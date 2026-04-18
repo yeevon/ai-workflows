@@ -1,0 +1,48 @@
+# Continuous integration for ai-workflows.
+#
+# Two jobs:
+#   * `test` — installs the project with uv, runs the test suite, the
+#     import-linter contracts, and ruff.
+#   * `secret-scan` — greps the committed `tiers.yaml` and `pricing.yaml`
+#     for Anthropic API key patterns. The acceptance criterion for Task 01
+#     requires this to FAIL when a test `sk-ant-xxx` is added to either
+#     file, so we are deliberately strict.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync --all-extras
+      - name: Run pytest
+        run: uv run pytest
+      - name: Lint imports (3-layer architecture)
+        run: uv run lint-imports
+      - name: Ruff
+        run: uv run ruff check .
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan tiers.yaml and pricing.yaml for API key patterns
+        # `grep -E ... && exit 1` means: if the pattern is found, fail the
+        # job. `|| true` on the outer expression is INTENTIONALLY ABSENT —
+        # we want a non-zero exit to bubble up.
+        run: |
+          if grep -E 'sk-ant-[A-Za-z0-9_-]+' tiers.yaml pricing.yaml; then
+            echo "::error::API key pattern detected in committed config"
+            exit 1
+          fi

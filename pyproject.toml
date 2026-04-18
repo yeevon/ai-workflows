@@ -1,7 +1,87 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "ai-workflows"
 version = "0.1.0"
-description = "Add your description here"
+description = "Composable AI workflow framework built on the pydantic-ai ecosystem."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "pydantic-ai>=1.0",
+  "pydantic-graph>=1.0",
+  "pydantic-evals>=1.0",
+  "logfire>=2.0",
+  "anthropic>=0.40",
+  "httpx>=0.27",
+  "pydantic>=2.0",
+  "pyyaml>=6.0",
+  "structlog>=24.0",
+  "typer>=0.12",
+  "yoyo-migrations>=9.0",
+  "pytest>=9.0.3",
+]
+
+[project.optional-dependencies]
+# Installed in M4 when the DAG Orchestrator lands. Linear Pipeline (M2) does
+# not need a graph library, so we keep this off the default install path.
+dag = ["networkx>=3.0"]
+
+[dependency-groups]
+# Dev tooling — installed via `uv sync` by default but not shipped with the
+# wheel. import-linter enforces the 3-layer architecture; ruff is the linter;
+# pytest + pytest-asyncio drive the test suite.
+dev = [
+  "import-linter>=2.0",
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.5",
+]
+
+[project.scripts]
+aiw = "ai_workflows.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ai_workflows"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Sensible default rule set; tighten as the codebase grows.
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.importlinter]
+root_package = "ai_workflows"
+
+# Contract 1: the primitives layer is the foundation. It owns LLM clients,
+# tools, storage, retry, etc., and must never reach upward into components or
+# workflows. Violating this collapses the layered architecture.
+[[tool.importlinter.contracts]]
+name = "primitives cannot import components or workflows"
+type = "forbidden"
+source_modules = ["ai_workflows.primitives"]
+forbidden_modules = ["ai_workflows.components", "ai_workflows.workflows"]
+
+# Contract 2: components compose primitives into reusable building blocks
+# (Worker, Validator, Pipeline, …). Workflows wire components together. A
+# component must never depend on a workflow — that would be circular.
+[[tool.importlinter.contracts]]
+name = "components cannot import workflows"
+type = "forbidden"
+source_modules = ["ai_workflows.components"]
+forbidden_modules = ["ai_workflows.workflows"]
+
+# Contract 3 ("components cannot peek at each other's private state") is
+# deferred. import-linter only allows ``*`` to replace a whole module
+# segment, so ``ai_workflows.components.*._*`` is rejected at load time.
+# Expressing this rule requires enumerating each component's private
+# modules, which we cannot do until components exist (M2 Task 01+). The
+# contract is re-added as part of M2 Task 01 when the ``BaseComponent``
+# convention for private modules is settled.

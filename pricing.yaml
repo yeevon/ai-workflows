@@ -1,0 +1,11 @@
+# Per-model pricing data for the cost tracker.
+#
+# Keys are model IDs (matching what the provider returns in usage events),
+# values are dollar prices per million tokens broken down by category
+# (input, output, cache_read, cache_write). The cost tracker (M1 Task 09)
+# multiplies usage events by these rates to enforce `max_run_cost_usd`.
+#
+# This stub is intentionally empty; pricing rows are filled in by Task 09
+# when the cost tracker lands.
+
+models: {}
