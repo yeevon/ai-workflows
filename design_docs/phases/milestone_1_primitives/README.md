@@ -49,7 +49,7 @@ Build the foundation on top of `pydantic-ai`. We don't reimplement what they've 
 
 ## Task Order
 
-1. `task_01_project_scaffolding.md`
+1. `task_01_project_scaffolding.md` — ✅ **Complete** (2026-04-18)
 2. `task_02_shared_types.md` — ContentBlock discriminated union + ClientCapabilities
 3. `task_03_model_factory.md` — tier name → pydantic-ai Model instance
 4. `task_04_prompt_caching.md` — multi-breakpoint Anthropic cache strategy

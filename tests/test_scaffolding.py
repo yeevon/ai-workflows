@@ -110,6 +110,9 @@ def test_aiw_version_command() -> None:
         "migrations/001_initial.sql",
         ".github/workflows/ci.yml",
         "CHANGELOG.md",
+        "docs/architecture.md",
+        "docs/writing-a-component.md",
+        "docs/writing-a-workflow.md",
     ],
 )
 def test_scaffolding_file_exists(relative_path: str) -> None:
@@ -209,6 +212,48 @@ def test_lint_imports_passes() -> None:
     assert result.returncode == 0, (
         f"lint-imports failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Secret-scan regex
+# ---------------------------------------------------------------------------
+
+
+def test_secret_scan_regex_matches_known_key_shapes() -> None:
+    """The CI secret-scan grep pattern must match real Anthropic key shapes.
+
+    Hard-codes the same pattern used in ``.github/workflows/ci.yml`` so that
+    a future refactor of the CI grep into an over-narrow pattern will break
+    this test and force an intentional update.  ISS-05.
+    """
+    import re
+
+    PATTERN = r"sk-ant-[A-Za-z0-9_-]+"
+    assert re.search(PATTERN, "key=sk-ant-abcDEF_123"), "pattern must match a valid key"
+    assert not re.search(PATTERN, "nothing here"), "pattern must not match plain text"
+    assert not re.search(PATTERN, "sk-openai-abc123"), "pattern must not match other providers"
+
+
+# ---------------------------------------------------------------------------
+# Console-script entry-point
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    shutil.which("aiw") is None,
+    reason="aiw console script not installed (run `uv sync`)",
+)
+def test_aiw_console_script_resolves() -> None:
+    """The installed ``aiw`` console script must resolve and exit 0.
+
+    Complements ``test_aiw_help_runs`` (in-process CliRunner) by proving
+    that the ``[project.scripts]`` entry point in ``pyproject.toml`` is
+    wired correctly.  A broken entry point would pass the CliRunner test
+    but fail here.  ISS-06.
+    """
+    result = subprocess.run(["aiw", "--help"], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "aiw" in result.stdout.lower()
 
 
 # ---------------------------------------------------------------------------

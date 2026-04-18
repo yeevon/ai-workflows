@@ -1,5 +1,8 @@
 # Task 01 — Project Scaffolding
 
+**Status:** ✅ Complete (2026-04-18). Audit log:
+[issues/task_01_issue.md](issues/task_01_issue.md).
+
 **Issues:** R-01, R-02, R-03, R-04, R-05, R-06, R-07, X-06, CRIT-10, SD-04
 
 ## What to Build
@@ -122,12 +125,19 @@ Initial schema stub (details in task_08). yoyo-migrations tracks applied migrati
 
 ## Acceptance Criteria
 
-- [ ] `uv sync` installs `pydantic-ai`, `logfire`, `yoyo-migrations` without conflicts
-- [ ] `uv run pytest` passes (empty suite)
-- [ ] `uv run lint-imports` passes with all three contracts above
-- [ ] `import ai_workflows.primitives` works
-- [ ] `aiw --help` prints the typer help text
-- [ ] CI secret-scan fails when a test `sk-ant-xxx` is added to `tiers.yaml`
+- [x] `uv sync` installs `pydantic-ai`, `logfire`, `yoyo-migrations` without conflicts
+- [x] `uv run pytest` passes (empty suite)
+- [x] `uv run lint-imports` passes with contracts 1 and 2 above
+- [x] `import ai_workflows.primitives` works
+- [x] `aiw --help` prints the typer help text
+- [x] CI secret-scan fails when a test `sk-ant-xxx` is added to `tiers.yaml`
+- [x] `docs/architecture.md`, `docs/writing-a-component.md`, and `docs/writing-a-workflow.md` exist as placeholder stubs
+
+> **Contract 3 note (M1-T01-ISS-01):** `import-linter` 2.x rejects wildcard patterns with a
+> partial-prefix segment (e.g. `components.*._*`). Contract 3 is deferred to M2 Task 01 where
+> private modules can be enumerated, or replaced by a pytest-based AST walk in
+> `tests/components/test_private_module_discipline.py`.
+
 
 ## Dependencies
 

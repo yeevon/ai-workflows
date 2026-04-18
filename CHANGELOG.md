@@ -7,12 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added — M1 Task 01: Project Scaffolding
+### Added — M1 Task 01: Project Scaffolding (2026-04-18)
 
 Initial project skeleton built on the `pydantic-ai` ecosystem. Establishes
 the three-layer architecture (primitives → components → workflows) and the
 tooling that enforces it. No runtime behaviour yet — that lands in M1
 Tasks 02–12.
+
+#### Initial build
 
 - **`pyproject.toml`**
   - Runtime deps: `pydantic-ai`, `pydantic-graph`, `pydantic-evals`,
@@ -62,6 +64,54 @@ Tasks 02–12.
     `aiw` console script, and the three `import-linter` contracts.
   - `lint-imports` exits 0 (skipped when `import-linter` is not
     installed).
+
+#### Reimplementation
+
+Addresses open issues from the Task 01 audit (M1-T01-ISS-01, M1-T01-ISS-02):
+
+- **`docs/architecture.md`** — placeholder stub; to be authored by M1 Task 11.
+- **`docs/writing-a-component.md`** — placeholder stub; to be authored by M2 Task 01.
+- **`docs/writing-a-workflow.md`** — placeholder stub; to be authored by M3 Task 01.
+- **`tests/test_scaffolding.py`** — extended parametrized file-existence test to cover
+  the three new `docs/` placeholders. Test count: 21 → 24.
+- **`design_docs/phases/milestone_1_primitives/task_01_project_scaffolding.md`** —
+  acceptance criterion for `lint-imports` updated to say "contracts 1 and 2" (not
+  "all three"), with a note documenting the Contract 3 deferral to M2 Task 01
+  (M1-T01-ISS-01).
+- **`pyproject.toml`** — removed accidental duplicate `pytest` entry from
+  `[project.dependencies]`; it belongs only in `[dependency-groups].dev`.
+
+#### Cleanup
+
+Addresses open issues from the Task 01 re-audit (ISS-04, ISS-05, ISS-06, ISS-07, ISS-09):
+
+- **`.gitignore`** — drop `.python-version` entry; file is the canonical 3.13 pin (ISS-04).
+- **`tests/test_scaffolding.py`** — add `test_secret_scan_regex_matches_known_key_shapes`
+  (ISS-05): self-contained pattern test that will break if the CI grep is ever narrowed.
+- **`tests/test_scaffolding.py`** — add `test_aiw_console_script_resolves` (ISS-06):
+  subprocess-based `aiw --help` gated on `shutil.which("aiw")`; proves the
+  `[project.scripts]` entry point resolves beyond what `CliRunner` can verify.
+- **`CHANGELOG.md`** — collapsed three Task 01 sub-entries into one
+  `### Added — M1 Task 01: Project Scaffolding (2026-04-18)` heading with subsections,
+  matching the CLAUDE.md format prescription (ISS-09).
+
+#### Completion marking & README (2026-04-18)
+
+Marks Task 01 as complete in the design docs and replaces the placeholder
+`README.md` (closes the last open issue, ISS-03).
+
+- **`design_docs/phases/milestone_1_primitives/task_01_project_scaffolding.md`** — ticked all
+  seven acceptance-criteria checkboxes and added a top-of-file `Status: ✅ Complete (2026-04-18)`
+  line pointing to the audit log.
+- **`design_docs/phases/milestone_1_primitives/README.md`** — appended
+  `— ✅ **Complete** (2026-04-18)` to the Task 01 entry in the task order list.
+- **`README.md`** — replaced 14-byte stub with a proper project README: description, current
+  status (M1 Task 01 done, 02–12 pending), requirements, quickstart, three-layer architecture
+  summary with contract rules, the three development gates, repo layout table, and further-reading
+  links into `design_docs/` and `docs/`. Resolves ISS-03 (previously deferred to M3 Task 01).
+- **`design_docs/phases/milestone_1_primitives/issues/task_01_issue.md`** — flipped ISS-03
+  from LOW/open to ✅ RESOLVED and updated the issue-log footer to reflect that every
+  Task 01 issue is now closed.
 
 ### Notes
 

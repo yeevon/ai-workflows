@@ -139,6 +139,23 @@ complete, be critical" / "is task NN actually done?".
      was skipped, or a gap creates real risk for a downstream task.
    - **LOW** — cosmetic, forward-looking, or a flag-only observation.
 
+   **Every issue must carry a proposed solution.** A report that only
+   names problems is half an audit. For each issue (HIGH/MEDIUM/LOW,
+   and every entry in the issue log):
+   - Include a concrete **Action** / **Recommendation** line that names
+     the fix: which file to edit, which test to add, which task owns
+     the follow-up, and (when relevant) the trade-offs between
+     alternatives.
+   - If the correct fix is **not** clear — e.g. two reasonable options
+     exist, the issue crosses milestone boundaries, or resolution
+     requires a spec change — **stop and ask the user** how they want
+     to handle it before finalizing the issue file. Do not invent a
+     direction.
+   - The same rule applies whenever issues are surfaced *outside* the
+     audit file (chat summaries, PR descriptions, status updates):
+     every listed issue gets a paired solution or an explicit request
+     for user direction.
+
 6. **Update the issue file on re-audit** — do not create `_v2` copies.
    Keep the running log there; tick items off, flip severities, or mark
    them `RESOLVED (commit sha)` when the underlying task picks them up.
