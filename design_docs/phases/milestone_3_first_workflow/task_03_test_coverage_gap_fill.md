@@ -1,59 +1,71 @@
-# Task 03 — Workflow: test_coverage_gap_fill
+# Task 03 — Workflow: test_coverage_gap_fill (Cloud-Default)
 
 ## Goal
 
-Generate characterization tests for a target slice of a codebase. Uses Qwen for exploration reads, Haiku/Qwen for test generation, Sonnet for complex cases requiring full file context.
+Generate characterization tests for a codebase slice. **Cloud-default** — Haiku for both exploration and generation in M1-M3. Ollama swap-in lands in M4 alongside Ollama's operational wrapping.
 
 ## Directory Structure
 
-```
+```text
 ai_workflows/workflows/test_coverage_gap_fill/
 ├── workflow.yaml
 ├── prompts/
-│   ├── explore_module.txt        # Qwen: read module, extract signatures
-│   ├── generate_test.txt         # Haiku: generate test for one function
-│   └── validate_test.txt         # Semantic validator criteria
+│   ├── explore_module_system.txt     # STATIC — no {{var}}
+│   ├── explore_module_user.txt       # per-call vars OK
+│   ├── generate_test_system.txt
+│   ├── generate_test_user.txt
+│   └── validate_test_system.txt      # STATIC criteria
 ├── schemas/
-│   ├── module_summary.py         # Pydantic: Qwen exploration output
-│   └── test_file.py              # Pydantic: generated test output
-└── run.py                        # thin: parse args, call aiw runner
+│   ├── inputs.py                     # TestCoverageInput
+│   ├── exploration.py                # ModuleSummary
+│   └── test_file.py                  # GeneratedTestFile
+├── run.py                            # thin CLI entry point
+└── evals/                            # added in Task 04
+    ├── cases.py
+    └── dataset.json
 ```
 
-## `workflow.yaml` Sketch
+## `workflow.yaml`
 
 ```yaml
 name: test_coverage_gap_fill
 description: Generate characterization tests for a codebase slice
 
+max_run_cost_usd: 5.00
+allowed_executables: []
+strict_review: false
+
 inputs:
   repo: path
   slice: str
 
-allowed_executables: []         # no shell commands needed for this workflow
-strict_review: false
-
 components:
   explore:
     type: worker
-    tier: local_coder            # Qwen for exploration
-    prompt: prompts/explore_module.txt
-    output_schema: schemas/module_summary.py:ModuleSummary
+    tier: haiku                      # cloud-default in M1-M3 (was local_coder)
+    system_prompt_file: prompts/explore_module_system.txt
+    user_prompt_file: prompts/explore_module_user.txt
+    input_schema: schemas/inputs.py:TestCoverageInput
+    output_schema: schemas/exploration.py:ModuleSummary
     tools: [read_file, list_dir, grep]
     max_output_chars: 15000
 
   generate_tests:
     type: fanout
+    input_from: explore              # ModuleSummary.functions as items
     worker_config:
       tier: haiku
-      prompt: prompts/generate_test.txt
-      output_schema: schemas/test_file.py:TestFile
+      system_prompt_file: prompts/generate_test_system.txt
+      user_prompt_file: prompts/generate_test_user.txt
+      input_schema: schemas/exploration.py:FunctionSignature
+      output_schema: schemas/test_file.py:GeneratedTestFile
       tools: [read_file]
       max_output_chars: 10000
     validator_config:
       steps:
         - type: semantic
           tier: haiku
-          criteria: prompts/validate_test.txt
+          criteria_prompt: prompts/validate_test_system.txt
     concurrency: 5
 
 flow:
@@ -61,31 +73,31 @@ flow:
   - generate_tests
 ```
 
-## Prompts (outline, not final)
+## Key Design Details
 
-**`explore_module.txt`:** Instructs Qwen to read the target slice, list all public functions/classes with signatures, inputs, outputs, and any notable dependencies. Output must match `ModuleSummary` schema.
+### Static System Prompts
 
-**`generate_test.txt`:** Instructs Haiku to write a pytest characterization test for one function given its signature and usage context. Output must be a valid Python test file.
+Every `*_system.txt` file is static — no `{{var}}` substitutions. The loader's `validate_system_prompt_template()` check enforces this. Prompt caching requires it.
 
-**`validate_test.txt`:** Criteria for semantic validator: "Does this test actually test the described function? Does it have at least one assert? Is it syntactically valid Python?"
+### Per-Call User Prompts
+
+`explore_module_user.txt` can use `{{repo}}`, `{{slice}}`. The Worker renders with `input` fields at runtime.
+
+### Schema Wiring (CRIT-01)
+
+`explore` produces `ModuleSummary` which contains `functions: list[FunctionSignature]`. The Fanout component's `input_from: explore` takes `ModuleSummary.functions` as its item list. The loader type-checks this at load time — if `FunctionSignature` in the Fanout's `input_schema` doesn't match `functions`'s item type, it raises before any LLM call.
 
 ## Acceptance Criteria
 
-- [ ] Workflow runs end-to-end on a small Python module (< 10 functions)
-- [ ] Qwen exploration produces a `ModuleSummary` with all public function signatures
-- [ ] Haiku generates a runnable pytest file for at least one function
+- [ ] Workflow runs end-to-end on a small Python module
+- [ ] Haiku exploration produces a `ModuleSummary` with function signatures
+- [ ] Haiku fanout generates a runnable pytest file per function
 - [ ] Semantic validator correctly rejects a test file with no asserts
-- [ ] `aiw inspect` shows correct cost breakdown (local_coder=$0.00, haiku=$X)
-- [ ] Re-running with `aiw resume` after interruption skips completed test generations
-
-## What to Watch For (Forcing Function)
-
-This workflow will break things in the components layer. Document each break and fix it:
-- Pydantic schemas too strict for LLM output → add retry or loosen
-- Prompt variables that don't exist in the template → improve error message
-- Tool output too large for Haiku's context → tune `max_output_chars`
-- Fanout failure reason not actionable → improve Validator output
+- [ ] `aiw inspect` shows correct breakdown (all haiku, no local_coder)
+- [ ] `aiw resume` after interruption skips completed test generations
+- [ ] Total cost under $1 on a 10-function module
 
 ## Dependencies
 
-- Tasks 01 and 02 (loader + aiw run)
+- Task 01 (loader)
+- Task 02 (aiw run)

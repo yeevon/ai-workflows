@@ -1,63 +1,63 @@
-# Milestone 1 — Primitives
+# Milestone 1 — Primitives (Pydantic AI Substrate)
 
 ## Goal
 
-Build the foundation every layer above depends on. No business logic. No components. No workflows. Just plumbing — stable, boring, well-tested.
+Build the foundation on top of `pydantic-ai`. We don't reimplement what they've already solved (Agent, Model abstraction, tool schema generation, RunContext). We wrap their models with our tier routing, cost tracking, budget caps, and workflow-aware storage. Our layer stays clean; their layer does the hard work.
 
-**Exit criteria:** You can make an LLM call from a Python REPL, it gets logged with cost, retried on 429, and the run is visible in `aiw list-runs`.
+**Exit criteria:** you can make an LLM call from a Python REPL through our tier system. It gets logged to SQLite with cost, budget cap protects you from runaway spend, retried on rate limits, and the run is visible in `aiw list-runs`. Prompt caching is verified (`cache_read_input_tokens > 0` on turn 2+).
 
-## Scope
+## Scope Changes from Original M1
 
-- Project scaffolding (pyproject.toml, import-linter, pytest, CI skeleton)
-- Shared types: `Message`, `ContentBlock`, `Response`, `TokenUsage`, `ToolSpec`
-- LLM client adapters: Anthropic, Ollama, OpenAI-compat
-- Tool sanitizer (prompt injection protection)
-- Tool registry (injected, per-run)
-- Stdlib tools: filesystem, shell, HTTP, git
-- Tiers loader (`tiers.yaml` + `pricing.yaml`)
-- Storage layer (SQLite + WAL, run log, checkpoint states)
-- Cost tracker
-- `retry_on_rate_limit()` utility
-- `structlog` setup
-- Basic CLI: `aiw list-runs`, `aiw inspect`, `aiw resume` (stub), `aiw run` (stub)
+- **Adopted `pydantic-ai`** as substrate. `Agent[Deps, Output]`, `Model` subclasses, `@agent.tool`, `RunContext[Deps]`, and `ModelRetry` come from there. We build a Model factory around `AnthropicModel` / `OpenAIModel` / `GoogleModel`.
+- **Cloud-default workflows.** Ollama adapter exists but defaults-to-cloud in M1-M3 workflow YAMLs. Full Ollama operational wrapping deferred to M4.
+- **Budget cap upgraded from deferred to critical.** You're paying out of pocket. `max_run_cost_usd` is in from day one.
+- **Sanitizer deleted/rebranded.** ContentBlock `tool_result` wrapping stays as the real defense. Regex sanitizer was theater — rebranded to `forensic_logger` for post-hoc analysis only.
+- **Multi-breakpoint caching**, not single-last-block.
+- **`max_retries=0` on every underlying SDK client** — our retry utility is the single authority.
+- **Retry taxonomy** — retryable-transient, retryable-semantic (via `ModelRetry`), non-retryable.
+- **`ClientCapabilities` descriptor** on every adapter — components never `isinstance()` check.
+- **`ContentBlock` discriminated union** with `Field(discriminator='type')`.
+- **`yoyo-migrations` for SQLite** instead of manual SQL.
+- **Workflow directory content hash** stored in `runs` table for resume version safety.
+- **Linear `Pipeline` planned for M2-M3** instead of DAG `Orchestrator` in M4.
 
 ## Key Decisions In Effect
 
 | Decision | Value |
-|---|---|
+| --- | --- |
 | Python floor | 3.12 (`requires-python = ">=3.12"`) |
 | Build backend | `hatchling` |
 | Dependency manager | `uv` |
-| Test framework | `pytest` + `pytest-asyncio` (`asyncio_mode = "auto"`) |
-| Import linter | `import-linter` configured in `pyproject.toml` |
+| Substrate | `pydantic-ai` |
+| Test framework | `pytest` + `pytest-asyncio` |
+| Import linter | `import-linter` (3-layer enforcement) |
 | CLI framework | `typer` |
-| Logging | `structlog` |
+| Logging | `structlog` + `logfire` (OTel wired in M3) |
+| Migrations | `yoyo-migrations` |
 | Storage | SQLite + WAL mode at `~/.ai-workflows/runs.db` |
 | Run artifacts | `~/.ai-workflows/runs/<run_id>/` |
-| Auth | Env vars only (no secrets in YAML) |
-| Retry | `retry_on_rate_limit()` utility, 429/529 only, max 3, exponential backoff + jitter |
-| Context tagging | Explicit `run_id`, `workflow_id`, `component` kwargs on every `generate()` call |
-| Prompt injection | Sanitizer in `primitives/tools/sanitizer.py` wraps all tool outputs |
-| Ollama cost | Record `0.0`, excluded from aggregations |
-| Streaming | Deferred — `generate()` always returns complete `Response` |
+| Workflow dir snapshot | Full directory + content hash in SQLite |
+| Auth | Env vars only |
+| SDK retries | `max_retries=0` on every wrapped SDK client |
+| Our retry | `retry_on_rate_limit()` — transient; `ModelRetry` — semantic |
+| Context tagging | Explicit kwargs (via `RunContext[Deps]` from pydantic-ai) |
+| Prompt injection | `tool_result` `ContentBlock` wrapping (real defense); `forensic_logger` (logging only) |
+| Budget cap | `max_run_cost_usd` in workflow config, enforced by `CostTracker` |
+| Ollama cost | `0.0`, excluded from aggregations |
+| Streaming | Deferred |
+| Prompt caching | Multi-breakpoint: tool defs (1h), static system (1h), messages (5m auto) |
 
 ## Task Order
 
-Tasks within this milestone should be completed in this order — each task builds on the previous:
-
 1. `task_01_project_scaffolding.md`
-2. `task_02_shared_types.md`
-3. `task_03_anthropic_client.md`
-4. `task_04_ollama_client.md`
-5. `task_05_openai_compat_client.md`
-6. `task_06_tool_sanitizer.md`
-7. `task_07_tool_registry.md`
-8. `task_08_stdlib_tools_fs.md`
-9. `task_09_stdlib_tools_shell.md`
-10. `task_10_stdlib_tools_http_git.md`
-11. `task_11_tiers_loader.md`
-12. `task_12_storage.md`
-13. `task_13_cost_tracker.md`
-14. `task_14_retry.md`
-15. `task_15_logging.md`
-16. `task_16_cli_primitives.md`
+2. `task_02_shared_types.md` — ContentBlock discriminated union + ClientCapabilities
+3. `task_03_model_factory.md` — tier name → pydantic-ai Model instance
+4. `task_04_prompt_caching.md` — multi-breakpoint Anthropic cache strategy
+5. `task_05_tool_registry.md` — injected registry + `forensic_logger`
+6. `task_06_stdlib_tools.md` — fs + shell + http + git
+7. `task_07_tiers_loader.md` — tiers.yaml + pricing.yaml + profile + dir-hash utility
+8. `task_08_storage.md` — SQLite + yoyo-migrations + workflow_dir_hash
+9. `task_09_cost_tracker.md` — tagging + budget cap enforcement
+10. `task_10_retry.md` — retry taxonomy
+11. `task_11_logging.md` — structlog + logfire configuration
+12. `task_12_cli_primitives.md` — aiw list-runs / inspect / resume (stub) / run (stub)

@@ -1,68 +1,94 @@
 # Task 02 — AgentLoop Component
 
-**Issues:** C-22, C-23, C-24, C-25
+**Issues:** C-22, C-23, C-24, C-25, CRIT-11
 
 ## What to Build
 
-An open-ended tool-using loop. Used internally by Planner (Opus planning phase) and directly by workflows needing investigation or research. Weaker guarantee than Worker — documented explicitly.
+Open-ended tool-using loop on top of `pydantic_ai.Agent`. Documented weaker guarantee than Worker. Used by Planner (Phase 2) and directly by workflows needing research/investigation. **Fresh context per subagent** is the default (CRIT-11).
 
 ## Deliverables
 
 ### `components/agent_loop.py`
 
-**Config:**
 ```python
 class AgentLoopConfig(ComponentConfig):
     tier: str
-    prompt_file: str
+    system_prompt_file: str
     tools: list[str]
     max_iterations: int = 20
-    output_schema: str | None = None    # if None, return raw final text
+    output_schema: str | None = None
+    context_isolation: Literal["fresh", "shared"] = "fresh"  # CRIT-11
+
+class AgentLoop(BaseComponent):
+    """
+    DOCUMENTED WEAK GUARANTEE:
+    AgentLoop does NOT guarantee identical outputs for identical inputs.
+    Tool-call history and intermediate state accumulate across turns.
+    The Orchestrator is responsible for validating AgentLoop output via
+    a Validator gate — do not trust AgentLoop output without validation.
+    """
 ```
 
-**Termination conditions (whichever comes first):**
-1. Response contains no `ToolUseBlock`s
-2. Model calls a special `done(summary: str)` tool — the summary becomes the output
-3. `max_iterations` hard cap reached → return `status="incomplete"` with last response content
+### Termination Conditions
 
-**Loop behavior:**
-- Iteration N: call `generate()`, get `Response`
-- If `ToolUseBlock`s present: execute each tool via registry, append `ToolResultBlock`s, continue
-- If `done` tool called: return `status="completed"` with `done.summary` as content
-- If no tool calls: return `status="completed"` with last text block as content
+Three possible termination triggers, whichever comes first:
 
-**Context compaction (basic):** If accumulated message history exceeds 80% of tier's `max_tokens` (estimated by char count / 4): summarize history by calling the same model with a "summarize our progress so far" prompt, replace the history with `[summary]`, continue. Log when compaction occurs.
+1. Response has no `ToolUseBlock`s → complete, return last text content
+2. Model calls the `done(summary: str)` tool → complete, return the `summary`
+3. `max_iterations` reached → `status="incomplete"`, return accumulated content
 
-**Documented weak guarantee:**
+### Context Isolation (CRIT-11)
+
 ```python
-"""
-AgentLoop does not guarantee identical outputs for identical inputs.
-Tool call history and intermediate state accumulate across turns.
-The Orchestrator is responsible for validating AgentLoop output via
-a Validator gate — do not trust AgentLoop output without validation.
-"""
+if config.context_isolation == "fresh":
+    # Each AgentLoop invocation is a fresh Agent with no shared history.
+    # Subagents (e.g., Planner Phase 1 over multiple modules) are independent.
+    agent = Agent(model, ...)
+elif config.context_isolation == "shared":
+    # Opt-in: the AgentLoop shares message history across calls.
+    # Document the risk: larger context, higher cost, potential for drift.
+    agent = self._shared_agent or Agent(model, ...)
+    self._shared_agent = agent
 ```
 
-**The `done` tool spec:**
+Default `fresh` matches Anthropic's subagent pattern. Shared context is opt-in per component config.
+
+### Context Compaction (Basic, C-24)
+
+When accumulated message history exceeds 80% of tier's `max_context` (estimated by char count / 4):
+
+1. Call the same model with a `"Summarize everything you have learned and decided so far"` prompt
+2. Replace the history with the summary as a single user message
+3. Continue the loop with the compacted context
+
+Log when compaction occurs. Not rocket science — just an emergency valve.
+
+### The `done` Tool
+
+Automatically added to every AgentLoop's tool list:
+
 ```python
-ToolSpec(
-    name="done",
-    description="Call this when your task is complete. Provide a summary of what you accomplished.",
-    input_schema={"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
-)
+@loop_agent.tool
+async def done(ctx: RunContext[WorkflowDeps], summary: str) -> str:
+    """Call when task is complete. Summary becomes the output."""
+    ctx.deps._done_called = True
+    ctx.deps._done_summary = summary
+    return "Task marked done"
 ```
-This tool is automatically added to every AgentLoop's tool registry (not via the workflow config).
+
+The loop checks `deps._done_called` after each turn and terminates.
 
 ## Acceptance Criteria
 
-- [ ] Loop stops on no-tool-call response
-- [ ] Loop stops on `done` tool call, returns `done.summary` as content
-- [ ] Loop returns `status="incomplete"` at `max_iterations`, not an error
-- [ ] Compaction triggers when estimated token count exceeds 80% of max_tokens
-- [ ] `status="incomplete"` result includes iteration count and last response content
-- [ ] Weak guarantee is in the class docstring
+- [ ] Loop stops when response has no tool calls
+- [ ] Loop stops when `done(summary=...)` is called; returns summary as content
+- [ ] `max_iterations` returns `status="incomplete"` with accumulated content
+- [ ] Compaction triggers at ~80% context fill
+- [ ] `context_isolation="fresh"` builds a new Agent per run call
+- [ ] `context_isolation="shared"` preserves history across calls
+- [ ] Docstring on class states the weak guarantee
 
 ## Dependencies
 
 - M2 Task 01 (BaseComponent)
-- M1 Task 07 (tool registry)
+- M1 all

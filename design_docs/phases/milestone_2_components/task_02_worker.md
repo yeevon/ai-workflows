@@ -1,46 +1,96 @@
 # Task 02 — Worker Component
 
-**Issues:** C-15, C-16, C-17
+**Issues:** C-15, C-16, C-17, CRIT-08
 
 ## What to Build
 
-The component that executes one subtask. Tier-aware max_turns: Sonnet gets a multi-turn soft cap, all other tiers are single-call.
+`Worker` wraps `pydantic_ai.Agent[WorkflowDeps, Output]`. We don't re-implement the LLM call loop — pydantic-ai does it. We add tier routing, the soft-cap policy for Sonnet, output parsing, and the single-call behavior for Haiku/Qwen/Flash.
 
 ## Deliverables
 
 ### `components/worker.py`
 
-**Config:**
 ```python
+from pydantic_ai import Agent, ModelRetry
+from pydantic_ai.models import Model
+
 class WorkerConfig(ComponentConfig):
-    tier: str                         # tier name from tiers.yaml
-    prompt_file: str                  # path to prompt template
-    output_schema: str                # "schemas/plan.py:Plan" — module:class
-    tools: list[str] = []             # tool names from registry
-    max_output_chars: int | None = None  # passed to tool calls
+    tier: str                            # tier name from tiers.yaml
+    system_prompt_file: str              # static instructions (no {{var}}!)
+    user_prompt_file: str                # per-call prompt (vars allowed)
+    output_schema: str                   # "schemas/plan.py:Plan"
+    tools: list[str] = []                # tool names from registry
+    max_output_chars: int | None = None  # passed to tool calls' max_chars
+
+class Worker(BaseComponent):
+    async def run(
+        self,
+        input: BaseModel,
+        *,
+        run_id: str,
+        workflow_id: str,
+        task_id: str,
+    ) -> ComponentResult:
+        # 1. build pydantic-ai Model from tier
+        # 2. gather tools from registry
+        # 3. construct Agent[WorkflowDeps, OutputSchema]
+        # 4. set max_turns based on tier policy
+        # 5. render user prompt with input vars
+        # 6. call run_with_cost(agent, user_prompt, deps)
+        # 7. map result to ComponentResult
+        ...
 ```
 
-**Behavior:**
-- Renders the prompt template with task input variables
-- Calls `generate()` with the rendered messages and selected tool specs
-- **If tier is `sonnet`**: runs a multi-turn loop up to `max_turns` (default 15). Each iteration: execute any tool calls in the response (via registry), append results as `ToolResultBlock`s, call `generate()` again. Stop when: no tool calls in response, OR `done` tool called, OR `max_turns` reached.
-- **All other tiers**: single `generate()` call. Tool calls in the response are executed and returned in the result, but no second LLM call is made.
-- At soft cap: return `ComponentResult(status="incomplete", ...)` with accumulated content
-- Parses LLM output into `output_schema` Pydantic model. On parse failure: return `ComponentResult(status="failed", failure_reason="parse_error: ...")`
+### Tier Policy (Hardcoded)
 
-**Tool execution within Worker:**
-- After `generate()` returns a response with `ToolUseBlock`s, execute each tool via `registry.execute()`
-- The registry sanitizes output before returning
-- Append `ToolResultBlock(tool_use_id=..., content=sanitized_output)` to the message history
+```python
+TIER_MAX_TURNS = {
+    "opus": 20,        # planning tier; may run through planner
+    "sonnet": 15,      # editing tier, soft cap
+    "haiku": 1,        # fixed
+    "gemini_flash": 1, # fixed
+    "local_coder": 1,  # fixed
+}
+```
+
+Multi-turn tiers (`opus`, `sonnet`) let pydantic-ai's Agent loop through tool calls until max_turns or no tool calls remain. Single-turn tiers get `max_turns=1` in the Agent — one LLM call, tool results surfaced in the response but no second round-trip.
+
+### Output Parsing (C-16)
+
+pydantic-ai `Agent[Deps, OutputSchema]` already enforces the output type. On validation failure, pydantic-ai raises `ModelRetry` internally and asks the model to try again. Bounded by Agent's internal retry count (set to 3 max).
+
+If after 3 internal retries the model still can't produce valid output, pydantic-ai raises — we catch and return `status="failed"` with `failure_reason="output_schema_mismatch"`.
+
+### Soft-Cap Behavior for Sonnet
+
+If Sonnet hits `max_turns=15` without completing: pydantic-ai returns the partial result. We inspect `result.all_messages()` for the last response and return `status="incomplete"` with the partial output. The Pipeline (or later Orchestrator) decides whether to re-trigger or decompose.
+
+### Tool Selection
+
+```python
+tools_for_agent = tool_registry.build_pydantic_ai_tools(config.tools)
+agent = Agent(
+    model,
+    deps_type=WorkflowDeps,
+    output_type=output_schema,
+    tools=tools_for_agent,
+    system_prompt=static_system,
+    retries=3,  # ModelRetry bound
+)
+```
 
 ## Acceptance Criteria
 
-- [ ] Single-call tier (Haiku) makes exactly one `generate()` call regardless of tool calls in response
-- [ ] Multi-turn Sonnet Worker loops until termination condition
-- [ ] Soft cap returns `status="incomplete"` with partial content (not an error)
-- [ ] Output parsed into Pydantic model — type error returns `status="failed"`
-- [ ] `run_id`, `workflow_id`, `component="worker"` present in every `generate()` call
+- [ ] Haiku Worker makes exactly one LLM call regardless of tool calls in response
+- [ ] Sonnet Worker loops until termination or max_turns=15
+- [ ] Output parsed into the declared Pydantic model on success
+- [ ] Output validation failure retries up to 3 times via `ModelRetry`, then returns `status="failed"`
+- [ ] Sonnet at soft cap returns `status="incomplete"` with partial content preserved
+- [ ] `WorkflowDeps` carries `run_id`, `workflow_id`, `component="worker"` into every tool call
+- [ ] Cost recorded exactly once per LLM call (no double-counting)
 
 ## Dependencies
 
 - Task 01 (BaseComponent)
+- M1 Task 03 (model factory)
+- M1 Task 05 (tool registry)

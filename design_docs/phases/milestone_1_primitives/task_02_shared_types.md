@@ -1,18 +1,18 @@
 # Task 02 — Shared Types
 
-**Issues:** P-01, P-02, P-07
+**Issues:** P-01, P-02, P-07, CRIT-05, CRIT-09
 
 ## What to Build
 
-The canonical data types that every layer speaks. These are defined once in `primitives/llm/base.py` and imported everywhere. Getting these right is critical — changing them later requires touching every adapter.
+Canonical types at `primitives/llm/types.py`. `ContentBlock` is a proper Pydantic v2 discriminated union. `ClientCapabilities` makes adapter capabilities explicit so components never `isinstance()` check.
 
 ## Deliverables
 
-### `primitives/llm/base.py`
+### `primitives/llm/types.py`
 
 ```python
-from typing import Literal, Protocol
-from pydantic import BaseModel
+from typing import Literal, Annotated
+from pydantic import BaseModel, Field
 
 
 class TextBlock(BaseModel):
@@ -30,11 +30,14 @@ class ToolUseBlock(BaseModel):
 class ToolResultBlock(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     tool_use_id: str
-    content: str
+    content: str          # sanitized / processed tool output
     is_error: bool = False
 
 
-ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock
+ContentBlock = Annotated[
+    TextBlock | ToolUseBlock | ToolResultBlock,
+    Field(discriminator="type"),
+]
 
 
 class Message(BaseModel):
@@ -55,40 +58,50 @@ class Response(BaseModel):
     usage: TokenUsage
 
 
-class ToolSpec(BaseModel):
-    name: str
-    description: str
-    input_schema: dict  # JSON Schema object
+class ClientCapabilities(BaseModel):
+    """Capability descriptor returned by every adapter.
+
+    Components check capabilities, never isinstance().
+    """
+    supports_prompt_caching: bool = False
+    supports_parallel_tool_calls: bool = False
+    supports_structured_output: bool = False
+    supports_thinking: bool = False
+    supports_vision: bool = False
+    max_context: int
+    provider: Literal["anthropic", "openai_compat", "ollama"]
+    model: str
 
 
-class LLMClient(Protocol):
-    async def generate(
-        self,
-        messages: list[Message],
-        *,
-        run_id: str,
-        workflow_id: str,
-        component: str,
-        tools: list[ToolSpec] | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.1,
-    ) -> Response: ...
+class WorkflowDeps(BaseModel):
+    """Passed as `deps` to every pydantic-ai Agent.run() call.
+
+    Makes run_id, workflow_id, component available in any tool call
+    via RunContext[WorkflowDeps].
+    """
+    run_id: str
+    workflow_id: str
+    component: str
+    tier: str
+    allowed_executables: list[str] = []
+    project_root: str
 ```
 
-## Notes
+## Why Discriminated Union (CRIT-09)
 
-- `ContentBlock` is a discriminated union. Pydantic v2 handles this cleanly with `model_validator` or tagged unions.
-- `ToolResultBlock` is what adapters produce after a tool call is executed and the result is sanitized. It never carries raw file content directly — only after the sanitizer has processed it.
-- `LLMClient` is a `Protocol` (structural subtyping), not a base class. Adapters don't inherit from it — they just implement the method signature.
-- `run_id`, `workflow_id`, `component` are required keyword-only args on every `generate()` call. This is the explicit cost-tagging contract.
+Without `Field(discriminator="type")`, Pydantic v2 tries each variant in order on every block. On a message with 50 tool_use blocks, this means 50 × (try TextBlock, fail, try ToolUseBlock, succeed) = wasted cycles and confusing validation errors. With the discriminator, Pydantic reads `type` once and dispatches directly.
+
+## Why `ClientCapabilities` (CRIT-05)
+
+Anthropic supports prompt caching; Ollama does not. If a `Worker` component wants to know "can I rely on cache?", the answer must come from a capability flag, not `isinstance(client, AnthropicClient)`. The `isinstance` approach forces Components to import from specific adapter modules, breaking the layering.
 
 ## Acceptance Criteria
 
-- [ ] All types importable from `ai_workflows.primitives.llm.base`
-- [ ] `Message` with mixed content blocks round-trips through Pydantic (serialize → deserialize)
-- [ ] `LLMClient` protocol can be used in `isinstance()` structural checks (Protocol + `runtime_checkable`)
-- [ ] Unit tests for all model serialization edge cases
+- [ ] Discriminated union dispatches correctly — `Message(content=[{"type":"text", "text":"hi"}])` parses without trying other variants
+- [ ] A message with 50 tool_use blocks parses in < 5ms
+- [ ] Invalid `type` value raises a clear Pydantic error naming the allowed literals
+- [ ] `ClientCapabilities` is serializable to/from JSON for logging
 
 ## Dependencies
 
-- Task 01 (scaffolding)
+- Task 01

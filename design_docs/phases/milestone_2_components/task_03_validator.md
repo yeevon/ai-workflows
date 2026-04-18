@@ -4,59 +4,81 @@
 
 ## What to Build
 
-The component that checks Worker output against declared criteria. Two types: structural (shell command) and semantic (LLM-based). Both defined in the interface from day one. Actual implementations (pytest, gradlew, React build) are registered per workflow.
+`Validator` with two types: structural (shell) and semantic (LLM judge). The semantic variant uses `pydantic_ai.Agent` with an output shape usable by `pydantic-evals` in M3.
 
 ## Deliverables
 
 ### `components/validator.py`
 
-**Config:**
 ```python
 class ValidatorStep(BaseModel):
     type: Literal["structural", "semantic"]
     # structural:
-    command: str | None = None          # e.g., "./gradlew build"
+    command: str | None = None
     working_dir: str | None = None
     # semantic:
-    tier: str | None = None             # e.g., "haiku"
-    criteria: str | None = None         # plain-text criteria for the LLM
+    tier: str | None = None
+    criteria_prompt: str | None = None  # path to criteria template
 
 class ValidatorConfig(ComponentConfig):
     steps: list[ValidatorStep]
     stop_on_first_failure: bool = True
-```
 
-**`ValidationResult`:**
-```python
 class ValidationResult(BaseModel):
     passed: bool
     step_type: str
-    failure_reason: str | None = None   # fed back to Orchestrator for mitigation
-    output: str | None = None           # command output or LLM response
+    failure_reason: str | None = None
+    output: str | None = None
 ```
 
-**Structural validator behavior:**
-- Runs the shell command via `run_command()` (respects CWD restriction and allowlist)
-- Passes if exit code is 0
-- `failure_reason` = combined stdout/stderr on non-zero exit
+### Structural Validator
 
-**Semantic validator behavior:**
-- Builds a prompt: system criteria + worker output as context
-- Calls `generate()` on the declared tier
-- Parses response for a pass/fail signal (LLM must respond with a structured verdict)
-- `failure_reason` = LLM's explanation of what failed
+- Runs the shell command via `run_command` tool (respects CWD restriction + allowlist)
+- Exit 0 → pass; non-zero → `failure_reason = stdout + stderr`
+- `working_dir` defaults to `ctx.deps.project_root`
 
-**The failure reason is the key output** — it's what the Orchestrator feeds back to the Worker on the mitigation attempt. It must be specific enough for the Worker to act on.
+### Semantic Validator
+
+Uses a `pydantic_ai.Agent[WorkflowDeps, JudgeOutput]`:
+
+```python
+class JudgeOutput(BaseModel):
+    passed: bool
+    reason: str  # fed back as failure_reason on fail
+
+semantic_agent = Agent(
+    model=build_model(step.tier, tiers, cost_tracker)[0],
+    deps_type=WorkflowDeps,
+    output_type=JudgeOutput,
+    system_prompt=load_prompt(step.criteria_prompt),
+)
+
+result = await run_with_cost(
+    semantic_agent,
+    f"Evaluate this output against the criteria: {worker_output}",
+    deps,
+    cost_tracker,
+)
+```
+
+The `JudgeOutput` shape maps directly onto `pydantic-evals`'s `LLMJudge` concept — in M3, the same semantic validator can be used as an eval evaluator with zero changes.
+
+### Failure Reason is Load-Bearing
+
+The Orchestrator (later the Pipeline) feeds `failure_reason` back to the Worker for the mitigation attempt. The reason must be specific enough for the Worker to act on. For structural: include exit code + last N lines of output. For semantic: the judge's reason field verbatim.
 
 ## Acceptance Criteria
 
-- [ ] Structural validator passes on exit 0, fails on non-zero with stdout in `failure_reason`
-- [ ] Semantic validator calls `generate()` with criteria in the system message
-- [ ] `ValidationResult.failure_reason` is non-None on all failures
-- [ ] Structural validator respects `run_command` allowlist (test with a disallowed command)
+- [ ] Structural validator passes on exit 0
+- [ ] Structural validator fails on non-zero with output in `failure_reason`
+- [ ] Structural validator respects `allowed_executables` (blocked command raises)
+- [ ] Semantic validator returns structured `JudgeOutput` via pydantic-ai
+- [ ] Semantic validator's prompt is a **static** system prompt (no `{{var}}` — validated at load time)
 - [ ] `stop_on_first_failure=True` skips remaining steps after first failure
+- [ ] Semantic validator's cost is tracked separately and visible in `aiw inspect`
 
 ## Dependencies
 
 - Task 01 (BaseComponent)
-- Task 09 (shell tool — for structural validation)
+- M1 Task 06 (shell tool for structural)
+- M1 Task 03 (model factory for semantic)

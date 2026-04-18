@@ -574,3 +574,44 @@ All decisions below were resolved through an exhaustive design review. See `gril
 - **Timeout:** configurable (default 30 min). Hard stop on expiry → `timed_out` in SQLite. Resume re-renders.
 - **Decisions:** approve / reject / edit-then-approve.
 - **`strict_review: true`:** blocks `--skip-gate` flag entirely. For government or regulated workflows.
+
+---
+
+## Design Revisions (Post-Research Analysis, 2026-04-18)
+
+A research comparison against LangGraph, CrewAI, Pydantic AI, Temporal, AutoGen, LlamaIndex, and Haystack surfaced material gaps. Resolution is in `analysis_summary.md` and `issues.md` priority tiers. Key pivots:
+
+### Substrate: Pydantic AI Adoption
+
+We adopt `pydantic-ai + pydantic-graph + pydantic-evals` as the substrate. Our framework becomes the thin layer on top: tier routing, workflow YAML loader, SQLite run log, cost tracking with budget caps, component taxonomy as specialized wrappers over `pydantic_ai.Agent[Deps, Output]`. This halves M1 and gives evals + graph orchestration for free.
+
+### Linear Pipeline First, DAG at M4
+
+M1-M3 use a linear `Pipeline` component, not a DAG Orchestrator. `test_coverage_gap_fill` is linear; committing to `networkx` + topological sort + DAG checkpoint in M1 is premature. DAG `Orchestrator` promotes the `Pipeline` in M4 when `slice_refactor` needs it.
+
+### Cloud-Default Workflows (Ollama Deferred)
+
+The `OllamaClient` adapter exists in M1 but all M1-M3 workflows default to cloud tiers (Haiku for exploration, Sonnet for editing). Ollama operational infrastructure — health checks, VPN drop handling, automatic Haiku fallback — lands in M4.
+
+### Preserve Layering
+
+Primitives and Components remain separate modules. Lego-block workflow composition is a core goal; dissolving the boundary would undermine it.
+
+### Critical Corrections
+
+- **Budget caps are not deferred.** `max_run_cost_usd` in workflow config, enforced by `CostTracker`, raises `BudgetExceeded`. In M1.
+- **Sanitizer is theater.** Deleted / rebranded as `forensic_logger` for post-hoc analysis only. The real defense is `ContentBlock` `tool_result` wrapping + CWD restriction + allowlists + HumanGate.
+- **Multi-breakpoint prompt caching.** Replaces "cache last system block." Cache tool defs (1h), static system (1h), conversation history (5m auto). Static-prompt rule is enforced at workflow load time (no `{{var}}` in system prompts).
+- **`max_retries=0` on every underlying SDK client.** Our `retry_on_rate_limit()` is the single authority — prevents 3×3 retry amplification.
+- **Retry error taxonomy.** Three classes: retryable-transient (429/529/500/connection), retryable-semantic (via Pydantic AI `ModelRetry`), non-retryable (auth/invalid request). Not a single 429/529 flag.
+- **`ClientCapabilities` descriptor** on every adapter. Components check capabilities, never `isinstance()`.
+- **`ContentBlock` discriminated union** with `Field(discriminator='type')`.
+- **`yoyo-migrations`** for SQLite schema evolution.
+- **Workflow directory content hash** stored in `runs` table. Resume refuses on mismatch unless `--force-workflow-version-mismatch`.
+- **AgentLoop subagent context isolation** default: fresh context per subagent (Anthropic pattern). Opt-in shared via config.
+
+### M3 Additions
+
+- **Evaluation harness via `pydantic-evals`.** `Case + Dataset + LLMJudge + span-based evaluators`. `aiw eval <workflow>` command. Ten cases per workflow.
+- **OTel GenAI observability via `logfire`.** Two lines: `logfire.instrument_anthropic()`, `logfire.instrument_openai()`. Every LLM call emits standardized spans.
+- **Debug CLI:** `aiw inspect <run_id> --task <task_id>`, `aiw rerun-task`, `aiw gc`, `aiw stats`.

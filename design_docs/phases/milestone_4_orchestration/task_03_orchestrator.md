@@ -1,73 +1,100 @@
-# Task 03 — Orchestrator Component
+# Task 03 — DAG Orchestrator (Promotes Pipeline)
 
-**Issues:** C-10, C-11, C-12, C-13, C-14
+**Issues:** C-10, C-11, C-12, C-13, C-14, IMP-08, X-03
 
 ## What to Build
 
-Executes a task DAG from the Planner. Handles topological scheduling, per-provider concurrency, checkpoint/resume, and the double-failure hard-stop policy. Mandates a Validator gate after every AgentLoop step.
+Executes a task DAG from the Planner. Promotes the linear `Pipeline` (M2) to a full DAG executor. `pydantic-graph` is the preferred substrate — its typed edges give compile-time wiring validation for free. Falls back to `networkx` topological sort if pydantic-graph constraints don't fit.
+
+**Relationship to Pipeline:** the `Pipeline` component stays — simple linear workflows continue to use it. The `Orchestrator` handles workflows with a real DAG topology (`slice_refactor`, `jvm_modernization`).
 
 ## Deliverables
 
 ### `components/orchestrator.py`
 
-**Config:**
 ```python
 class OrchestratorConfig(ComponentConfig):
-    plan_source: str                   # component name that produces the Plan
-    parallelism: int = 5               # per-provider semaphore size
+    plan_source: str                     # component name producing the Plan
+    parallelism: int = 5
     validator_config: ValidatorConfig | None = None
-    dispatch_config: dict[str, str] = {}  # task_type -> tier override
+    failure_policy: Literal["hard_stop", "best_effort", "n_of_m"] = "hard_stop"
 ```
 
-**Behavior:**
+### Behavior
 
-**DAG scheduling:**
-- Receive `Plan` (DAG of tasks with `depends_on` edges)
-- Topological sort via `networkx.topological_sort()`
-- Identify all tasks with no pending dependencies as "ready"
-- Schedule ready tasks up to `parallelism` concurrent per provider
+1. Receive `Plan` (DAG of typed tasks)
+2. Validate DAG at plan time:
+   - No cycles
+   - All `depends_on` references point to existing tasks
+   - Input/output schemas match across edges (Haystack pattern — type errors at plan time, not runtime)
+3. Topological sort — use `pydantic-graph`'s `Graph.compile()` if plan shape permits; else fall back to `networkx.topological_sort()`
+4. Schedule ready tasks (no pending deps) up to `parallelism` per provider
+5. Per-provider semaphore: prevents overloading any one provider
+6. For each task: dispatch to correct component (Worker / AgentLoop / Fanout / HumanGate)
+7. After AgentLoop step: mandatorily run Validator (CRIT-25)
+8. On validator failure: one mitigation attempt; second failure → hard stop per `failure_policy`
 
-**Per-provider semaphore:**
-- `asyncio.Semaphore` per provider (anthropic, ollama, openai_compat)
-- Prevents overloading a single provider when tasks use different tiers
+### Failure Policies
 
-**Checkpoint/resume:**
-- On startup: read task states from SQLite for this `run_id`
-- Skip tasks with `status="completed"`
-- Re-queue tasks with `status="running"` (treat as interrupted — safe to re-run)
-- Continue from ready tasks
+Per analysis — the single "hard_stop only" policy is too restrictive:
 
-**Task execution:**
-1. Mark task `running` in SQLite
-2. Dispatch to Worker or AgentLoop (based on task type in plan)
-3. If AgentLoop: mandatorily run Validator after completion
-4. If Validator fails: **one mitigation attempt** — re-run component with `failure_reason` in context
-5. If mitigation fails: **hard stop** — cancel all in-flight tasks via `asyncio.TaskGroup` scope cancellation, write `OrchestratorFailure` artifact, raise `OrchestratorHardStopError`
-6. On success: mark `completed`, update dependent tasks' ready status
+- **`hard_stop`** (default): double failure cancels the run. Right for modernization where compile gates are load-bearing.
+- **`best_effort`**: collect all failures, continue. Right for docs/review workflows where individual failures don't invalidate the batch.
+- **`n_of_m`**: succeed if ≥ N of M tasks pass. Right for aggregate workflows (summarize 10 files — 8 good summaries is acceptable).
 
-**Task result passing (C-14):**
-- Each task declares `output_key: str` in the plan schema
-- Completed task outputs stored in a `results: dict[str, Any]` dict keyed by `output_key`
-- Downstream tasks receive `results` as available input variables for prompt rendering
+Each workflow declares its policy. Default stays `hard_stop`.
 
-**SIGINT cancellation (X-03):**
-- Wrap the main execution in `asyncio.TaskGroup`
-- On `KeyboardInterrupt`: mark in-flight tasks as `running` (not failed) in SQLite — they are safe to resume
-- Print "Run paused — resume with: aiw resume <run_id>"
+### Send-Equivalent Preparation (IMP-08)
+
+Plan schema must support dynamic fan-out. A task can declare:
+
+```python
+class Task(BaseModel):
+    task_id: str
+    task_type: Literal["worker", "agent_loop", "fanout", "human_gate", "runtime_fanout"]
+    depends_on: list[str] = []
+    # ... other fields
+
+    # For runtime_fanout type:
+    spawn_template: Task | None = None  # template to instantiate per result item
+    spawn_source_output: str | None = None  # output_key from upstream task to iterate
+```
+
+When the Orchestrator hits a `runtime_fanout` task: it reads the upstream output, creates one instance of the template per item, schedules them. Not implemented in M4 unless `slice_refactor` needs it — but the Plan schema permits it now so we don't need to change the schema later.
+
+### SIGINT Cancellation (X-03)
+
+Wrap main execution in `asyncio.TaskGroup`:
+
+```python
+try:
+    async with asyncio.TaskGroup() as tg:
+        for task in scheduler.ready():
+            tg.create_task(self._run_task(task))
+except KeyboardInterrupt:
+    # mark in-flight as running (not failed) — resume-safe
+    await storage.mark_interrupted(run_id)
+    print(f"Run paused — resume with: aiw resume {run_id}")
+    raise SystemExit(130)
+```
+
+### Checkpoint/Resume
+
+Same as Pipeline: task states in SQLite, `aiw resume` skips `completed`, re-queues `running`.
 
 ## Acceptance Criteria
 
-- [ ] Tasks with no dependencies run in parallel (verify with a mock that records call order)
+- [ ] Independent tasks run in parallel (verify with mock timestamp recorder)
 - [ ] Task B waits for Task A if `B.depends_on = [A]`
-- [ ] Completed tasks from a prior run are skipped on resume
-- [ ] AgentLoop task result always passes through Validator before marking `completed`
-- [ ] Double failure triggers hard stop and cancels remaining tasks
-- [ ] SIGINT writes `running` (not `failed`) to SQLite for in-flight tasks
+- [ ] AgentLoop output always runs through Validator before `completed`
+- [ ] `failure_policy: hard_stop` cancels siblings on double-failure
+- [ ] `failure_policy: best_effort` continues and reports all failures
+- [ ] Plan with a cycle raises at load time (before any LLM call)
+- [ ] Plan with type mismatch on an edge raises at load time
+- [ ] SIGINT marks running tasks `running` (not `failed`) in SQLite
 
 ## Dependencies
 
 - Task 01 (Planner)
 - Task 02 (AgentLoop)
-- M2 Task 02 (Worker)
-- M2 Task 03 (Validator)
-- M1 Task 12 (storage)
+- M2 Tasks 02, 03, 04, 05

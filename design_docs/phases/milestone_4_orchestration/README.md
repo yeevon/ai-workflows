@@ -1,41 +1,39 @@
-# Milestone 4 — Orchestration Components
+# Milestone 4 — Orchestration Components (+ Ollama Infrastructure)
 
 ## Goal
 
-Build the components needed to support multi-step, DAG-driven workflows with human review gates: Planner, Orchestrator, AgentLoop, and HumanGate.
+Now that `slice_refactor` demands a DAG (cross-repo dependencies), promote the linear `Pipeline` to a DAG `Orchestrator`. Add `Planner`, `AgentLoop`, `HumanGate`, and full `aiw resume`. Also wire up Ollama operational infrastructure — health checks, VPN drop handling, fallback to Haiku.
 
-**Exit criteria:** These four components can be composed to recreate Pipeline 2's shape — a Planner produces a DAG, the Orchestrator executes it with parallel branches, and a HumanGate pauses for review between planning and execution.
+**Exit criteria:** a Planner produces a DAG, the Orchestrator executes it with parallel branches, a HumanGate pauses between planning and execution, `aiw resume` picks up from any checkpointed state. Ollama runs reliably against your home desktop with fallback to Haiku on network failures.
 
-## Scope
+## Scope Changes from Original M4
 
-- `Planner` (two-phase: Qwen exploration + Opus planning with tools)
-- `Orchestrator` (DAG execution, topological sort, checkpoint/resume, double-failure hard stop)
-- `AgentLoop` (multi-turn, termination conditions, weak guarantee documented)
-- `HumanGate` (pretty-printed review, timeout, strict_review flag)
-- `aiw resume` (full implementation — was a stub in Milestone 1)
-- SIGINT cancellation handling
+- **DAG Orchestrator now arrives at M4** instead of M1 (SD-02). Promotes from linear `Pipeline`. `networkx` optional-dep installed here.
+- **Ollama operational infrastructure now here** (SD-03): health check, circuit breaker, auto-fallback to Haiku.
+- **AgentLoop subagent context isolation** is explicit (CRIT-11): fresh context per subagent by default.
+- **Send-equivalent runtime fan-out** designed in but deferred to M5 if not needed by first DAG workflow.
 
 ## Key Decisions In Effect
 
 | Decision | Value |
-|---|---|
-| Planner output | DAG with `depends_on: [task_id]` |
-| Plan parse retry | Max 3, then abort |
+| --- | --- |
+| DAG implementation | `pydantic-graph` (preferred) or `networkx` for topological sort |
+| Planner | Two-phase: Qwen exploration → Opus planning with tools |
+| Plan parse retry | Max 3 via `ModelRetry`, then abort |
 | Plan max tasks | Configurable, default 50 |
-| Two-phase planning | Phase 1: Qwen exploration → `runs/<run_id>/exploration/` docs. Phase 2: Opus with tool access reads docs + targeted lookups |
-| Topological sort | `networkx` |
 | Concurrency | Per-provider semaphore |
-| Double-failure | Hard stop — same policy as Fanout but at Orchestrator level |
-| AgentLoop guarantee | Weaker: best-effort determinism. Orchestrator mandates Validator after every AgentLoop step |
-| AgentLoop termination | No tool calls + explicit `done` tool + `max_iterations` (default 20) |
-| HumanGate render | Raw JSON → log file; pretty-printed plan → terminal |
-| HumanGate timeout | 30min default, configurable. Hard stop on expiry → `timed_out` in SQLite |
-| strict_review | `strict_review: true` in workflow YAML blocks `--skip-gate` |
+| Double failure | Full hard stop (same as Pipeline but DAG-aware) |
+| AgentLoop guarantee | Weak, documented. Orchestrator mandates Validator after every step |
+| AgentLoop subagent context | Fresh per subagent (default). Opt-in shared via `shared_context: true` |
+| AgentLoop termination | No tool calls OR `done` tool OR `max_iterations` |
+| HumanGate timeout | `None` for `strict_review=True` (wait forever). 30 min otherwise |
+| Ollama fallback | On `ConnectionError`: pause run, prompt user to fall back to Haiku or retry |
 
 ## Task Order
 
-1. `task_01_planner.md`
-2. `task_02_agent_loop.md` (Planner depends on AgentLoop internally)
-3. `task_03_orchestrator.md`
-4. `task_04_human_gate.md`
-5. `task_05_aiw_resume.md`
+1. `task_01_planner.md` — two-phase Planner
+2. `task_02_agent_loop.md` — fresh-context subagents
+3. `task_03_orchestrator.md` — DAG executor, promotes Pipeline
+4. `task_04_human_gate.md` — full gate with `strict_review`
+5. `task_05_aiw_resume.md` — full resume with DAG
+6. `task_06_ollama_infrastructure.md` — NEW — health check + circuit breaker + Haiku fallback
