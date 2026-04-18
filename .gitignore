@@ -1,1 +1,33 @@
-.vscode
+# Environment
+.venv/
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Build
+dist/
+*.egg-info/
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# ai-workflows runtime (local only, never committed)
+runs/
+*.db
+*.db-wal
+*.db-shm
+
+# Tiers overlay (machine-specific)
+tiers.local.yaml
