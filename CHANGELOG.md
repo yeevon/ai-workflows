@@ -7,6 +7,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 pre-build issue files bridging audit.md to tasks 02–13 (2026-04-19)
+
+Doc-only deliverable. Task files `task_02`…`task_13` were drafted **before**
+the reconciliation audit ran, so none of them cite [audit.md](design_docs/phases/milestone_1_reconciliation/audit.md)
+as an input. Per [CLAUDE.md](CLAUDE.md) Builder conventions, pre-build issue
+files at `design_docs/phases/milestone_1_reconciliation/issues/task_NN_issue.md`
+are the channel the Builder workflow consults for task-spec amendments. One
+file created per downstream task, each: (a) pointing the Builder at
+[audit.md](design_docs/phases/milestone_1_reconciliation/audit.md) in the
+required reading order, (b) listing the audit rows that task must execute,
+(c) flagging divergences between the task spec and the audit as explicit
+HIGH / MEDIUM / LOW amendments.
+
+**Files added:**
+
+- `design_docs/phases/milestone_1_reconciliation/issues/task_02_issue.md`
+  through `task_13_issue.md` (12 files).
+
+**Key divergences surfaced:**
+
+- 🔴 **HIGH — AUD-03-01:** [task 03](design_docs/phases/milestone_1_reconciliation/task_03_remove_llm_substrate.md)
+  spec keeps `ai_workflows/primitives/llm/__init__.py` as an empty stub for
+  M2; [audit.md](design_docs/phases/milestone_1_reconciliation/audit.md)
+  marks the path REMOVE entirely (architecture.md §4.1 names `providers/`,
+  not `llm/`). Requires user resolution before /implement m1 t3 runs.
+- 🟡 **MEDIUM — AUD-04-01:** [task 04](design_docs/phases/milestone_1_reconciliation/task_04_remove_tool_registry.md)
+  spec has a "if audit keeps any stdlib helper" branch; audit keeps none —
+  branch is dead and should be removed on /implement.
+- 🟡 **MEDIUM — AUD-12-01:** [.github/workflows/ci.yml](.github/workflows/ci.yml)
+  step named `"Lint imports (3-layer architecture)"` must be renamed as part
+  of [task 12](design_docs/phases/milestone_1_reconciliation/task_12_import_linter_rewrite.md)
+  after the four-layer contract lands.
+- 🟢 Several LOW scope-boundary notes across tasks 05 / 07 / 10 / 11 / 12
+  (coordination between sibling tasks, nice_to_have.md guardrails).
+
+No code touched.
+
+### Changed — M1 Task 01: AC checkboxes ticked with verification evidence (2026-04-19, cycle 6)
+
+User caught that despite cycles 1–5 logging `✅ PASS` in
+[task_01_issue.md](design_docs/phases/milestone_1_reconciliation/issues/task_01_issue.md),
+the six AC checkboxes in
+[task_01_reconciliation_audit.md](design_docs/phases/milestone_1_reconciliation/task_01_reconciliation_audit.md)
+were still `- [ ]`. Cycle 6 re-counted every AC against ground truth — 23
+`.py` files via `Glob("ai_workflows/**/*.py")` (set-match, not just cardinality);
+17 `pyproject.toml` dependency lines (11 runtime + 1 optional + 5 dev); 14 KEEP
+rows individually scanned for KDR / architecture.md § citations; 21 MODIFY + 16
+REMOVE rows each carrying a `task_NN` Target link; `—` only on pure-KEEP rows;
+`logfire` → REMOVE → task 02 — then ticked each box with an inline
+`_(verified 2026-04-19 cycle 6 — evidence)_` note. Logged as **M1-T01-ISS-05**
+(RESOLVED). Gates: 345 passed / 2 contracts kept / ruff clean.
+
+No runtime code touched. Doc-only.
+
+### Changed — M1 Task 01: Reconciliation Audit citation cleanup (2026-04-19, cycle 3)
+
+Cycle-3 audit surfaced two residual AC gaps not caught in cycles 1–2. Both
+resolved in `design_docs/phases/milestone_1_reconciliation/audit.md`:
+
+- **M1-T01-ISS-02** (MEDIUM) — `tests/conftest.py` KEEP row now cites
+  [architecture.md §3](design_docs/architecture.md) + KDR-005 ("primitives
+  layer preserved and owned"). AC3 ("Every KEEP row cites either a KDR or
+  an architecture.md section") now passes for this row.
+- **M1-T01-ISS-03** (LOW) — `typer>=0.12` KEEP row reworded. Primary
+  citation moved to [nice_to_have.md §4](design_docs/nice_to_have.md) with
+  an inline note flagging that [architecture.md §4.4](design_docs/architecture.md)'s
+  "Click-based for now" phrasing is stale against the Typer reality
+  ([pyproject.toml:21](pyproject.toml), [ai_workflows/cli.py](ai_workflows/cli.py)).
+  The architecture.md wording correction is parked for a future ADR under
+  `design_docs/adr/` (directory to be created by
+  [task 10](design_docs/phases/milestone_1_reconciliation/task_10_workflow_hash_decision.md)).
+
+No code touched. No runtime behaviour change.
+
+### Added — M1 Task 01: Reconciliation Audit (2026-04-19)
+
+Doc-only deliverable. Produced `design_docs/phases/milestone_1_reconciliation/audit.md`:
+a tagged table of every `ai_workflows/` module, every `pyproject.toml`
+dependency, every `tests/` file, and every `migrations/` SQL file with a
+KEEP / MODIFY / REMOVE / ADD / DECIDE verdict, a reason citing a KDR or an
+`architecture.md` section, and the M1 task that will execute the change.
+Acts as the authoritative input for M1 tasks 02–12. No code touched.
+
+**Files added:**
+
+- `design_docs/phases/milestone_1_reconciliation/audit.md`.
+
+**Acceptance criteria satisfied ([task 01](design_docs/phases/milestone_1_reconciliation/task_01_reconciliation_audit.md)):**
+
+- Every `.py` file under `ai_workflows/` appears in the file-audit table
+  (plus `tiers.yaml` / `pricing.yaml` under the root-config section).
+- Every dependency line in `pyproject.toml` appears in the dependency-audit
+  table (`[project].dependencies`, `[project.optional-dependencies]`, and
+  `[dependency-groups].dev`), plus a companion ADD table for the four new
+  substrate deps (`langgraph`, `langgraph-checkpoint-sqlite`, `litellm`,
+  `fastmcp`).
+- Every KEEP row cites either a KDR or an `architecture.md` section.
+- Every MODIFY / REMOVE row cites the M1 task that will execute it.
+- Only pure-KEEP items without follow-on work carry a `—` in the Target
+  task column.
+- `logfire` carries an explicit REMOVE verdict citing [architecture.md §8.1](design_docs/architecture.md)
+  and [nice_to_have.md §1 / §3 / §8](design_docs/nice_to_have.md) — this is
+  the load-bearing question [task 02](design_docs/phases/milestone_1_reconciliation/task_02_dependency_swap.md)
+  will consume.
+
 ### Changed — Architecture pivot: LangGraph + MCP substrate (2026-04-19)
 
 Design-mode pivot away from the pydantic-ai-centric M1 plan toward a
