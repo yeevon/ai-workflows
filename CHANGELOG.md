@@ -7,6 +7,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M1 Task 07: Refit RetryPolicy to 3-bucket Taxonomy (2026-04-19)
+
+Rewrote `ai_workflows/primitives/retry.py` around the three-bucket
+taxonomy mandated by [architecture.md §8.2](design_docs/architecture.md)
+and KDR-006. The module is now **classification only** — the
+execution layer (self-looping edges, exponential backoff) lands in the
+`graph/` layer in M2. LiteLLM owns transient retry inside a single
+call; our `RetryingEdge` will read `RetryPolicy` and consume
+`classify()` at the edge between an LLM node and its
+`ValidatorNode`. No `ModelRetry` wiring — LangGraph ships that.
+
+**Files modified:**
+
+- `ai_workflows/primitives/retry.py` — new surface.
+  `RetryableTransient`, `RetryableSemantic(reason, revision_hint)`,
+  `NonRetryable`, `RetryPolicy(max_transient_attempts,
+  max_semantic_attempts, transient_backoff_base_s,
+  transient_backoff_max_s)`, `classify(exc) -> type[…]`. The old
+  `RETRYABLE_STATUS` / `is_retryable_transient` /
+  `retry_on_rate_limit` surface is removed (no consumer survives M1;
+  M2's `RetryingEdge` replaces the retry loop). `anthropic` and
+  `openai` imports removed (closes M1-T02-ISS-01 against this file).
+- `tests/primitives/test_retry.py` — rewritten (21 tests). Covers
+  class export + disjointness, `RetryableSemantic` reason /
+  revision_hint round-trip, `RetryPolicy` default values + validation
+  (`ge=1` / `gt=0` guards), parametrised `classify()` table across
+  every listed LiteLLM transient + non-retryable class, subprocess
+  `TimeoutExpired` / `CalledProcessError` mapping, the
+  "everything-else-is-NonRetryable" default, and the explicit
+  `ValidationError → NonRetryable` rule (ValidatorNode owns the
+  semantic bucket per KDR-004). Sanity pins scan the module file's
+  import statements for residual `anthropic` / `openai` /
+  `pydantic_ai` / `ModelRetry` references and for
+  `TierConfig.max_retries` / `tier_config.max_retries` docstring
+  leftovers.
+
+**Acceptance criteria satisfied:**
+
+- AC-1 Three taxonomy classes exported from `primitives.retry`.
+  Pinned by `test_taxonomy_classes_are_exported` +
+  `test_taxonomy_classes_are_distinct`.
+- AC-2 `classify()` covers every listed LiteLLM error class.
+  Parametrised test tables for transient (`Timeout`,
+  `APIConnectionError`, `RateLimitError`,
+  `ServiceUnavailableError`) and non-retryable (`BadRequestError`,
+  `AuthenticationError`, `NotFoundError`,
+  `ContextWindowExceededError`); plus `subprocess.TimeoutExpired →
+  RetryableTransient`, `subprocess.CalledProcessError →
+  NonRetryable`, default-to-`NonRetryable`, and
+  `ValidationError → NonRetryable`.
+- AC-3 `grep -r "ModelRetry" ai_workflows/ tests/` returns zero
+  matches. Pinned by
+  `test_retry_module_has_no_pydantic_ai_or_model_retry_imports` and
+  confirmed post-build.
+- AC-4 `uv run pytest tests/primitives/test_retry.py` → 21 passed.
+- AC-5 Full-suite pytest: collection errors down from 3 to 2
+  (`test_retry.py` now imports cleanly). Remaining red is pre-existing
+  T08 / T09 / T11 carry-over (`test_cost.py` via M1-T05-ISS-01 →
+  T08; `test_logging.py` via logfire → T09; `test_cli.py` via
+  `logging.py` cascade → T09/T11;
+  `test_scaffolding.py::test_aiw_*` via the same cascade). Matches the
+  T-scope reading applied in T02–T06.
+
+**Carry-over ticked:**
+
+- M1-T02-ISS-01 (post-T02 — `primitives/retry.py` imported `anthropic`
+  after task 02 removed the dep). Resolved: all three `from anthropic
+  import …` blocks are gone; the openai imports are dropped too
+  (spec-scoped to LiteLLM + subprocess). `test_retry_module_has_no_removed_sdk_imports`
+  pins the absence of both SDKs in `from` / `import` statements.
+- M1-T06-ISS-01 (post-T06 — `tests/primitives/test_retry.py:237-245`
+  constructed `TierConfig` with removed flat-shape kwargs).
+  Resolved: `TierConfig` is incidental to classifier tests, so the
+  construction was dropped outright (option B from the carry-over
+  wording). The file no longer imports `TierConfig`.
+- M1-T06-ISS-03 (post-T06 — `ai_workflows/primitives/retry.py:35,:131`
+  docstrings referenced the removed `TierConfig.max_retries` field).
+  Resolved: the refit rewrote the module docstring to say "the
+  per-tier transient budget lives here, on
+  `RetryPolicy.max_transient_attempts`, not on the tier config";
+  `test_retry_module_has_no_tier_config_max_retries_references` pins
+  the absence.
+
+**Deviations from spec / audit:**
+
+- Pre-pivot `is_retryable_transient` / `retry_on_rate_limit` /
+  `RETRYABLE_STATUS` removed outright rather than re-shaped. Spec
+  names `classify()` + `RetryPolicy` as the new surface and does not
+  list a retry loop as a deliverable (the loop belongs to M2's
+  `RetryingEdge`). No current consumer survives M1.
+- `subprocess.CalledProcessError` defaults to `NonRetryable`
+  unconditionally. Spec's "unless the stderr matches a known
+  transient pattern (flagged for M2 refinement)" is deferred to M2 —
+  at M1 we take the safe bucket; M2's `ClaudeCodeSubprocess` driver
+  will supply the stderr patterns it wants promoted to transient.
+- Export surface: `__all__` explicitly names the five public symbols
+  (`RetryableTransient`, `RetryableSemantic`, `NonRetryable`,
+  `RetryPolicy`, `classify`). Spec is silent on this; a minimal
+  `__all__` keeps `from ai_workflows.primitives.retry import *`
+  predictable for M2 callers.
+
 ### Changed — M1 Task 06: Refit TierConfig + tiers.yaml (2026-04-19)
 
 Rewrote `ai_workflows/primitives/tiers.py` around the discriminated

@@ -1,171 +1,164 @@
-"""Retry taxonomy — the single retry authority for the whole framework.
+"""Three-bucket retry taxonomy (M1 Task 07 — KDR-006, [architecture.md §8.2]).
 
-Produced by M1 Task 10 (P-36, P-40, P-41, CRIT-06, CRIT-08; revises P-37).
+Exposes the classifier + policy object M2's `RetryingEdge` and
+`ValidatorNode` will consume. This module is **classification only** —
+it does not run a retry loop. The execution layer (self-looping edges,
+exponential backoff) lands in the `graph/` layer in M2 per
+[architecture.md §4.2](../../design_docs/architecture.md) and
+KDR-001.
 
-Three error classes, three different strategies
------------------------------------------------
-* **Retryable Transient** — network and rate-limit errors. Exponential
-  backoff + jitter, bounded by ``max_attempts``. This module owns that
-  retry loop. SDK clients are always constructed with ``max_retries=0``
-  (CRIT-06) so :func:`retry_on_rate_limit` is the *only* place a request
-  gets retried.
-* **Retryable Semantic** — the LLM returned text that does not match the
-  expected structured output. Handled by raising
-  :class:`pydantic_ai.ModelRetry` from inside a tool callable or an
-  ``@agent.output_validator`` hook; pydantic-ai feeds the error back as
-  a new turn and lets the model try again. Bounded by the Agent's
-  ``max_retries`` setting (kept low — typically 3). This module does not
-  implement semantic retry; it only documents and tests the integration
-  pattern.
-* **Non-Retryable** — auth, bad request, configuration, security, and
-  budget errors surface directly to the caller with no retry at any
-  layer. :func:`is_retryable_transient` returns ``False`` for these.
+Why three buckets (see [architecture.md §8.2](../../design_docs/architecture.md)):
 
-Classification keys off HTTP status code and a small whitelist of SDK
-exception types. We treat both the ``anthropic`` and ``openai`` SDK
-variants as retryable because the project's default tiers drive Gemini
-through the OpenAI-compatible endpoint (see memory:
-``project_provider_strategy``). Without the openai branch the retry
-layer would silently no-op on the primary runtime path.
+* **`RetryableTransient`** — network blip, 429, 5xx, stream interruption.
+  Safe to retry the same call. LiteLLM retries within a single call
+  first; if exhausted, the exception bubbles up and `RetryingEdge`
+  self-loops at the node level with exponential backoff per
+  `RetryPolicy`.
+* **`RetryableSemantic`** — output parsed but violated schema /
+  business rule. Re-invoke the LLM with a revision hint. Raised
+  explicitly by M2's `ValidatorNode` after catching pydantic
+  `ValidationError` (KDR-004). This module does **not** auto-classify
+  `ValidationError` — the validator is the one that decides whether a
+  payload is a retryable schema miss or a non-retryable logic error.
+* **`NonRetryable`** — auth failure, invalid model, logic error, budget
+  exceeded. Node fails; graph-level policy decides (abort run vs.
+  continue independent siblings). Two distinct non-retryable failures
+  in the same run trigger the double-failure hard-stop (§8.2).
 
-See also
---------
-* ``primitives/llm/model_factory.py`` — every SDK client is built with
-  ``max_retries=0`` so this module stays the sole retry authority.
-* ``primitives/tiers.py`` — ``TierConfig.max_retries`` holds the per-tier
-  budget for our retry layer; callers pass it in as ``max_attempts``.
+Relationship to sibling modules
+-------------------------------
+* `primitives/tiers.py` — post-M1 Task 06 tier retries ride under
+  LiteLLM (KDR-007). The per-tier transient budget lives here, on
+  `RetryPolicy.max_transient_attempts`, not on the tier config.
+* `primitives/cost.py` — M1 Task 08 raises `NonRetryable("budget
+  exceeded")` from `CostTracker.check_budget` per §8.5.
+* `graph/` (M2) — `RetryingEdge` reads `RetryPolicy` and consumes
+  `classify()` at the edge between an LLM node and its `ValidatorNode`.
+  Retry-prompt wiring is LangGraph's job, not ours.
+
+Classification keys off LiteLLM exception types and stdlib
+`subprocess` errors — the pre-pivot provider SDKs (KDR-003, KDR-005)
+are no longer imported anywhere in this module.
 """
 
 from __future__ import annotations
 
-import asyncio
-import random
-from collections.abc import Awaitable, Callable
+import subprocess
 
-import structlog
-from anthropic import (
-    APIConnectionError as AnthropicAPIConnectionError,
-)
-from anthropic import (
-    APIStatusError as AnthropicAPIStatusError,
-)
-from anthropic import (
-    RateLimitError as AnthropicRateLimitError,
-)
-from openai import (
-    APIConnectionError as OpenAIAPIConnectionError,
-)
-from openai import (
-    APIStatusError as OpenAIAPIStatusError,
-)
-from openai import (
-    RateLimitError as OpenAIRateLimitError,
-)
+import litellm
+from pydantic import BaseModel, Field
 
-logger = structlog.get_logger(__name__)
-
-RETRYABLE_STATUS: frozenset[int] = frozenset({429, 529, 500, 502, 503})
-"""HTTP status codes we treat as retryable transient failures.
-
-429 — rate limit; 529 — Anthropic ``overloaded_error``; 500/502/503 —
-server-side transient. 504 is intentionally excluded: it signals an
-upstream deadline miss, and retrying blindly tends to make an already
-overloaded backend worse. Clients that need 504 handling should bubble
-it as a timeout.
-"""
-
-_RETRYABLE_RATE_LIMIT_TYPES: tuple[type[Exception], ...] = (
-    AnthropicRateLimitError,
-    OpenAIRateLimitError,
-)
-_RETRYABLE_CONNECTION_TYPES: tuple[type[Exception], ...] = (
-    AnthropicAPIConnectionError,
-    OpenAIAPIConnectionError,
-)
-_RETRYABLE_STATUS_TYPES: tuple[type[Exception], ...] = (
-    AnthropicAPIStatusError,
-    OpenAIAPIStatusError,
-)
+__all__ = [
+    "NonRetryable",
+    "RetryPolicy",
+    "RetryableSemantic",
+    "RetryableTransient",
+    "classify",
+]
 
 
-def is_retryable_transient(exc: Exception) -> bool:
-    """Return ``True`` if ``exc`` is a network-level or rate-limit failure.
+class RetryableTransient(Exception):
+    """Network blip, 429, 5xx, stream interruption. Safe to retry the same call.
 
-    The classification is intentionally narrow. Anything that is not a
-    known-transient SDK exception (or an ``APIStatusError`` whose HTTP
-    status is in :data:`RETRYABLE_STATUS`) falls through to ``False`` and
-    surfaces to the caller on the first attempt — auth, validation,
-    configuration, security, and budget errors must never trigger a
-    retry.
-
-    The check runs ``isinstance`` against both ``anthropic`` and
-    ``openai`` SDK exception classes so the retry layer behaves
-    uniformly across every provider wired by the Task 03 model factory.
+    LiteLLM retries once internally; a raised `RetryableTransient`
+    means that internal budget is exhausted and the edge layer should
+    self-loop per `RetryPolicy.max_transient_attempts` with
+    exponential backoff bounded by `transient_backoff_max_s`.
     """
-    if isinstance(exc, _RETRYABLE_CONNECTION_TYPES):
-        return True
-    if isinstance(exc, _RETRYABLE_RATE_LIMIT_TYPES):
-        return True
-    if isinstance(exc, _RETRYABLE_STATUS_TYPES):
-        return exc.status_code in RETRYABLE_STATUS
-    return False
 
 
-async def retry_on_rate_limit[T](
-    fn: Callable[..., Awaitable[T]],
-    *args: object,
-    max_attempts: int = 3,
-    base_delay: float = 1.0,
-    **kwargs: object,
-) -> T:
-    """Run ``fn`` with exponential backoff + jitter on transient failures.
+class RetryableSemantic(Exception):
+    """Output parsed but violated schema / business rule.
 
-    Parameters
-    ----------
-    fn:
-        An async callable. Usually ``agent.run`` or a thin wrapper around
-        it, but anything awaitable works.
-    max_attempts:
-        Total number of attempts (not retries). ``max_attempts=3`` means
-        one initial call plus up to two retries. Callers that want the
-        per-tier budget pass ``tier_config.max_retries`` here.
-    base_delay:
-        Seconds used as the base of the backoff curve. Delay for attempt
-        ``n`` (0-indexed) is ``base_delay * 2**n + uniform(0, 1)``; the
-        uniform term is the jitter.
+    Raised by M2's `ValidatorNode` after catching a pydantic
+    `ValidationError` or a business-rule mismatch. Carries a plain-text
+    `reason` for the log line and a `revision_hint` that LangGraph
+    feeds back to the model as the next-turn prompt so it can
+    course-correct (KDR-004).
+    """
 
-    Notes
+    def __init__(self, reason: str, revision_hint: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.revision_hint = revision_hint
+
+
+class NonRetryable(Exception):
+    """Auth failure, invalid model, logic error, budget exceeded.
+
+    Surfaces directly to the caller. The graph-level policy decides
+    whether to abort the whole run or let independent siblings
+    continue (§8.2). Two of these in the same run trigger the
+    double-failure hard-stop.
+    """
+
+
+class RetryPolicy(BaseModel):
+    """Per-tier retry budget + backoff shape.
+
+    Consumed by M2's `RetryingEdge`. `max_transient_attempts` and
+    `max_semantic_attempts` match the §8.2 defaults; the backoff
+    fields cap the transient-retry sleep window so a misbehaving
+    provider cannot lock a run up indefinitely.
+    """
+
+    max_transient_attempts: int = Field(default=3, ge=1)
+    max_semantic_attempts: int = Field(default=3, ge=1)
+    transient_backoff_base_s: float = Field(default=1.0, gt=0.0)
+    transient_backoff_max_s: float = Field(default=30.0, gt=0.0)
+
+
+_LITELLM_TRANSIENT: tuple[type[BaseException], ...] = (
+    litellm.Timeout,
+    litellm.APIConnectionError,
+    litellm.RateLimitError,
+    litellm.ServiceUnavailableError,
+)
+
+_LITELLM_NON_RETRYABLE: tuple[type[BaseException], ...] = (
+    litellm.BadRequestError,
+    litellm.AuthenticationError,
+    litellm.NotFoundError,
+    litellm.ContextWindowExceededError,
+)
+
+
+def classify(
+    exc: BaseException,
+) -> type[RetryableTransient | RetryableSemantic | NonRetryable]:
+    """Map an exception to one of the three retry buckets.
+
+    Returns the taxonomy **class** (not an instance) so callers can
+    raise a fresh bucket-tagged exception or dispatch by `is` /
+    `issubclass`. The mapping is intentionally narrow — anything not
+    explicitly listed is `NonRetryable` so a misclassified error fails
+    loudly instead of retrying into oblivion.
+
+    Rules
     -----
-    * Non-transient errors re-raise on the first attempt — no sleep, no
-      log noise, no swallowed stack trace.
-    * The last attempt re-raises rather than sleeping. Sleeping after
-      the final try would delay the failure without changing the
-      outcome.
-    * Every retry emits a structured ``retry.transient`` WARNING with
-      the attempt number, the sleep duration, and the exception type
-      name. The log line is how M1 Task 11 (logging) + M3 (OTel) users
-      see retry behaviour in the run timeline.
+    * LiteLLM `Timeout` / `APIConnectionError` / `RateLimitError` /
+      `ServiceUnavailableError` → `RetryableTransient`.
+    * LiteLLM `BadRequestError` / `AuthenticationError` /
+      `NotFoundError` / `ContextWindowExceededError` → `NonRetryable`.
+    * `subprocess.TimeoutExpired` → `RetryableTransient` (covers the
+      Claude Code CLI subprocess tier; a timed-out wrapper is safe to
+      rerun).
+    * `subprocess.CalledProcessError` → `NonRetryable`. Stderr-pattern
+      recovery (e.g. transient auth refresh) is flagged for M2
+      refinement; at M1 we default to the safe bucket.
+    * Anything else → `NonRetryable`.
+
+    Pydantic `ValidationError` is **not** auto-classified. M2's
+    `ValidatorNode` catches it and raises `RetryableSemantic`
+    explicitly with a `revision_hint` so the validator owns the
+    decision (KDR-004).
     """
-    if max_attempts < 1:
-        raise ValueError(f"max_attempts must be >= 1, got {max_attempts!r}")
-
-    for attempt in range(max_attempts):
-        try:
-            return await fn(*args, **kwargs)
-        except Exception as exc:
-            is_last = attempt == max_attempts - 1
-            if not is_retryable_transient(exc) or is_last:
-                raise
-            delay = base_delay * (2**attempt) + random.uniform(0, 1)
-            logger.warning(
-                "retry.transient",
-                attempt=attempt + 1,
-                max_attempts=max_attempts,
-                delay=delay,
-                error_type=type(exc).__name__,
-            )
-            await asyncio.sleep(delay)
-
-    # Unreachable: the loop either returns, raises a non-transient error,
-    # or raises the last transient error on the final attempt.
-    raise RuntimeError("retry_on_rate_limit exited the loop without returning or raising")
+    if isinstance(exc, _LITELLM_TRANSIENT):
+        return RetryableTransient
+    if isinstance(exc, _LITELLM_NON_RETRYABLE):
+        return NonRetryable
+    if isinstance(exc, subprocess.TimeoutExpired):
+        return RetryableTransient
+    if isinstance(exc, subprocess.CalledProcessError):
+        return NonRetryable
+    return NonRetryable
