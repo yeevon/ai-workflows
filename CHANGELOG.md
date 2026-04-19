@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 10: Retry Taxonomy (2026-04-19)
+
+Implements P-36, P-40, P-41, CRIT-06, CRIT-08 (revises P-37). Lands the
+three-class error taxonomy that turns the retry story into a single
+authority: Retryable Transient (handled by
+`primitives.retry.retry_on_rate_limit`), Retryable Semantic (handled by
+pydantic-ai's `ModelRetry` pattern — documented and integration-tested
+here), Non-Retryable (surfaces on first attempt).
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/retry.py` — new module. Exports
+  `RETRYABLE_STATUS = frozenset({429, 529, 500, 502, 503})`,
+  `is_retryable_transient(exc)` which classifies both `anthropic` *and*
+  `openai` SDK exception variants (the spec lists only `anthropic`, but
+  the default tiers drive Gemini through the OpenAI-compatible endpoint
+  per memory `project_provider_strategy`; without the openai branch the
+  retry layer would silently no-op on the primary runtime path), and
+  `retry_on_rate_limit(fn, *args, max_attempts=3, base_delay=1.0,
+  **kwargs)` which loops `max_attempts` times, re-raises non-transient
+  errors on the first attempt, sleeps
+  `base_delay * 2**attempt + uniform(0, 1)` between transient retries,
+  logs a `retry.transient` WARNING with attempt / max_attempts / delay /
+  error_type on every retry, and re-raises the final transient error
+  without sleeping. `max_attempts < 1` raises `ValueError`. Callers that
+  want the per-tier budget (resolved by M1-T03-ISS-12) pass
+  `tier_config.max_retries` as `max_attempts`. Uses PEP 695 generic
+  syntax (`retry_on_rate_limit[T](...)`) so the return type is inferred
+  from `fn`'s awaited result.
+- `tests/primitives/test_retry.py` — 34 tests covering every acceptance
+  criterion: AC-1 `is_retryable_transient` True for 429/529/500/502/503
+  and `APIConnectionError` (parametrised across both SDKs) +
+  `RateLimitError` for both SDKs; AC-2 False for 400/401/403/404/422/504
+  and `ConfigurationError` / arbitrary exceptions; AC-3 retries up to
+  `max_attempts`, exhausts and re-raises, plus `TierConfig.max_retries`
+  round-trip (passes the field through as `max_attempts` and exhausts
+  after `tier.max_retries` calls); AC-4 non-transient errors raise on
+  first attempt with zero `asyncio.sleep` calls; AC-5 jitter — 4 draws
+  with `base_delay=0.0` collapse to the uniform term alone and
+  `len(set(sleeps)) > 1` pins non-determinism, and a pinned-RNG test
+  confirms the exponential component is `[1.0, 2.0, 4.0]` for
+  `base_delay=1.0`; AC-6 `structlog.testing.capture_logs` asserts two
+  `retry.transient` WARNINGs (for `max_attempts=3`) with `attempt`,
+  `max_attempts`, `delay`, and `error_type` fields, plus negative
+  coverage that first-success and non-transient paths emit none; AC-7
+  `ModelRetry` integration — `pydantic_ai.models.function.FunctionModel`
+  returns malformed JSON on call 1, an `@agent.output_validator` raises
+  `ModelRetry` with the `ValidationError` message, the model is invoked
+  a second time with a `RetryPromptPart` in the message history, and
+  the final agent output is a valid `Plan`. Also pins
+  `max_attempts < 1` → `ValueError`.
+- `design_docs/phases/milestone_1_primitives/task_10_retry.md` — status
+  line added, every AC checkbox ticked with the pinning test name.
+- `design_docs/phases/milestone_1_primitives/README.md` — Task 10 entry
+  flipped to `✅ Complete (2026-04-19)`.
+
+**Deviations from spec:**
+
+- Classification extended to openai SDK exceptions. The spec code block
+  imports from `anthropic` only; this module additionally handles
+  `openai.RateLimitError`, `openai.APIStatusError`, and
+  `openai.APIConnectionError` so the "single retry authority" (CRIT-06)
+  actually covers this repo's primary runtime path (Gemini via
+  `openai_compat`). Justified by memory `project_provider_strategy` and
+  by the spec's own Class-1 wording ("HTTP 429", "network") being
+  provider-agnostic.
+- Logger uses `structlog.get_logger(__name__)` (consistent with
+  `cost.py`) instead of the spec's bare `log.warning`.
+- Final-attempt branch does not sleep before re-raising. The spec
+  pseudocode computes `delay` and sleeps unconditionally inside the
+  except block; sleeping after the final try would delay the failure
+  without changing the outcome.
+
 ### Added — M1 Task 09: Cost Tracker with Budget Enforcement (2026-04-19)
 
 Implements CRIT-03, P-32 … P-34 and resolves P-35. Lands the

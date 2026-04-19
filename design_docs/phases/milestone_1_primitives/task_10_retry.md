@@ -1,5 +1,7 @@
 # Task 10 — Retry Taxonomy
 
+**Status:** ✅ Complete (2026-04-19)
+
 **Issues:** P-36, P-40, P-41, CRIT-06, CRIT-08 (revises P-37)
 
 ## What to Build
@@ -107,13 +109,42 @@ pydantic-ai catches `ModelRetry`, appends an error message as a turn, and re-inv
 
 ## Acceptance Criteria
 
-- [ ] `is_retryable_transient()` returns True for 429, 529, 500, APIConnectionError
-- [ ] `is_retryable_transient()` returns False for 400, 401, ConfigurationError
-- [ ] `retry_on_rate_limit()` retries transient errors up to `max_attempts`
-- [ ] Non-transient errors raise on first attempt (no retry delay)
-- [ ] Jitter is present (two consecutive retry delays should not be identical)
-- [ ] WARNING logged on each retry with attempt number and error type
-- [ ] `ModelRetry` integration test: inject a ValidationError in an output validator, confirm model gets a second chance
+- [x] `is_retryable_transient()` returns True for 429, 529, 500, APIConnectionError
+  — pinned by `tests/primitives/test_retry.py::test_is_retryable_transient_true_for_retryable_status_anthropic`,
+  `::test_is_retryable_transient_true_for_retryable_status_openai`,
+  `::test_is_retryable_transient_true_for_rate_limit_errors`,
+  `::test_is_retryable_transient_true_for_connection_errors`.
+- [x] `is_retryable_transient()` returns False for 400, 401, ConfigurationError
+  — pinned by `::test_is_retryable_transient_false_for_non_retryable_status`
+  (400, 401, 403, 404, 422, 504), `::test_is_retryable_transient_false_for_configuration_error`,
+  `::test_is_retryable_transient_false_for_arbitrary_exceptions`.
+- [x] `retry_on_rate_limit()` retries transient errors up to `max_attempts`
+  — `::test_retry_on_rate_limit_retries_transient_until_success`,
+  `::test_retry_on_rate_limit_exhausts_and_raises_transient`,
+  `::test_retry_on_rate_limit_uses_tier_max_retries` (feeds
+  `TierConfig.max_retries` through as `max_attempts`).
+- [x] Non-transient errors raise on first attempt (no retry delay)
+  — `::test_retry_on_rate_limit_raises_non_transient_immediately`,
+  `::test_retry_on_rate_limit_raises_http_400_immediately`
+  (both patch `asyncio.sleep` and assert zero sleep calls).
+- [x] Jitter is present (two consecutive retry delays should not be identical)
+  — `::test_retry_on_rate_limit_emits_jittered_delays` asserts
+  `len(set(sleeps)) > 1` with `base_delay=0.0`, and
+  `::test_retry_on_rate_limit_delays_include_exponential_component`
+  pins the exponential component by stubbing `random.uniform`.
+- [x] WARNING logged on each retry with attempt number and error type
+  — `::test_retry_on_rate_limit_logs_warning_per_retry` asserts event
+  name `retry.transient`, log level `warning`, and fields `attempt` /
+  `max_attempts` / `delay` / `error_type`. Negative coverage:
+  `::test_retry_on_rate_limit_does_not_log_on_first_success`,
+  `::test_retry_on_rate_limit_does_not_log_on_non_transient`.
+- [x] `ModelRetry` integration test: inject a ValidationError in an output validator, confirm model gets a second chance
+  — `::test_model_retry_feeds_error_back_and_model_retries` uses
+  `pydantic_ai.models.function.FunctionModel`: call 1 returns malformed
+  JSON, the `@agent.output_validator` raises `ModelRetry` from the
+  `ValidationError`, and call 2 receives a `RetryPromptPart` in its
+  message history before returning valid JSON that the validator
+  accepts.
 
 ## Dependencies
 

@@ -59,6 +59,6 @@ Build the foundation on top of `pydantic-ai`. We don't reimplement what they've 
 7. `task_07_tiers_loader.md` — tiers.yaml + pricing.yaml + profile + dir-hash utility — ✅ **Complete** (2026-04-18)
 8. `task_08_storage.md` — SQLite + yoyo-migrations + workflow_dir_hash — ✅ **Complete** (2026-04-19)
 9. `task_09_cost_tracker.md` — tagging + budget cap enforcement — ✅ **Complete** (2026-04-19)
-10. `task_10_retry.md` — retry taxonomy
+10. `task_10_retry.md` — retry taxonomy — ✅ **Complete** (2026-04-19)
 11. `task_11_logging.md` — structlog + logfire configuration
 12. `task_12_cli_primitives.md` — aiw list-runs / inspect / resume (stub) / run (stub)
