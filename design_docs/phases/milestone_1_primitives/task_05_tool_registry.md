@@ -1,5 +1,7 @@
 # Task 05 — Tool Registry and Forensic Logger
 
+**Status:** ✅ Complete (2026-04-18) — see [issues/task_05_issue.md](issues/task_05_issue.md).
+
 **Issues:** P-11, P-20, CRIT-04 (revises X-07)
 
 ## What to Build
@@ -85,11 +87,11 @@ The `ContentBlock` `tool_result` wrapping happens by virtue of pydantic-ai's pro
 
 ## Acceptance Criteria
 
-- [ ] Two `ToolRegistry()` instances in the same process have zero shared state
-- [ ] `build_pydantic_ai_tools(["read_file"])` returns only 1 tool, not the full registry
-- [ ] `forensic_logger` matches and logs injection patterns without modifying output
-- [ ] A `WARNING` structlog event appears when output contains a known pattern
-- [ ] Docstrings on `forensic_logger` explicitly state it is NOT a security control
+- [x] Two `ToolRegistry()` instances in the same process have zero shared state
+- [x] `build_pydantic_ai_tools(["read_file"])` returns only 1 tool, not the full registry
+- [x] `forensic_logger` matches and logs injection patterns without modifying output
+- [x] A `WARNING` structlog event appears when output contains a known pattern
+- [x] Docstrings on `forensic_logger` explicitly state it is NOT a security control
 
 ## Dependencies
 

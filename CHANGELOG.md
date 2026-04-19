@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 05: Tool Registry and Forensic Logger (2026-04-18)
+
+Implements P-11 / P-20 (injected tool registry) and CRIT-04 (rename the
+regex sanitizer to a forensic logger that makes its non-defence status
+unambiguous). Replaces the former ``sanitizer.py`` pattern with a
+per-workflow registry that scopes tools per-component (Anthropic subagent
+pattern) plus a logging-only marker scanner.
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/tools/registry.py` — new module.
+  `ToolRegistry` with `register()`, `get_tool_callable()`,
+  `registered_names()`, and `build_pydantic_ai_tools(names)`. Every tool
+  returned by `build_pydantic_ai_tools()` is wrapped so its output flows
+  through `forensic_logger.log_suspicious_patterns()` before returning to
+  pydantic-ai; the wrapper preserves the original callable's signature
+  (sync or async) so pydantic-ai's JSON-schema generator stays happy.
+  Exports `ToolAlreadyRegisteredError` and `ToolNotRegisteredError`.
+- `ai_workflows/primitives/tools/forensic_logger.py` — new module.
+  `INJECTION_PATTERNS` plus `log_suspicious_patterns(*, tool_name, output,
+  run_id)`. Emits a single structlog `WARNING` event named
+  `tool_output_suspicious_patterns` when any pattern matches; never
+  modifies the output. Docstring states **NOT a security control**
+  (CRIT-04) and points at the real defences (ContentBlock tool_result
+  wrapping, run_command allowlist, HumanGate, per-component allowlists).
+- `ai_workflows/primitives/tools/__init__.py` — docstring updated to
+  reflect that the two modules now exist and cross-link CRIT-04.
+- `tests/primitives/test_tool_registry.py` — 29 tests covering every
+  acceptance criterion and the integration surface: zero shared state
+  between instances, per-component scoping via `build_pydantic_ai_tools`,
+  order preservation, empty list, unknown-name error, duplicate
+  rejection, `register()` validation, raw-callable retrieval, every
+  injection pattern matching, silence on benign output, no output
+  mutation, output_length recorded, docstring disclaimers for both the
+  module and the public function, sync + async tool flow-through,
+  run_id extraction from `RunContext[WorkflowDeps]`, and signature
+  preservation through the forensic wrapper.
+
+**Acceptance criteria satisfied:**
+
+- AC-1: Two `ToolRegistry()` instances in the same process have zero
+  shared state — `test_two_registries_have_zero_shared_state` +
+  `test_registry_is_not_a_singleton_via_class_attribute`.
+- AC-2: `build_pydantic_ai_tools(["read_file"])` returns only one
+  scoped tool — `test_build_pydantic_ai_tools_returns_only_the_named`.
+- AC-3: `forensic_logger` matches injection patterns without modifying
+  output — `test_forensic_logger_matches_known_patterns` +
+  `test_forensic_logger_does_not_modify_output`.
+- AC-4: A `WARNING` structlog event appears when output contains a known
+  pattern — `test_forensic_logger_matches_known_patterns` asserts the
+  WARNING record and the event name, run_id, and tool_name fields.
+- AC-5: Module + function docstrings explicitly state the forensic logger
+  is NOT a security control — `test_forensic_logger_module_docstring_disclaims_security_control`
+  and `test_log_suspicious_patterns_docstring_disclaims_security_control`.
+
+**Deviations from spec:**
+
+- The spec's `register()` signature is `(name, fn, description)`; the
+  implementation also raises `ToolAlreadyRegisteredError` on duplicate
+  registration and rejects empty name/description. Neither is called out
+  in the spec, but silently shadowing an existing registration is an
+  unambiguous programmer error — failing loudly is the conservative
+  default.
+- `build_pydantic_ai_tools()` rejects duplicate names (`ValueError`) and
+  unknown names (`ToolNotRegisteredError`). The spec does not mandate
+  either, but both conditions point at a miswired Worker config and
+  should not silently degrade to the registry's natural behaviour
+  (double-wrap; `KeyError` from dict lookup).
+- `ai_workflows/primitives/tools/__init__.py` docstring — updated only.
+  No new submodule files were added beyond the two named in the spec.
+
 ### Fixed — M1 Task 03: Model Factory — SD-03 (Claude Code CLI) Alignment (2026-04-18)
 
 Resolves ISS-13, ISS-14, ISS-15 opened after the SD-03 spec amendment

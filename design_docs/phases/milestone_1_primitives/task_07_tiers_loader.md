@@ -168,3 +168,18 @@ Stored in the `runs.workflow_dir_hash` column. On `aiw resume <run_id>`:
 ## Dependencies
 
 - Task 01 (scaffolding)
+
+## Carry-over from prior audits
+
+Forward-deferred items owned by this task. Treat each entry like an
+additional acceptance criterion and tick it when resolved.
+
+- [ ] **M1-T03-ISS-12** — `TierConfig.max_retries` field decision. Task 03's
+  `TierConfig` stub includes a `max_retries` attribute but nothing in Task 03
+  reads it — SDK `max_retries` is hard-wired to `0` per CRIT-06, and our
+  retry utility is not the `TierConfig.max_retries` consumer. Decide:
+  (a) wire `max_retries` through `load_tiers()` and have Task 10's retry
+  utility consume it per-tier, or (b) drop the field and rely on a single
+  global retry budget. Pin the decision in the `TierConfig` docstring and
+  add / remove the field accordingly.
+  Source: [issues/task_03_issue.md](issues/task_03_issue.md) — LOW.

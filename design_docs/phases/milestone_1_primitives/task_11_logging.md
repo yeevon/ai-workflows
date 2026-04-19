@@ -85,3 +85,26 @@ When `logfire.instrument_anthropic()` and `logfire.instrument_openai()` are adde
 ## Dependencies
 
 - Task 01 (scaffolding)
+
+## Carry-over from prior audits
+
+Forward-deferred items owned by this task. Treat each entry like an
+additional acceptance criterion and tick it when the corresponding test or
+change lands.
+
+- [ ] **M1-T01-ISS-08** — Optional hardening for the `secret-scan` CI check.
+  Today `tests/test_scaffolding.py::test_secret_scan_regex_matches_known_key_shapes`
+  hard-codes the `sk-ant-[A-Za-z0-9_-]+` pattern so a narrower CI regex
+  can drift undetected. Option-2 from the Task 01 audit: parse
+  `.github/workflows/ci.yml` at test time and extract the live regex so
+  the test and CI always agree. Nice-to-have, not required.
+  Source: [issues/task_01_issue.md](issues/task_01_issue.md) — LOW.
+- [ ] **M1-T05-ISS-02** — Smoke test that a forensic `WARNING` emitted by
+  `ai_workflows.primitives.tools.forensic_logger.log_suspicious_patterns()`
+  survives the production structlog processor chain configured here.
+  Call the function through the real pipeline and assert the event lands
+  in the expected sink with `level=warning` and the four expected keys
+  (`tool_name`, `run_id`, `patterns`, `output_length`). Task 05's unit
+  tests reconfigure structlog themselves; this carry-over pins the
+  behaviour under the *real* configuration.
+  Source: [issues/task_05_issue.md](issues/task_05_issue.md) — LOW.

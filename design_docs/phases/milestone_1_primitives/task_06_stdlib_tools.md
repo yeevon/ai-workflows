@@ -66,3 +66,32 @@ Called at workflow run start, before `ToolRegistry` is passed to Components.
 
 - Task 02 (types)
 - Task 05 (registry)
+
+## Carry-over from prior audits
+
+Forward-deferred items owned by this task. Treat each entry like an
+additional acceptance criterion and tick it when the corresponding test or
+change lands.
+
+- [ ] **M1-T05-ISS-01** — End-to-end test that a real `pydantic_ai.Agent.run()`
+  call routes a registered tool's output through
+  `forensic_logger.log_suspicious_patterns()`. Use
+  `pydantic_ai.models.test.TestModel` so no API key is needed. Register a
+  tool whose output contains an `INJECTION_PATTERNS` marker; assert a
+  `tool_output_suspicious_patterns` WARNING is emitted when the agent
+  invokes it. The Task 05 tests call `tools[0].function(...)` directly —
+  this carry-over pins the wrapper is still in the path under pydantic-ai's
+  internal call protocol.
+  Source: [issues/task_05_issue.md](issues/task_05_issue.md) — LOW.
+  Alternative owner: M2 Task 02 (Worker).
+- [ ] **M1-T05-ISS-03** — Standardise how non-string tool outputs reach the
+  forensic scanner. The Task 05 wrapper calls `str(result)`, which is a
+  no-op for the stdlib tools landing here (`read_file`, `grep`,
+  `run_command` all return `str`). Either keep all stdlib tools returning
+  `str` (recommended; document the convention in the module docstring) or
+  wrap the value with pydantic-ai's JSON serialiser so the forensic scan
+  sees the exact bytes the model receives. Pick one and pin it in code
+  review.
+  Source: [issues/task_05_issue.md](issues/task_05_issue.md) — LOW,
+  informational. Alternative owner: M2 Task 02 (Worker), only if Worker
+  introduces structured-output tools before this task closes.

@@ -94,3 +94,22 @@ On `aiw resume`:
 ## Dependencies
 
 - All of M2
+
+## Carry-over from prior audits
+
+Forward-deferred items owned by this task. Treat each entry like an
+additional acceptance criterion and tick it when resolved.
+
+- [ ] **M1-T04-ISS-02** — Split
+  `ai_workflows.primitives.llm.caching.validate_prompt_template()` so it
+  only scans **system** prompt sections. Today the function rejects any
+  `{{var}}` anywhere in a prompt file, which is correct while no caller
+  exists but will block legitimate user-section templating once the
+  prompt schema formally distinguishes system vs. user. Two options from
+  the Task 04 audit:
+  (1) Rename to `validate_system_prompt_template()` and add
+      `validate_user_prompt_template()` as a no-op or far looser check.
+  (2) Change the signature to accept `section: Literal["system", "user"]`
+      and early-return for `"user"`.
+  Pick one and wire the workflow loader's prompt-file pass to call it.
+  Source: [../milestone_1_primitives/issues/task_04_issue.md](../milestone_1_primitives/issues/task_04_issue.md) — LOW.

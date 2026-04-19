@@ -98,3 +98,24 @@ agent = Agent(
 - Task 01 (BaseComponent)
 - M1 Task 03 (model factory)
 - M1 Task 05 (tool registry)
+
+## Carry-over from prior audits
+
+Forward-deferred items where this task is the **alternative owner** (the
+primary owner is listed per entry). Only pick these up if the primary
+owner has not already closed them by the time Worker lands.
+
+- [ ] **M1-T05-ISS-01** — End-to-end test that a real `pydantic_ai.Agent.run()`
+  call routes a registered tool's output through
+  `forensic_logger.log_suspicious_patterns()`. Primary owner: M1 Task 06
+  (stdlib tools, first real tool integration test). If M1 Task 06 closed
+  it, mark this entry resolved in review; if not, Worker's integration
+  test suite is the next natural home.
+  Source: [../milestone_1_primitives/issues/task_05_issue.md](../milestone_1_primitives/issues/task_05_issue.md) — LOW.
+- [ ] **M1-T05-ISS-03** — Decide the forensic-scanner contract for
+  non-string tool outputs. Primary owner: M1 Task 06. If Worker
+  introduces structured-output tools (e.g. a Pydantic-model-returning
+  tool) before the stdlib tools pin this convention, Worker owns the
+  call: either coerce via pydantic-ai's JSON serialiser before forensic
+  scanning, or require registered tools return `str`.
+  Source: [../milestone_1_primitives/issues/task_05_issue.md](../milestone_1_primitives/issues/task_05_issue.md) — LOW.

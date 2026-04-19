@@ -95,3 +95,18 @@ Accepts `--profile` flag for forward compatibility.
 - Task 08 (storage)
 - Task 09 (cost tracker)
 - Task 11 (logging)
+
+## Carry-over from prior audits
+
+Forward-deferred items owned by this task. Treat each entry like an
+additional acceptance criterion and tick it when the corresponding test or
+change lands.
+
+- [ ] **M1-T04-ISS-01** — Complete Task 04's AC-5 by surfacing
+  `cache_read_tokens` and `cache_write_tokens` from `TokenUsage` in the
+  `aiw inspect <run_id>` renderer. Task 04 verified the fields flow from
+  pydantic-ai's `RunUsage` → our `TokenUsage` → the cost tracker; this
+  task is where they become operationally visible. Add the two fields to
+  the per-call usage table, and a CLI-level test that shells
+  `aiw inspect <run_id>` and greps for `cache_read`.
+  Source: [issues/task_04_issue.md](issues/task_04_issue.md) — LOW.
