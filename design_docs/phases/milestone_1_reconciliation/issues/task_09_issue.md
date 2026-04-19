@@ -33,8 +33,12 @@ Task files `task_02`…`task_13` were drafted **before** the reconciliation audi
 
 ## Carry-over from prior audits
 
-_None._
+### From [M1-T02-ISS-01](task_02_issue.md#-medium--m1-t02-iss-01-post-t02-interim-gate-red-state-forward-deferral-propagated) (T02 post-build audit, 2026-04-19)
+
+Task 02 removed `logfire>=2.0` from `pyproject.toml` but `ai_workflows/primitives/logging.py` still does `import logfire` at line 53. The sanity pass under this task must drop that import outright. Highest-leverage carry-over in M1: restoring it closes 2 of the 11 `uv run pytest` collection errors **and** the 4 `tests/test_scaffolding.py` CLI-path assertions (because `ai_workflows.cli` transitively imports `ai_workflows.primitives.logging`).
+
+- [ ] **M1-T02-ISS-01 · MEDIUM** — Remove `import logfire` from `primitives/logging.py`; verify `tests/test_scaffolding.py::test_layered_packages_import[ai_workflows.cli]`, `test_aiw_help_runs`, `test_aiw_version_command`, `test_aiw_console_script_resolves` all return green. Record shape unchanged (see "Record shape" note above — this is purely about the import line). Source: [task_02_issue.md §Propagation status](task_02_issue.md#propagation-status).
 
 ## Propagation status
 
-Post-build audit will overwrite this file with implementation findings.
+Post-build audit will overwrite this file with implementation findings. When the T02 carry-over checkbox ticks, [task_02_issue.md](task_02_issue.md) flips ISS-01 from `DEFERRED` to `RESOLVED` on the next T02 re-audit touch point.

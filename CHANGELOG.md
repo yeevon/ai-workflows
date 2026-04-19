@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M1 Task 02: Dependency swap (2026-04-19)
+
+Replaced the pydantic-ai-era runtime dependencies with the LangGraph + MCP +
+LiteLLM substrate declared in [architecture.md §6](design_docs/architecture.md).
+
+**Removed from `[project].dependencies`:** `pydantic-ai>=1.0`,
+`pydantic-graph>=1.0`, `pydantic-evals>=1.0`, `logfire>=2.0`, `anthropic>=0.40`
+(KDR-001, KDR-003, KDR-005, architecture.md §8.1).
+
+**Removed from `[project.optional-dependencies]`:** the entire `dag = ["networkx>=3.0"]`
+extras group (KDR-001 — LangGraph owns DAGs).
+
+**Added to `[project].dependencies`:** `langgraph>=0.2`,
+`langgraph-checkpoint-sqlite>=1.0` (KDR-001, KDR-009), `litellm>=1.40` (KDR-007),
+`fastmcp>=0.2` (KDR-008).
+
+**Kept:** `httpx`, `pydantic`, `pyyaml`, `structlog`, `typer`, `yoyo-migrations`;
+entire `[dependency-groups].dev` block unchanged.
+
+**Other edits:**
+
+- `project.description` → `"Composable AI workflow framework built on LangGraph + MCP."`
+- `tests/test_scaffolding.py` — `test_pyproject_declares_required_dependencies`
+  `required` set rewired to the new substrate.
+- `uv.lock` regenerated; `uv sync` completes clean.
+
+Follow-on `grep -r pydantic_ai ai_workflows/` purge is [task 03](design_docs/phases/milestone_1_reconciliation/task_03_remove_llm_substrate.md)'s
+gate, not this one.
+
 ### Added — M1 pre-build issue files bridging audit.md to tasks 02–13 (2026-04-19)
 
 Doc-only deliverable. Task files `task_02`…`task_13` were drafted **before**

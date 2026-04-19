@@ -130,11 +130,10 @@ def test_pyproject_declares_required_dependencies() -> None:
         pyproject = tomllib.load(fh)
 
     required = {
-        "pydantic-ai",
-        "pydantic-graph",
-        "pydantic-evals",
-        "logfire",
-        "anthropic",
+        "langgraph",
+        "langgraph-checkpoint-sqlite",
+        "litellm",
+        "fastmcp",
         "httpx",
         "pydantic",
         "pyyaml",

@@ -69,8 +69,12 @@ Task files `task_02`…`task_13` were drafted **before** the reconciliation audi
 
 ## Carry-over from prior audits
 
-_None._
+### From [M1-T02-ISS-01](task_02_issue.md#-medium--m1-t02-iss-01-post-t02-interim-gate-red-state-forward-deferral-propagated) (T02 post-build audit, 2026-04-19)
+
+Task 02 removed `pydantic-ai>=1.0` from `pyproject.toml` but left the code that imports it under `ai_workflows/primitives/llm/*`. This task owns the matching deletion. Expected side effect: closes 3 of the 11 `uv run pytest` collection errors left open by T02.
+
+- [ ] **M1-T02-ISS-01 · MEDIUM** — Delete `ai_workflows/primitives/llm/model_factory.py`, `caching.py`, `types.py` (the three `pydantic_ai` / `anthropic` import sites under `llm/`). Verified effect on pytest: `tests/primitives/test_caching.py`, `test_model_factory.py`, `test_types.py` collection errors clear. Source: [task_02_issue.md §Propagation status](task_02_issue.md#propagation-status).
 
 ## Propagation status
 
-Post-build audit of this task will overwrite this file with implementation findings. The two amendments above must be resolved in the Builder's output; failure to apply AUD-03-01 leaves an architectural-drift landmine for M2.
+Post-build audit of this task will overwrite this file with implementation findings. The two amendments above (AUD-03-01 + AUD-03-02) plus the T02 carry-over must be resolved in the Builder's output; failure to apply AUD-03-01 leaves an architectural-drift landmine for M2. When the carry-over checkbox ticks, [task_02_issue.md](task_02_issue.md) flips ISS-01 from `DEFERRED` to `RESOLVED` on the next T02 re-audit touch point.

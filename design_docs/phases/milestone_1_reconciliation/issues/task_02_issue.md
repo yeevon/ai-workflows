@@ -1,75 +1,107 @@
-# Task 02 — Dependency Swap — Pre-build Audit Amendments
+# Task 02 — Dependency Swap — Audit Issues
 
 **Source task:** [../task_02_dependency_swap.md](../task_02_dependency_swap.md)
 **Source audit:** [../audit.md](../audit.md) (produced by [M1 Task 01](../task_01_reconciliation_audit.md))
-**Created on:** 2026-04-19
-**Status:** 📋 PENDING BUILDER — gates not yet run; this file encodes pre-build amendments only. A cycle-1 post-build audit will overwrite with implementation findings.
+**Audited on:** 2026-04-19 (cycle 1 post-build audit — overwrites the PENDING BUILDER pre-build file)
+**Audit scope:** pyproject.toml diff, uv.lock regeneration, tests/test_scaffolding.py update, CHANGELOG.md entry, full-suite gates, design-drift cross-check against architecture.md §6 + KDR-001/003/005/007/008/009, grep for removed-dep imports surviving elsewhere under `ai_workflows/`.
+**Status:** ✅ PASS on T02's explicit ACs **with MEDIUM forward-deferral to T03/T04/T07/T09**. The post-T02 interim state leaves pytest-red on untouched modules (still importing `pydantic_ai` / `anthropic` / `logfire`); those imports are owned by downstream tasks per [audit.md](../audit.md). Milestone-level green gates land at T13.
 
-## Why this file exists
+## Design-drift check
 
-Task files `task_02`…`task_13` were drafted **before** the reconciliation audit ran. Per [CLAUDE.md](../../../../CLAUDE.md) Builder conventions ("Issue file is authoritative amendment to task file"), this file is the bridge: it pulls the [audit.md](../audit.md) rows that target this task into the issue-file channel so `/implement m1 t2` sees them.
+Cross-checked every change against [architecture.md](../../../architecture.md) §6 + KDR-001/003/005/007/008/009.
 
-## Required reading order for Builder
+| Change | Reference | Drift? |
+| --- | --- | --- |
+| Removed `pydantic-ai>=1.0` | KDR-001, KDR-005 | ✅ Aligned — LangGraph replaces pydantic-ai substrate. |
+| Removed `pydantic-graph>=1.0` | KDR-001 | ✅ Aligned — LangGraph owns DAGs. |
+| Removed `pydantic-evals>=1.0` | [roadmap.md](../../../roadmap.md) (M7 re-intro); [architecture.md §10](../../../architecture.md) | ✅ Aligned — eval harness deferred. |
+| Removed `logfire>=2.0` | [architecture.md §8.1](../../../architecture.md), [nice_to_have.md §1/§3/§8](../../../nice_to_have.md) | ✅ Aligned — `StructuredLogger` is the single observability surface; hosted tracing deferred. |
+| Removed `anthropic>=0.40` | KDR-003 | ✅ Aligned — no Anthropic API; Claude access OAuth-only via CLI. |
+| Removed `[project.optional-dependencies].dag = ["networkx"]` | KDR-001 | ✅ Aligned — LangGraph replaces hand-rolled DAG primitive. |
+| Added `langgraph>=0.2` | [architecture.md §6](../../../architecture.md), KDR-001 | ✅ Aligned — DAG + checkpoint + interrupt substrate. |
+| Added `langgraph-checkpoint-sqlite>=1.0` | KDR-009, [architecture.md §4.1/§6](../../../architecture.md) | ✅ Aligned — `SqliteSaver` is the only checkpoint implementation. |
+| Added `litellm>=1.40` | KDR-007, [architecture.md §4.1/§6](../../../architecture.md) | ✅ Aligned — unified Gemini + Qwen/Ollama adapter. |
+| Added `fastmcp>=0.2` | KDR-008, [architecture.md §4.4/§6](../../../architecture.md) | ✅ Aligned — MCP server ergonomics. |
+| Kept `httpx`, `pydantic`, `pyyaml`, `structlog`, `typer`, `yoyo-migrations`, entire `dev` group | [architecture.md §6](../../../architecture.md), [audit.md §2](../audit.md) | ✅ Aligned — every kept dep is named in §6 or has an explicit KEEP row in audit.md. |
+| Updated `project.description` | Task spec + audit.md note | ✅ Aligned. |
+| Rewired `tests/test_scaffolding.py::test_pyproject_declares_required_dependencies::required` set | Audit.md §3 row for `tests/test_scaffolding.py` (MODIFY → task 02) | ✅ Aligned — row explicitly targets task 02. |
 
-1. [../../../architecture.md](../../../architecture.md) — KDRs cited in the rows below.
-2. [../audit.md](../audit.md) — authoritative source. Every row whose Target task column names `task 02` applies here.
-3. [../task_02_dependency_swap.md](../task_02_dependency_swap.md) — deliverables + ACs.
-4. This file — any divergence between audit and task spec.
-5. If audit and task disagree, **raise the conflict before implementing** per CLAUDE.md Builder conventions.
+**No new module. No new layer. No LLM call added. No checkpoint logic added. No retry logic added. No observability path added.** Nothing silently adopted from [nice_to_have.md](../../../nice_to_have.md).
 
-## Rows from audit.md this task must execute
+Drift check: **clean**.
 
-### `[project].dependencies` REMOVE
+## Acceptance Criteria grading
 
-| Dependency | Reason |
-| --- | --- |
-| `pydantic-ai>=1.0` | Replaced by LangGraph per KDR-001 / KDR-005. |
-| `pydantic-graph>=1.0` | Hand-rolled DAG helper; LangGraph owns DAGs per KDR-001. |
-| `pydantic-evals>=1.0` | Eval harness deferred to M7 per [roadmap.md](../../../roadmap.md). |
-| `logfire>=2.0` | Observability is `StructuredLogger` only per [architecture.md §8.1](../../../architecture.md); hosted tracing is deferred — [nice_to_have.md §1/§3/§8](../../../nice_to_have.md). |
-| `anthropic>=0.40` | No Anthropic API per KDR-003; Claude access is OAuth-only via the `claude` CLI subprocess. |
+| # | AC | Evidence | Verdict |
+| --- | --- | --- | --- |
+| 1 | `uv sync` completes without error on a fresh clone. | `uv lock` completed (132 packages resolved); subsequent `uv sync` → `Audited 129 packages`. | ✅ |
+| 2 | `grep -r pydantic_ai ai_workflows/` returns nothing **after task 03** — flagged as a follow-on check, **not this task's gate**. | Task-spec literal text. The current grep still returns hits (`retry.py` via anthropic, `llm/*`, `tools/*` via pydantic_ai, `logging.py` via logfire — 13 files) — every hit is assigned to a downstream task per [audit.md §1](../audit.md): T03 (`llm/*`), T04 (`tools/*`), T07 (`retry.py`), T09 (`logging.py`). AC as written is not this task's gate. | ✅ (per spec's own exclusion) |
+| 3 | No dependency marked REMOVE in the audit remains in `pyproject.toml`. | Post-swap `[project].dependencies` grep for `pydantic-ai`, `pydantic-graph`, `pydantic-evals`, `logfire`, `anthropic` → zero hits. `[project.optional-dependencies]` block is absent entirely (dag extras gone). | ✅ |
+| 4 | Every dependency marked ADD in the audit is present with a pinned lower bound. | `langgraph>=0.2`, `langgraph-checkpoint-sqlite>=1.0`, `litellm>=1.40`, `fastmcp>=0.2` all present in `[project].dependencies`. | ✅ |
+| 5 | `project.description` no longer mentions pydantic-ai. | `description = "Composable AI workflow framework built on LangGraph + MCP."` | ✅ |
+| 6 | CHANGELOG.md notes the dependency swap under `[Unreleased]`. | New `### Changed — M1 Task 02: Dependency swap (2026-04-19)` entry; lists every REMOVE/ADD/KEEP with KDR citations. | ✅ |
 
-### `[project.optional-dependencies]` REMOVE
+All six explicit ACs pass.
 
-| Dependency | Reason |
-| --- | --- |
-| `dag = ["networkx>=3.0"]` | LangGraph replaces every hand-rolled DAG primitive per KDR-001; remove the entire extras group. |
+## 🟡 MEDIUM — M1-T02-ISS-01: Post-T02 interim gate-red state; forward-deferral propagated
 
-### `[project].dependencies` ADD
+**Finding.** The T02 spec explicitly disclaims the `grep -r pydantic_ai` check as a follow-on for T03 (AC2). Delivering T02 as specified leaves `ai_workflows/` with 13 files that still import removed deps:
 
-| Dependency | Reason |
-| --- | --- |
-| `langgraph>=0.2` | DAG + checkpoint + interrupt substrate per KDR-001 / [architecture.md §6](../../../architecture.md). |
-| `langgraph-checkpoint-sqlite>=1.0` | `SqliteSaver` is the only checkpoint implementation per KDR-009. |
-| `litellm>=1.40` | Unified Gemini + Qwen/Ollama adapter per KDR-007. |
-| `fastmcp>=0.2` | MCP server ergonomics per KDR-008 / [architecture.md §4.4](../../../architecture.md). |
+| Import surviving | File(s) | Owner task |
+| --- | --- | --- |
+| `pydantic_ai` | `primitives/llm/model_factory.py`, `primitives/llm/caching.py`, `primitives/llm/types.py` (REMOVE) | [task 03](../task_03_remove_llm_substrate.md) |
+| `pydantic_ai` | `primitives/tools/fs.py`, `git.py`, `http.py`, `shell.py`, `stdlib.py`, `registry.py` (REMOVE) | [task 04](../task_04_remove_tool_registry.md) |
+| `anthropic` | `primitives/retry.py` (MODIFY) | [task 07](../task_07_refit_retry_policy.md) |
+| `logfire` | `primitives/logging.py` (MODIFY) | [task 09](../task_09_logger_sanity.md) |
 
-### `[project].dependencies` KEEP (no change — listed so nothing is accidentally stripped)
+Consequence — `uv run pytest` collection fails (11 errors + 4 scaffolding assertions) because `ai_workflows.cli` transitively imports `ai_workflows.primitives.logging` which imports `logfire`. `uv run lint-imports` ✅ and `uv run ruff check` ✅ are unaffected.
 
-- `httpx>=0.27` (transitive for LiteLLM)
-- `pydantic>=2.0`
-- `pyyaml>=6.0`
-- `structlog>=24.0`
-- `typer>=0.12`
-- `yoyo-migrations>=9.0`
+This is the spec-anticipated critical-path break between T02 (strip deps) and T03/T04/T07/T09 (strip matching imports). [Milestone README](../README.md) exit criterion 1 ("all three gates green") is **milestone-level**, not per-task; T02's own ACs do not list pytest-green.
 
-### `[dependency-groups].dev` KEEP (entire block unchanged)
+**Severity rationale — MEDIUM, not HIGH.** No AC unmet; no architectural rule broken; drift-check clean; the gate-red state is literally the contract written into [audit.md §1](../audit.md)'s task-assignment map. MEDIUM captures the forward-deferral bookkeeping only — downstream tasks must know their scope includes restoring pytest-green.
 
-- `import-linter>=2.0`, `pytest>=8.0`, `pytest-asyncio>=0.23`, `python-dotenv>=1.0`, `ruff>=0.5`.
+**Action — forward-deferral propagation (CLAUDE.md):**
 
-### Non-dependency amendments
+1. Append carry-over entry to [../issues/task_03_issue.md](task_03_issue.md) — deleting `ai_workflows/primitives/llm/*` closes 3 of the 11 collection errors.
+2. Append carry-over entry to [../issues/task_04_issue.md](task_04_issue.md) — deleting `ai_workflows/primitives/tools/*` closes 5 of the 11 collection errors.
+3. Append carry-over entry to [../issues/task_07_issue.md](task_07_issue.md) — modifying `primitives/retry.py` to drop the `anthropic` import closes 1 collection error.
+4. Append carry-over entry to [../issues/task_09_issue.md](task_09_issue.md) — modifying `primitives/logging.py` to drop the `import logfire` closes the remaining 2 errors + the 4 `test_scaffolding.py` CLI-path assertions.
+5. [Task 13 (milestone close-out)](../task_13_milestone_closeout.md) is the gate that verifies all 11 collection errors cleared and full `uv run pytest` returns green.
 
-- `project.description` → `"Composable AI workflow framework built on LangGraph + MCP."` (drop the pydantic-ai reference).
-- `tests/test_scaffolding.py` MODIFY — update the scaffolding smoke assertions to reference the new substrate deps after the swap.
+## Additions beyond spec — audited and justified
 
-## Known amendments vs. task spec
+_None._ Implementation touched only `pyproject.toml`, `uv.lock` (regenerated), `tests/test_scaffolding.py` (`required` set), and `CHANGELOG.md`. No new modules, no new directories, no new CI steps, no new docs.
 
-- **Aligned.** Task spec's REMOVE / ADD / KEEP lists match the audit exactly. `logfire` is confirmed REMOVE (task spec said "if audit classes it as REMOVE"); the audit is unambiguous.
+## Gate summary
 
-## Carry-over from prior audits
+| Gate | Result | Notes |
+| --- | --- | --- |
+| `uv sync` | ✅ | 132 packages resolved; `Audited 129 packages` on re-sync. |
+| `uv run lint-imports` | ✅ | 2 contracts kept (primitives/components barriers). |
+| `uv run ruff check` | ✅ | `All checks passed!` |
+| `uv run pytest` | ⚠️ RED (expected) | 11 collection errors + 4 `test_scaffolding.py` assertions — all on files owned by T03/T04/T07/T09 per audit.md row assignments. Not a T02 AC (per spec line 40). |
+| `uv run pytest tests/test_scaffolding.py` | ⚠️ 4 failed / 23 passed | All 4 failures originate in `ai_workflows.cli` → `ai_workflows.primitives.logging` → `import logfire`; owner = T09. The 23 passing cases cover the dep-set assertion, the import-linter assertion, and the secret-scan regex — all T02-scope concerns pass. |
+| `grep -E 'pydantic-ai\|pydantic-graph\|pydantic-evals\|logfire\|anthropic' pyproject.toml` | ✅ zero hits | REMOVE list fully applied. |
+| `grep -E 'langgraph\|litellm\|fastmcp' pyproject.toml` | ✅ all present | ADD list fully applied. |
+| `grep -r pydantic_ai ai_workflows/` (T02 disclaimed, T03 gate) | ⚠️ 8 hits under `llm/*` + `tools/*` | Scoped to downstream tasks; spec explicitly not this task's gate. |
 
-_None. Task 01 raised ISS-01 against itself and resolved it inside the same cycle; no forward-deferred items to this task._
+## Issue log
+
+| ID | Severity | Owner / next touch | Status |
+| --- | --- | --- | --- |
+| M1-T02-ISS-01 | 🟡 MEDIUM | Forward-deferred to T03, T04, T07, T09; close-out verified by T13 | **DEFERRED** (propagation applied to four target issue files) |
+
+## Deferred to nice_to_have
+
+_None._ No finding in this audit maps to [nice_to_have.md](../../../nice_to_have.md).
 
 ## Propagation status
 
-Post-build audit of this task will overwrite this file with implementation findings.
+ISS-01 forward-deferral (interim pytest-red state) propagated to:
+
+- [task_03_issue.md — Carry-over from prior audits](task_03_issue.md) — pydantic_ai purge under `primitives/llm/*`.
+- [task_04_issue.md — Carry-over from prior audits](task_04_issue.md) — pydantic_ai purge under `primitives/tools/*`.
+- [task_07_issue.md — Carry-over from prior audits](task_07_issue.md) — anthropic import removal from `primitives/retry.py`.
+- [task_09_issue.md — Carry-over from prior audits](task_09_issue.md) — logfire removal from `primitives/logging.py` + restore of `test_scaffolding.py` CLI-path assertions.
+
+On post-build audit of each target task, the Auditor must tick the propagated carry-over items that were actually closed and flip the corresponding line in this issue file from `DEFERRED` to `RESOLVED (commit sha)`.
