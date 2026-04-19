@@ -161,6 +161,28 @@ Model instances, enforcing `max_retries=0` on every underlying SDK client.
   (no pydantic-ai usage-callback hook exists); active cost recording is in
   `run_with_cost()` as described in the spec's cost-tracking section.
 
+### Fixed — M1 Task 02: Shared Types — ISS-06 (2026-04-18)
+
+Resolves M1-T02-ISS-06 — the SD-03 design change introduced the
+`claude_code` provider (Claude Max CLI tiers) but `ClientCapabilities.provider`
+still read the pre-CLI literal, blocking Task 03's `claude_code` branch and
+Task 07's `tiers.yaml` load.
+
+**Files modified:**
+
+- `ai_workflows/primitives/llm/types.py` — extended the `provider` literal
+  to `Literal["claude_code", "anthropic", "openai_compat", "ollama", "google"]`
+  (keeping `anthropic` for third-party callers per
+  `project_provider_strategy`); added an inline comment enumerating each
+  provider's role.
+- `tests/primitives/test_types.py` — added
+  `test_client_capabilities_claude_code_provider_roundtrips` mirroring the
+  existing `_google_provider` test. Asserts `supports_prompt_caching=False`
+  on the CLI path (prompt caching is an API-only feature).
+
+**Verdict:** all four acceptance criteria remain ✅ PASS. Task 02 flips
+back from 🔴 Reopened to ✅ Complete once the audit re-runs.
+
 ### Added — M1 Task 02: Shared Types (2026-04-18)
 
 Introduces all canonical shared types consumed by every higher layer.

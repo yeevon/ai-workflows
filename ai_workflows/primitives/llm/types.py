@@ -84,7 +84,13 @@ class ClientCapabilities(BaseModel):
     supports_thinking: bool = False
     supports_vision: bool = False
     max_context: int
-    provider: Literal["anthropic", "openai_compat", "ollama", "google"]
+    provider: Literal["claude_code", "anthropic", "openai_compat", "ollama", "google"]
+    # claude_code   → Claude Max subscription via `claude` CLI (opus/sonnet/haiku);
+    #                 subprocess launcher lands in M4.
+    # anthropic     → direct Anthropic API (third-party deployments; unused here).
+    # openai_compat → Gemini API last-resort overflow (gemini_flash).
+    # ollama        → local Qwen (local_coder).
+    # google        → native Google SDK (reserved, not in default tiers).
     model: str
 
 

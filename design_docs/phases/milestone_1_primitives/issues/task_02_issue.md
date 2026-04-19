@@ -1,7 +1,7 @@
 # Task 02 — Shared Types — Audit Issues
 
 **Source task:** [../task_02_shared_types.md](../task_02_shared_types.md)
-**Audited on:** 2026-04-18 (initial) · 2026-04-18 (re-audit) · 2026-04-18 (reopened — design-change sweep)
+**Audited on:** 2026-04-18 (initial) · 2026-04-18 (re-audit) · 2026-04-18 (reopened — design-change sweep) · 2026-04-18 (ISS-06 resolution confirmation)
 **Audit scope:** full Task 02 surface —
 `ai_workflows/primitives/llm/types.py`, `tests/primitives/test_types.py`,
 `CHANGELOG.md` (M1 Task 02 section), `pyproject.toml` (no changes
@@ -15,54 +15,50 @@ v2 discriminator behaviour independently verified via a REPL probe
 additionally probed `Message.model_json_schema()` (discriminator
 present on `content.items`) and mutable-default isolation on
 `WorkflowDeps.allowed_executables` (per-instance copy — mutation on one
-instance does not leak to a second).
-**Status:** 🔴 REOPENED (2026-04-18) — spec was amended post-audit to
-adopt the Claude Code CLI design (SD-03). `types.py` still advertises
-the pre-amendment literal. See **M1-T02-ISS-06** below. ISS-01 through
-ISS-05 remain resolved; ISS-03's "fix" is now stale (captured under the
-new issue).
+instance does not leak to a second). Confirmation audit additionally
+probed the updated provider literal — `get_args(CC.model_fields['provider'].annotation)`
+now reports `('claude_code', 'anthropic', 'openai_compat', 'ollama', 'google')`
+— and round-tripped a `provider="claude_code"` capability through JSON.
+**Status:** ✅ PASS (2026-04-18) — ISS-06 resolved; all five prior
+issues remain resolved; every AC graded ✅. Task 02 returns to
+`Complete` state. No open issues.
 
 ---
 
 ## 🔴 HIGH
 
-### M1-T02-ISS-06 — `ClientCapabilities.provider` literal missing `"claude_code"` (OPEN)
-
-**Severity:** HIGH · **Status:** 🔴 OPEN (2026-04-18) — introduced by the SD-03 design change
-
-**What's wrong.** The Task 02 spec
-([task_02_shared_types.md:74](../task_02_shared_types.md#L74)) now declares
-`provider: Literal["claude_code", "openai_compat", "ollama", "google"]`.
-The implementation at
-[types.py:87](../../../../ai_workflows/primitives/llm/types.py#L87)
-still declares the pre-CLI literal
-`Literal["anthropic", "openai_compat", "ollama", "google"]`. Any caller
-constructing `ClientCapabilities(provider="claude_code", ...)` — which
-Task 03's `_build_claude_code()` branch and Task 07's canonical
-`tiers.yaml` will do — fails at Pydantic validation.
-
-**Why this matters.** SD-03 / project-memory
-`project_provider_strategy.md` makes `claude_code` a first-class
-runtime provider (opus / sonnet / haiku tiers). Blocks the T03-DRIFT
-resolution and prevents loading the 5-tier `tiers.yaml`. The stale
-ISS-03 resolution (below) captures how the literal was amended before
-the CLI design landed; the amendment needs to be extended, not
-replaced — per memory, `anthropic` must stay alongside `claude_code` so
-the third-party `AnthropicModel` code path keeps a typed home.
-
-**Recommendation.** Update the literal to
-`Literal["claude_code", "anthropic", "openai_compat", "ollama", "google"]`
-(keeping `anthropic` for third-party callers). Add
-`test_client_capabilities_claude_code_provider_roundtrips` mirroring the
-ISS-03 test. Update the module docstring's enumeration if present.
-Update CHANGELOG with a new subsection under `M1 Task 02`. Reflip
-ISS-03's note to point at the new literal shape.
+None.
 
 ## 🟡 MEDIUM
 
 None.
 
 ## 🟢 LOW
+
+### ✅ RESOLVED — M1-T02-ISS-06 — `ClientCapabilities.provider` literal missing `"claude_code"`
+
+**Resolved on:** 2026-04-18
+
+`ClientCapabilities.provider` extended to
+`Literal["claude_code", "anthropic", "openai_compat", "ollama", "google"]`
+in [types.py:87](../../../../ai_workflows/primitives/llm/types.py#L87)
+(inline comment added enumerating each provider's role per the project
+provider-strategy memo). `tests/primitives/test_types.py` now carries
+`test_client_capabilities_claude_code_provider_roundtrips`, which
+asserts JSON round-trip fidelity *and* pins `supports_prompt_caching`
+to `False` on the CLI path (prompt caching is an Anthropic API feature,
+not exposed via the CLI — matches Task 03's capability table at
+`task_03_model_factory.md:55`). CHANGELOG gains a new `### Fixed — M1
+Task 02: Shared Types — ISS-06 (2026-04-18)` subsection above the
+original `### Added` block. REPL probe confirms
+`get_args(CC.model_fields['provider'].annotation)` returns the
+five-tuple in the documented order. Task 03's `claude_code` branch and
+Task 07's canonical `tiers.yaml` now have a typed home for the literal
+without breaking the third-party `anthropic` path.
+
+**Verdict:** fully resolved. ISS-03's resolution note below remains
+historically accurate for the pre-SD-03 state; the current literal is
+the ISS-06 shape (superset).
 
 ### ✅ RESOLVED — M1-T02-ISS-01 — AC-3 test accepts any one literal instead of asserting all three
 
@@ -147,17 +143,18 @@ adapter-specific types leaked into `primitives/llm/types.py`.
 
 ## Gate summary
 
-| Gate | Result (initial) | Result (re-audit) |
-| --- | --- | --- |
-| `uv run pytest` | ✅ 41/41 | ✅ 41/41 (15 Task 02 + 26 Task 01) — 0.39 s |
-| `uv run lint-imports` | ✅ 2 kept / 0 broken | ✅ 2 kept / 0 broken — primitives still free of components/workflows imports |
-| `uv run ruff check` | ✅ | ✅ All checks passed |
-| `import ai_workflows.primitives.llm.types` (REPL) | ✅ `get_args(ContentBlock)[1].discriminator == "type"` | ✅ re-verified |
-| `Message.model_json_schema()` exposes discriminator | — (not probed initially) | ✅ `discriminator` present on `content.items` |
-| `WorkflowDeps.allowed_executables` mutable-default safety | — (not probed initially) | ✅ Pydantic v2 per-instance copy — one instance's `.append()` does not leak to a second |
-| `ClientCapabilities` JSON round-trip (REPL) | ✅ All 8 fields serialised | ✅ re-verified |
-| Pydantic discriminator error names all three tags (REPL) | ✅ `'text', 'tool_use', 'tool_result'` all present | ✅ re-verified |
-| CHANGELOG entry format matches CLAUDE.md prescription | ✅ `### Added — M1 Task 02: Shared Types (2026-04-18)` | ✅ unchanged |
+| Gate | Result (initial) | Result (re-audit) | Result (ISS-06 confirmation) |
+| --- | --- | --- | --- |
+| `uv run pytest` | ✅ 41/41 | ✅ 41/41 (15 Task 02 + 26 Task 01) — 0.39 s | ✅ 82/82 (16 Task 02 + 22 Task 03 + 18 Task 04 + 26 Task 01) — 3.47 s |
+| `uv run lint-imports` | ✅ 2 kept / 0 broken | ✅ 2 kept / 0 broken — primitives still free of components/workflows imports | ✅ 2 kept / 0 broken |
+| `uv run ruff check` | ✅ | ✅ All checks passed | ✅ All checks passed |
+| `import ai_workflows.primitives.llm.types` (REPL) | ✅ `get_args(ContentBlock)[1].discriminator == "type"` | ✅ re-verified | ✅ re-verified |
+| `Message.model_json_schema()` exposes discriminator | — (not probed initially) | ✅ `discriminator` present on `content.items` | ✅ re-verified |
+| `WorkflowDeps.allowed_executables` mutable-default safety | — (not probed initially) | ✅ Pydantic v2 per-instance copy — one instance's `.append()` does not leak to a second | — (unchanged) |
+| `ClientCapabilities` JSON round-trip (REPL) | ✅ All 8 fields serialised | ✅ re-verified | ✅ extended to `provider="claude_code"` |
+| Provider-literal args match SD-03 spec | — | — | ✅ `('claude_code', 'anthropic', 'openai_compat', 'ollama', 'google')` |
+| Pydantic discriminator error names all three tags (REPL) | ✅ `'text', 'tool_use', 'tool_result'` all present | ✅ re-verified | — (unchanged) |
+| CHANGELOG entry format matches CLAUDE.md prescription | ✅ `### Added — M1 Task 02: Shared Types (2026-04-18)` | ✅ unchanged | ✅ new `### Fixed — M1 Task 02: Shared Types — ISS-06 (2026-04-18)` subsection added |
 
 ---
 
@@ -188,11 +185,9 @@ adapter-specific types leaked into `primitives/llm/types.py`.
   added; milestone README entry flagged `— ✅ **Complete**
   (2026-04-18)`; CHANGELOG updated with a completion-marking
   subsection.
-- **M1-T02-ISS-06** (HIGH) 🔴 OPEN (2026-04-18) — `ClientCapabilities.provider`
-  literal in `types.py` still reads `["anthropic", ...]`; spec was
-  amended to `["claude_code", ...]` when SD-03 landed. Fix: extend the
-  literal to `["claude_code", "anthropic", "openai_compat", "ollama",
-  "google"]` (keep `anthropic` for third-party callers per project
-  memory), add round-trip test for `claude_code`. Blocks Task 03
-  claude_code branch + Task 07 tiers.yaml load. Must be paired with
-  M1-T02 task-status flip (✅ Complete → 🔴 Reopened) until fixed.
+- **M1-T02-ISS-06** (HIGH) ✅ RESOLVED (2026-04-18) — `ClientCapabilities.provider`
+  literal extended to `["claude_code", "anthropic", "openai_compat",
+  "ollama", "google"]`; `test_client_capabilities_claude_code_provider_roundtrips`
+  added (asserts JSON round-trip + pins `supports_prompt_caching=False`
+  for the CLI path); CHANGELOG documents the fix. Gates: 82 passed, 2
+  kept / 0 broken, ruff clean. Task 02 status returns to ✅ Complete.

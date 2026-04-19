@@ -163,6 +163,25 @@ def test_client_capabilities_google_provider_roundtrips():
     assert caps2.provider == "google"
 
 
+def test_client_capabilities_claude_code_provider_roundtrips():
+    # claude_code is the Claude Max CLI tier (opus/sonnet/haiku). Prompt caching
+    # is an Anthropic API feature and is NOT exposed via the CLI, so the flag is
+    # False even though the underlying model would support it on the raw API.
+    caps = ClientCapabilities(
+        max_context=200_000,
+        provider="claude_code",
+        model="claude-opus-4-7",
+        supports_parallel_tool_calls=True,
+        supports_structured_output=True,
+        supports_thinking=True,
+        supports_vision=True,
+    )
+    caps2 = ClientCapabilities.model_validate_json(caps.model_dump_json())
+    assert caps2 == caps
+    assert caps2.provider == "claude_code"
+    assert caps2.supports_prompt_caching is False
+
+
 # ---------------------------------------------------------------------------
 # Structural / import sanity
 # ---------------------------------------------------------------------------
