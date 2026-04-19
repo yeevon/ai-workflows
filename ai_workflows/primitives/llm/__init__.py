@@ -10,5 +10,7 @@ Modules (filled in by later M1 tasks):
   ``tiers.yaml`` and returns a configured pydantic-ai ``Model`` with
   ``max_retries=0`` (we own retries via :mod:`ai_workflows.primitives.retry`).
 * ``caching`` (Task 04) — Anthropic multi-breakpoint cache helpers used by
-  the model factory and by Worker/AgentLoop call sites.
+  the model factory and by Worker/AgentLoop call sites. Exposes
+  :func:`caching.apply_cache_control`, :func:`caching.build_cache_settings`,
+  and :func:`caching.validate_prompt_template`.
 """

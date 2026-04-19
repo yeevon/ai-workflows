@@ -12,39 +12,57 @@ Two things:
 
 ### `tiers.yaml`
 
+> **Provider strategy:** Claude tiers (`opus`, `sonnet`, `haiku`) run via the
+> `claude` CLI using the developer's Claude Max subscription — no Anthropic API
+> key required. The `claude_code` provider type is defined here; its
+> implementation (subprocess launcher) lands in M4 with the Orchestrator
+> component. `gemini_flash` is the paid-API overflow tier, used only when both
+> `haiku` and `local_coder` cannot handle a task. `local_coder` (Qwen) is free
+> and private.
+
 ```yaml
 tiers:
+  # Orchestration tier — drives multi-step workflows, long-horizon planning.
+  # Uses Claude Max subscription via `claude` CLI (no API key).
   opus:
-    provider: anthropic
+    provider: claude_code
     model: claude-opus-4-7
     max_tokens: 8192
     temperature: 0.1
 
+  # Implementation tier — large/complex code generation, multi-file edits.
+  # Uses Claude Max subscription via `claude` CLI.
   sonnet:
-    provider: anthropic
+    provider: claude_code
     model: claude-sonnet-4-6
     max_tokens: 8192
     temperature: 0.1
 
+  # Fast Claude tier — simple single-turn tasks, classification, routing.
+  # Uses Claude Max subscription via `claude` CLI.
   haiku:
-    provider: anthropic
+    provider: claude_code
     model: claude-haiku-4-5-20251001
     max_tokens: 4096
     temperature: 0.1
 
+  # Local coding tier — free, private, runs on LAN Ollama instance.
+  # First choice for coding tasks; zero API cost.
   local_coder:
     provider: ollama
     model: qwen2.5-coder:32b
-    base_url: "${OLLAMA_BASE_URL:-http://192.168.1.X:11434}"
+    base_url: "${OLLAMA_BASE_URL:-http://192.168.1.100:11434/v1}"
     max_tokens: 8192
     temperature: 0.1
 
+  # Overflow / last-resort tier — paid Gemini API (GEMINI_API_KEY).
+  # Used only when both haiku AND local_coder cannot handle the task.
   gemini_flash:
     provider: openai_compat
     model: gemini-2.0-flash
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key_env: GEMINI_API_KEY
-    max_tokens: 8192
+    max_tokens: 4096
     temperature: 0.1
 ```
 
@@ -53,31 +71,29 @@ tiers:
 ```yaml
 tiers:
   local_coder:
-    base_url: "http://localhost:11434"
+    base_url: "http://localhost:11434/v1"
 ```
 
 ### `pricing.yaml`
 
 ```yaml
 pricing:
+  # Claude tiers: billed via Max subscription, not per-token API.
+  # Record as $0 for cost-tracker purposes; budget cap applies to API tiers only.
   claude-opus-4-7:
-    input_per_mtok: 15.00
-    output_per_mtok: 75.00
-    cache_read_per_mtok: 1.50
-    cache_write_per_mtok: 18.75
+    input_per_mtok: 0.0
+    output_per_mtok: 0.0
   claude-sonnet-4-6:
-    input_per_mtok: 3.00
-    output_per_mtok: 15.00
-    cache_read_per_mtok: 0.30
-    cache_write_per_mtok: 3.75
+    input_per_mtok: 0.0
+    output_per_mtok: 0.0
   claude-haiku-4-5-20251001:
-    input_per_mtok: 0.80
-    output_per_mtok: 4.00
-    cache_read_per_mtok: 0.08
-    cache_write_per_mtok: 1.00
+    input_per_mtok: 0.0
+    output_per_mtok: 0.0
+  # Gemini overflow tier — billed per token (verify at console.cloud.google.com)
   gemini-2.0-flash:
     input_per_mtok: 0.10
     output_per_mtok: 0.40
+  # Local models: zero cost, excluded from budget-cap enforcement
   qwen2.5-coder:32b:
     input_per_mtok: 0.0
     output_per_mtok: 0.0
@@ -87,7 +103,11 @@ pricing:
 
 ```python
 class TierConfig(BaseModel):
-    provider: Literal["anthropic", "ollama", "openai_compat", "google"]
+    provider: Literal["claude_code", "ollama", "openai_compat", "google"]
+    # claude_code → subprocess `claude` CLI (Max subscription, no API key)
+    # ollama      → local Ollama server (Qwen, free)
+    # openai_compat → Gemini via openai-compat endpoint (GEMINI_API_KEY, paid)
+    # google      → native Google SDK (reserved, not used in default tiers)
     model: str
     max_tokens: int
     temperature: float
@@ -143,7 +163,7 @@ Stored in the `runs.workflow_dir_hash` column. On `aiw resume <run_id>`:
 - [ ] Hash changes when any content file changes (test: touch prompt, hash differs)
 - [ ] `__pycache__` changes do NOT affect the hash
 - [ ] Unknown tier raises `UnknownTierError`
-- [ ] `sonnet` tier has `temperature: 0.1` (P-22 oversight fixed)
+- [ ] `sonnet` tier has `temperature: 0.1` (P-22 — restored to original tier name)
 
 ## Dependencies
 

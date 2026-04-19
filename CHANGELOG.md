@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 04: Multi-Breakpoint Prompt Caching (2026-04-18)
+
+Implements CRIT-07: Anthropic multi-breakpoint prompt caching replaces the
+naive "cache last system block" pattern. Cache the two stable prefixes
+(tool definitions, static system prompt) with a 1-hour TTL; per-call
+variables are pushed into the last user message, enforced by a load-time
+lint.
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/llm/caching.py` — new module. Exposes
+  `apply_cache_control()` (pure helper that injects `cache_control` into the
+  last tool definition and last system block of a raw Anthropic request),
+  `build_cache_settings()` (returns a pydantic-ai `AnthropicModelSettings`
+  with `anthropic_cache_tool_definitions` + `anthropic_cache_instructions`
+  set to TTL="1h" when `caps.supports_prompt_caching` is True, else `None`),
+  `validate_prompt_template()` (raises `PromptTemplateError` when a prompt
+  file contains `{{var}}` substitutions — run at workflow-load time in M3),
+  and the `PromptTemplateError` exception class.
+- `ai_workflows/primitives/llm/__init__.py` — docstring updated to reflect
+  the three new `caching` exports now that the module exists.
+- `tests/primitives/test_caching.py` — 19 tests covering every acceptance
+  criterion: last-tool-def / last-system-block breakpoints, input
+  non-mutation, empty-input handling, 5m/1h TTL override, `AnthropicModelSettings`
+  wiring for Anthropic tiers, `None` for non-caching providers, factory
+  integration, `{{var}}` / dotted-var / multi-var rejection, static prompt
+  acceptance, single-brace not confused with template, missing-file error,
+  `str`/`Path` acceptance, and `cache_read_tokens` forwarding through
+  `run_with_cost()` → `TokenUsage`. A final live integration test
+  (`test_integration_prompt_caching_works`) runs two back-to-back
+  `agent.run()` calls against a real Anthropic endpoint and asserts
+  `cache_read_tokens > 0` on turn 2; skipped when `ANTHROPIC_API_KEY` is
+  absent.
+
+**Acceptance criteria satisfied:**
+
+- AC-1: Tool definitions carry `cache_control` on the last entry
+  (`test_apply_cache_control_marks_last_tool_definition` + pydantic-ai's
+  `anthropic_cache_tool_definitions` setting wired via
+  `build_cache_settings()`).
+- AC-2: System prompt last block carries `cache_control`
+  (`test_apply_cache_control_marks_last_system_block` + pydantic-ai's
+  `anthropic_cache_instructions` setting wired via `build_cache_settings()`).
+- AC-3: `validate_prompt_template()` flags `{{var}}` in system prompts
+  (`test_validate_prompt_template_rejects_template_variable` +
+  `test_validate_prompt_template_rejects_dotted_variable` +
+  `test_validate_prompt_template_lists_all_offending_variables`).
+- AC-4: Integration test confirms `cache_read_tokens > 0` on turn 2 of a
+  repeated agent call — `test_integration_prompt_caching_works`. Skipped
+  locally because no `ANTHROPIC_API_KEY` is available (user runs Claude Max,
+  no pay-as-you-go API account); the test remains in the suite so a future
+  key flip or CI run exercises it.
+- AC-5: Cache read tokens recorded in `TokenUsage` — `_convert_usage()`
+  already populates `cache_read_tokens` / `cache_write_tokens` from
+  pydantic-ai's `RunUsage` (M1 Task 03); `test_run_with_cost_forwards_cache_tokens_to_tracker`
+  pins that wiring. Surfacing the field in `aiw inspect` is owned by M1
+  Task 12.
+
+**Deviations from spec:**
+
+- The spec sketches a handwritten caching wrapper that injects `cache_control`
+  into outgoing Anthropic requests. pydantic-ai 1.x already exposes this
+  as typed settings (`AnthropicModelSettings.anthropic_cache_tool_definitions`
+  and `anthropic_cache_instructions`), so the Task 04 wiring is a thin
+  adapter — `build_cache_settings()` — rather than a bespoke request-mutating
+  wrapper. `apply_cache_control()` remains as a pure helper for direct-SDK
+  / forensic-replay callers that build Anthropic request payloads outside
+  pydantic-ai. Behaviour matches the spec: last tool def and last system
+  block carry `cache_control` with TTL="1h"; messages are left for
+  Anthropic's automatic 5-minute breakpoint.
+- `validate_prompt_template()` operates on a single prompt file path; the
+  workflow/prompt schema that distinguishes "system" vs. "user" sections
+  lands in M2/M3. Until then, callers invoke this on any file intended for
+  use as a system-prompt block.
+
 ### Fixed — M1 Task 03: Model Factory — Audit Follow-up (2026-04-18)
 
 Resolves ISS-09, ISS-10, ISS-11 surfaced in the post-resolution confirmation audit.

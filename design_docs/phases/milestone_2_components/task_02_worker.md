@@ -4,7 +4,9 @@
 
 ## What to Build
 
-`Worker` wraps `pydantic_ai.Agent[WorkflowDeps, Output]`. We don't re-implement the LLM call loop — pydantic-ai does it. We add tier routing, the soft-cap policy for Sonnet, output parsing, and the single-call behavior for Haiku/Qwen/Flash.
+`Worker` wraps `pydantic_ai.Agent[WorkflowDeps, Output]`. We don't re-implement the LLM call loop — pydantic-ai does it. We add tier routing, the multi-turn policy for the orchestrator/implementer tiers, output parsing, and the single-call behavior for gemini_flash/local_coder.
+
+> **Deployment note:** Runtime tiers are Gemini (`orchestrator`, `implementer`, `gemini_flash`) and Qwen (`local_coder`). No Anthropic API — the `opus`/`sonnet`/`haiku` names below are replaced by the new tier names.
 
 ## Deliverables
 
@@ -45,15 +47,17 @@ class Worker(BaseComponent):
 
 ```python
 TIER_MAX_TURNS = {
-    "opus": 20,        # planning tier; may run through planner
-    "sonnet": 15,      # editing tier, soft cap
-    "haiku": 1,        # fixed
-    "gemini_flash": 1, # fixed
-    "local_coder": 1,  # fixed
+    "opus":         20,  # orchestration — long tool chains, multi-step planning
+    "sonnet":       15,  # large implementation — soft cap
+    "haiku":         1,  # fixed — fast single-turn tasks
+    "local_coder":   1,  # fixed — local Qwen, single-turn
+    "gemini_flash":  1,  # fixed — overflow last resort, single-turn
 }
 ```
 
-Multi-turn tiers (`opus`, `sonnet`) let pydantic-ai's Agent loop through tool calls until max_turns or no tool calls remain. Single-turn tiers get `max_turns=1` in the Agent — one LLM call, tool results surfaced in the response but no second round-trip.
+Multi-turn tiers (`opus`, `sonnet`) let pydantic-ai's Agent loop through tool calls until max_turns or no tool calls remain. Single-turn tiers get `max_turns=1` — one LLM call, no second round-trip.
+
+Note: `opus` and `sonnet` invoke Claude via the `claude_code` provider (Claude Code CLI, Max subscription). `haiku` similarly. `gemini_flash` is used only when both `haiku` and `local_coder` fail.
 
 ### Output Parsing (C-16)
 
@@ -63,7 +67,7 @@ If after 3 internal retries the model still can't produce valid output, pydantic
 
 ### Soft-Cap Behavior for Sonnet
 
-If Sonnet hits `max_turns=15` without completing: pydantic-ai returns the partial result. We inspect `result.all_messages()` for the last response and return `status="incomplete"` with the partial output. The Pipeline (or later Orchestrator) decides whether to re-trigger or decompose.
+If `sonnet` hits `max_turns=15` without completing: pydantic-ai returns the partial result. We inspect `result.all_messages()` for the last response and return `status="incomplete"` with the partial output. The Pipeline (or later Orchestrator) decides whether to re-trigger or decompose.
 
 ### Tool Selection
 
@@ -81,11 +85,11 @@ agent = Agent(
 
 ## Acceptance Criteria
 
-- [ ] Haiku Worker makes exactly one LLM call regardless of tool calls in response
-- [ ] Sonnet Worker loops until termination or max_turns=15
+- [ ] `haiku` / `local_coder` / `gemini_flash` Worker makes exactly one LLM call regardless of tool calls in response
+- [ ] `sonnet` Worker loops until termination or max_turns=15
 - [ ] Output parsed into the declared Pydantic model on success
 - [ ] Output validation failure retries up to 3 times via `ModelRetry`, then returns `status="failed"`
-- [ ] Sonnet at soft cap returns `status="incomplete"` with partial content preserved
+- [ ] `sonnet` at soft cap returns `status="incomplete"` with partial content preserved
 - [ ] `WorkflowDeps` carries `run_id`, `workflow_id`, `component="worker"` into every tool call
 - [ ] Cost recorded exactly once per LLM call (no double-counting)
 

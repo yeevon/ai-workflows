@@ -14,13 +14,13 @@ Each component below has a trigger condition — the scenario that justifies bui
 
 **Trigger:** A workflow needs to route tasks to different tiers based on `change_type` or other classification, and a `Worker`-based approach is too blunt.
 
-**Decision:** Fixed escalation order `local_coder → haiku → sonnet → opus`, configurable override per workflow. Router classifies each task and returns a tier name.
+**Decision:** Fixed escalation order `local_coder → haiku → sonnet → opus`, with `gemini_flash` as overflow when both `local_coder` and `haiku` cannot handle the task. Configurable override per workflow. Router classifies each task and returns a tier name.
 
 ---
 
 ### Escalator
 
-**Trigger:** A workflow is paying too much because Sonnet handles tasks that Haiku could do, and a Router alone isn't enough.
+**Trigger:** A workflow is paying too much because `sonnet` handles tasks that `haiku` or `local_coder` could do, and a Router alone isn't enough.
 
 **Decision:** Cheap tier first → Validator → escalate on failure. Escalation cost tracked separately in run log.
 

@@ -22,17 +22,134 @@ and [pyproject.toml](../../../../pyproject.toml). All three gates executed local
 `cache_write_tokens` are real fields on pydantic-ai 1.x. `Agent.run` return
 type probed via `inspect.signature` — confirmed `AgentRunResult[Any]`.
 
-**Status:** ✅ PASS — all twelve issues resolved or deferred (ISS-12 deferred
-to Task 07 by user decision). All four provider branches have full model-type +
-capability-flag + max_retries unit-test coverage. Task 04 may begin.
+**Status:** 🔴 REOPENED (2026-04-18) — spec was amended post-audit to
+adopt the Claude Code CLI design (SD-03). `tiers.py` and
+`model_factory.py` still reflect the pre-amendment provider set. Three
+new issues below (ISS-13, ISS-14, ISS-15). ISS-01 through ISS-12 remain
+resolved / deferred.
 
 ---
 
 ## 🔴 HIGH
 
-_No HIGH issues open. ISS-08 (AC-4 integration) resolved via Gemini + Ollama
-live tests in the first resolution pass and confirmed passing in this
-re-audit._
+### M1-T03-ISS-13 — `TierConfig.provider` literal missing `"claude_code"` (OPEN)
+
+**Severity:** HIGH · **Status:** 🔴 OPEN (2026-04-18) — introduced by SD-03
+
+**What's wrong.** Task 07's amended spec
+([task_07_tiers_loader.md:106](../task_07_tiers_loader.md#L106)) declares
+`provider: Literal["claude_code", "ollama", "openai_compat", "google"]`;
+Task 03's own mapping table also lists `claude_code` as the first-class
+provider for opus/sonnet/haiku. The implementation at
+[tiers.py:19](../../../../ai_workflows/primitives/tiers.py#L19) still
+reads `Literal["anthropic", "ollama", "openai_compat", "google"]`. This
+is a hard blocker for Task 07: loading the canonical `tiers.yaml` (which
+declares `provider: claude_code` for opus/sonnet/haiku) fails at Pydantic
+validation.
+
+**Why this matters.** Per project memory
+`project_provider_strategy.md`, `claude_code` must be present in
+`TierConfig.provider` **now**; the implementation is deferred to M4, but
+the type must exist so tiers.yaml loads. Keeping `"anthropic"` alongside
+is intentional (third-party deployments still want the
+`AnthropicModel` code path).
+
+**Recommendation.** Extend to
+`Literal["claude_code", "anthropic", "ollama", "openai_compat", "google"]`.
+Add a test `test_tier_config_accepts_claude_code_provider` that
+constructs a `claude_code` tier and asserts `TierConfig(provider="claude_code", ...)`
+validates. Paired with ISS-14 (factory branch) and ISS-15 (module
+docstring) to form one bundled fix.
+
+### M1-T03-ISS-14 — `build_model()` has no `claude_code` branch; AC-6 never checked (OPEN)
+
+**Severity:** HIGH · **Status:** 🔴 OPEN (2026-04-18) — introduced by SD-03
+
+**What's wrong.** Task 03 AC-6
+([task_03_model_factory.md:108](../task_03_model_factory.md#L108)) is
+explicitly unchecked: `build_model` must raise `NotImplementedError` for
+`claude_code` (subprocess launcher lands in M4). The implementation at
+[model_factory.py:69-78](../../../../ai_workflows/primitives/llm/model_factory.py#L69-L78)
+branches only on `anthropic / ollama / openai_compat / google`. If
+ISS-13 is fixed without this, a `claude_code` tier would fall through to
+`raise ConfigurationError("Unsupported provider: 'claude_code'")` — the
+wrong exception type *and* the wrong message, with no forward signal to
+M4. Task 03 is currently banner-marked "✅ Complete" in both the spec
+header and the milestone README while AC-6 is still `[ ]`.
+
+**Why this matters.** The `NotImplementedError` is the contract M4 will
+grep for — Orchestrator work depends on a specific, typed failure. A
+generic `ConfigurationError` hides the gap; a specific
+`NotImplementedError("claude_code provider lands in M4 — Orchestrator subprocess launcher")`
+makes the deferral explicit and greppable.
+
+**Recommendation.** Add to `build_model()`:
+
+```python
+if config.provider == "claude_code":
+    raise NotImplementedError(
+        f"claude_code provider (tier {tier_name!r}, model {config.model!r}) "
+        "is not yet implemented. Subprocess launcher lands in M4 with the "
+        "Orchestrator component."
+    )
+```
+
+Keep this *before* the `anthropic` branch so the claude_code fallthrough
+path is explicit. Add `test_build_model_claude_code_raises_not_implemented`
+asserting both the exception type and that the message names the tier
+and model. Then tick AC-6, flip Task 03's completion banner once
+ISS-13, ISS-14, and ISS-15 all land, and update CHANGELOG.
+
+### M1-T03-ISS-15 — tests, fixture names, and module docstring lag the new design (OPEN)
+
+**Severity:** HIGH · **Status:** 🔴 OPEN (2026-04-18) — partially downstream of ISS-13 / ISS-14
+
+**What's wrong.** Several surfaces still describe the pre-CLI world:
+
+1. [model_factory.py:13-20](../../../../ai_workflows/primitives/llm/model_factory.py#L13-L20) —
+   module docstring lists four providers; `claude_code` is absent.
+2. [test_model_factory.py:7](../../../../tests/primitives/test_model_factory.py#L7),
+   L77 — header and AC-1 docstring say
+   `build_model("sonnet", ...) → (AnthropicModel, caps)`. Under the new
+   design `sonnet` is `claude_code` → `NotImplementedError`.
+3. [test_model_factory.py:25-30](../../../../tests/primitives/test_model_factory.py#L25-L30) —
+   `SONNET_TIER` uses `provider="anthropic"` with model
+   `claude-sonnet-4-6`. That pairing is now semantically wrong (the
+   claude-sonnet-4-6 model under the new design is driven via CLI,
+   not the Anthropic API). The fixture should be renamed (e.g.
+   `ANTHROPIC_THIRD_PARTY_TIER`) and paired with a model name that
+   matches third-party Anthropic usage (or left as-is explicitly
+   documented as "third-party Anthropic regression fixture").
+4. Test file headers (line 3-9) still list "AC-1: build_model('sonnet', ...)
+   → AnthropicModel" instead of the amended shape.
+
+**Why this matters.** Low behavioural risk on its own, but the
+fixtures actively lie about the runtime design. A new contributor reads
+`SONNET_TIER.provider == "anthropic"` and infers that's how sonnet is
+driven — exactly the confusion the SD-03 design change was meant to
+remove.
+
+**Recommendation.** Three-part fix:
+
+1. Rename `SONNET_TIER` → `ANTHROPIC_THIRD_PARTY_TIER` (with a docstring
+   citing project memory: "retained to exercise the third-party
+   AnthropicModel code path; this deployment drives sonnet via
+   claude_code CLI"). Keep the existing anthropic tests on this fixture.
+2. Add a `CLAUDE_CODE_SONNET_TIER` fixture (`provider="claude_code"`)
+   used only by the ISS-14 `test_build_model_claude_code_raises_not_implemented`.
+3. Update the test file header docstring and add `claude_code` to
+   `model_factory.py`'s module docstring provider list.
+
+Bundle with ISS-13 and ISS-14 so the test suite lands green in a
+single fix pass.
+
+---
+
+## ⏸️ Previously resolved — no change
+
+ISS-08 (AC-4 integration) resolved via Gemini + Ollama live tests in
+the first resolution pass and confirmed passing in the 2026-04-18
+re-audit. Not reopened.
 
 ---
 
@@ -228,7 +345,7 @@ types leaked into shared modules.
 | `uv run ruff check` | ✅ all checks passed |
 | AC-4 Gemini live test | ✅ PASS — `test_integration_gemini_cost_recorded_after_real_agent_run` runs green when `GEMINI_API_KEY` is set |
 | AC-4 Ollama live test | ✅ PASS — `test_integration_ollama_cost_recorded_after_real_agent_run` runs green when `AIWORKFLOWS_OLLAMA_BASE_URL` is set to `/v1` |
-| AC-4 Anthropic live test | ⏸️ SKIPPED — `ANTHROPIC_API_KEY` not set; accepted condition |
+| AC-4 Anthropic live test | ⏸️ PERMANENTLY N/A — no Anthropic API key; this deployment uses Gemini + Qwen. Test removed from suite. |
 
 ---
 
@@ -236,11 +353,12 @@ types leaked into shared modules.
 
 | AC | Verdict | Evidence |
 | --- | --- | --- |
-| AC-1: `build_model("sonnet", ...)` → `(AnthropicModel, caps)` with `supports_prompt_caching=True` | ✅ PASS | `test_build_anthropic_model_returns_correct_type` + `test_anthropic_capabilities_flags` |
+| AC-1: `build_model("sonnet", ...)` → `(AnthropicModel, caps)` with `supports_prompt_caching=True` | ⚠️ STALE — see ISS-15 | Test passes, but AC wording describes the pre-CLI design. Under SD-03, `sonnet` is `claude_code` → `NotImplementedError`; AC-1 should be rewritten to target the third-party `AnthropicModel` code path or dropped in favour of AC-6. |
 | AC-2: `build_model("local_coder", ...)` → `(OpenAIChatModel, caps)` with Ollama base_url | ✅ PASS | `test_build_ollama_model_returns_correct_type` + `test_build_ollama_base_url_from_config` + `test_ollama_capabilities_flags` |
 | AC-3: Underlying SDK clients have `max_retries=0` | ✅ PASS | Anthropic / OpenAI-compat / Ollama: explicit. Google: documented default + regression test. |
-| AC-4: Integration test with real provider key confirms cost recording fires after `agent.run()` | ✅ PASS | Gemini `openai_compat` + Ollama live tests green in this re-audit |
+| AC-4: Integration test with real provider key confirms cost recording fires after `agent.run()` | ✅ PASS | Gemini `openai_compat` live test green (`test_integration_gemini_cost_recorded_after_real_agent_run`). Anthropic live test removed (no API key — deployment uses Gemini + Qwen). |
 | AC-5: Missing env var raises `ConfigurationError` naming the variable | ✅ PASS | Anthropic + Google + custom-env + unknown-tier + openai_compat-missing-base_url tests |
+| AC-6: `build_model` raises `NotImplementedError` for `claude_code` provider | 🔴 UNMET — see ISS-14 | No branch implemented; a `claude_code` tier would fall through to `ConfigurationError` (wrong type + wrong message). Blocks M4 Orchestrator contract. |
 
 ---
 
@@ -258,3 +376,6 @@ types leaked into shared modules.
 - **M1-T03-ISS-10** ✅ RESOLVED — `run_with_cost` annotated `-> "AgentRunResult[Any]"`.
 - **M1-T03-ISS-11** ✅ RESOLVED (conservative) — fallthrough branch kept; `test_unsupported_provider_raises_configuration_error` exercises it via `model_construct`.
 - **M1-T03-ISS-12** ⏸️ DEFERRED — `TierConfig.max_retries` ownership transferred to Task 07 (tiers loader).
+- **M1-T03-ISS-13** 🔴 OPEN (2026-04-18) — `TierConfig.provider` literal in `tiers.py` is missing `"claude_code"`; blocks Task 07 tiers.yaml load. Fix: extend literal to `["claude_code", "anthropic", "ollama", "openai_compat", "google"]` + add round-trip test.
+- **M1-T03-ISS-14** 🔴 OPEN (2026-04-18) — `build_model()` has no `claude_code` branch; AC-6 unchecked. Fix: add explicit `NotImplementedError` branch naming the tier/model, add `test_build_model_claude_code_raises_not_implemented`, then tick AC-6.
+- **M1-T03-ISS-15** 🔴 OPEN (2026-04-18) — module docstring, test-file header, and `SONNET_TIER` fixture still describe the pre-CLI world. Fix: rename fixture to `ANTHROPIC_THIRD_PARTY_TIER`, add `CLAUDE_CODE_SONNET_TIER`, update docstrings. Bundle with ISS-13 + ISS-14.

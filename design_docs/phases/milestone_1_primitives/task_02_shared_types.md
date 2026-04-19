@@ -71,7 +71,11 @@ class ClientCapabilities(BaseModel):
     supports_thinking: bool = False
     supports_vision: bool = False
     max_context: int
-    provider: Literal["anthropic", "openai_compat", "ollama", "google"]
+    provider: Literal["claude_code", "openai_compat", "ollama", "google"]
+    # claude_code  → claude CLI (Max subscription): opus, sonnet, haiku
+    # openai_compat → Gemini API (last-resort overflow): gemini_flash
+    # ollama       → local Qwen: local_coder
+    # google       → native Google SDK (reserved, not in default tiers)
     model: str
 
 
@@ -95,7 +99,7 @@ Without `Field(discriminator="type")`, Pydantic v2 tries each variant in order o
 
 ## Why `ClientCapabilities` (CRIT-05)
 
-Anthropic supports prompt caching; Ollama does not. If a `Worker` component wants to know "can I rely on cache?", the answer must come from a capability flag, not `isinstance(client, AnthropicClient)`. The `isinstance` approach forces Components to import from specific adapter modules, breaking the layering.
+Different providers support different features. If a `Worker` component wants to know "can I rely on cache?" or "does this model support vision?", the answer must come from a capability flag, not `isinstance(client, SomeProviderClient)`. The `isinstance` approach forces Components to import from specific adapter modules, breaking the layering.
 
 ## Acceptance Criteria
 

@@ -8,8 +8,8 @@ Build the foundation on top of `pydantic-ai`. We don't reimplement what they've 
 
 ## Scope Changes from Original M1
 
-- **Adopted `pydantic-ai`** as substrate. `Agent[Deps, Output]`, `Model` subclasses, `@agent.tool`, `RunContext[Deps]`, and `ModelRetry` come from there. We build a Model factory around `AnthropicModel` / `OpenAIModel` / `GoogleModel`.
-- **Cloud-default workflows.** Ollama adapter exists but defaults-to-cloud in M1-M3 workflow YAMLs. Full Ollama operational wrapping deferred to M4.
+- **Adopted `pydantic-ai`** as substrate. `Agent[Deps, Output]`, `Model` subclasses, `@agent.tool`, `RunContext[Deps]`, and `ModelRetry` come from there. We build a Model factory around `OpenAIChatModel` (Gemini via openai-compat, Ollama) and `GoogleModel`. The `AnthropicModel` provider is implemented in code for third-party use but is not exercised in this deployment (no Anthropic API key — developer uses Claude Max subscription and Claude Code CLI for orchestration).
+- **Claude Code CLI tiers.** `opus`, `sonnet`, `haiku` run via `claude` CLI (Max subscription, no API key). `local_coder` (Qwen/Ollama) is free and local. `gemini_flash` (Gemini API) is the last-resort overflow tier only. `claude_code` provider impl lands in M4 with the Orchestrator.
 - **Budget cap upgraded from deferred to critical.** You're paying out of pocket. `max_run_cost_usd` is in from day one.
 - **Sanitizer deleted/rebranded.** ContentBlock `tool_result` wrapping stays as the real defense. Regex sanitizer was theater — rebranded to `forensic_logger` for post-hoc analysis only.
 - **Multi-breakpoint caching**, not single-last-block.
@@ -45,14 +45,15 @@ Build the foundation on top of `pydantic-ai`. We don't reimplement what they've 
 | Budget cap | `max_run_cost_usd` in workflow config, enforced by `CostTracker` |
 | Ollama cost | `0.0`, excluded from aggregations |
 | Streaming | Deferred |
-| Prompt caching | Multi-breakpoint: tool defs (1h), static system (1h), messages (5m auto) |
+| Prompt caching | Helpers built (Task 04); Anthropic API only. Not active — Claude tiers run via CLI, not API. |
+| **5 tiers** | **`opus`/`sonnet`/`haiku` → Claude Code CLI (Max sub) · `local_coder` → Qwen/Ollama · `gemini_flash` → Gemini API (last resort)** |
 
 ## Task Order
 
 1. `task_01_project_scaffolding.md` — ✅ **Complete** (2026-04-18)
 2. `task_02_shared_types.md` — ContentBlock discriminated union + ClientCapabilities — ✅ **Complete** (2026-04-18)
 3. `task_03_model_factory.md` — tier name → pydantic-ai Model instance — ✅ **Complete** (2026-04-18)
-4. `task_04_prompt_caching.md` — multi-breakpoint Anthropic cache strategy
+4. `task_04_prompt_caching.md` — multi-breakpoint Anthropic cache strategy — ✅ **Complete** (2026-04-18)
 5. `task_05_tool_registry.md` — injected registry + `forensic_logger`
 6. `task_06_stdlib_tools.md` — fs + shell + http + git
 7. `task_07_tiers_loader.md` — tiers.yaml + pricing.yaml + profile + dir-hash utility

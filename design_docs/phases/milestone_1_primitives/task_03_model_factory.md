@@ -6,13 +6,14 @@
 
 ## What to Build
 
-A factory that, given a tier name, returns a configured `pydantic_ai.Model` instance. We don't write Anthropic/OpenAI/Ollama clients from scratch — pydantic-ai already ships `AnthropicModel`, `OpenAIModel`, and `GoogleModel`. We wrap their construction with:
+A factory that, given a tier name, returns a configured `pydantic_ai.Model` instance (or raises `NotImplementedError` for the `claude_code` provider, which lands in M4). We don't write API clients from scratch — pydantic-ai already ships `OpenAIChatModel` and `GoogleModel`. We wrap their construction with:
 
 - API key loading from env vars (tier-specified `api_key_env`)
 - `max_retries=0` on every underlying SDK client (CRIT-06)
 - `ClientCapabilities` declared per provider
 - Wiring to our cost tracker
-- Ollama via `OpenAIModel` pointing at an Ollama base URL
+- Ollama via `OpenAIChatModel` pointing at an Ollama base URL
+- `claude_code` tiers (`opus`, `sonnet`, `haiku`) raise `NotImplementedError` — the subprocess launcher is M4 work
 
 ## Deliverables
 
@@ -39,36 +40,37 @@ def build_model(
 
 ### Provider → Model Mapping
 
-| Tier provider | pydantic-ai Model | Notes |
-| --- | --- | --- |
-| `anthropic` | `AnthropicModel` | native |
-| `openai_compat` | `OpenAIModel` | for DeepSeek, OpenRouter |
-| `google` / `gemini` | `GoogleModel` (or `OpenAIModel` via compat endpoint) | pick native if available |
-| `ollama` | `OpenAIModel(base_url=...)` | Ollama exposes OpenAI-compatible API |
+| Tier provider | pydantic-ai Model | Default tiers | Notes |
+| --- | --- | --- | --- |
+| `claude_code` | `NotImplementedError` (M4) | `opus`, `sonnet`, `haiku` | Claude Max subscription via `claude` CLI subprocess |
+| `openai_compat` | `OpenAIChatModel` | `gemini_flash` | Gemini API last-resort overflow |
+| `ollama` | `OpenAIChatModel(base_url=...)` | `local_coder` | Local Qwen, free |
+| `google` | `GoogleModel` | (reserved) | Native Google SDK, not in default tiers |
+| `anthropic` | `AnthropicModel` | (not used) | Supported in code for third-party deployments; no API key in this project |
 
 ### `ClientCapabilities` per Provider
 
 | Provider | caching | parallel tools | structured | thinking | vision | max_context |
 | --- | --- | --- | --- | --- | --- | --- |
-| `anthropic` (Opus/Sonnet/Haiku) | True | True | True | True | True | 200_000 |
-| `openai_compat` (DeepSeek, OpenRouter) | False | True | True | False | varies | 128_000 |
-| `google` / `gemini-flash` | False | True | True | True | True | 1_000_000 |
-| `ollama` | False | varies by model | False | False | False | per-model |
+| `claude_code` (opus/sonnet/haiku) | False* | True | True | True | True | 200_000 |
+| `openai_compat` (gemini_flash) | False | True | True | False | False | 128_000 |
+| `ollama` (local_coder / Qwen) | False | False | False | False | False | per-model |
+| `google` | False | True | True | True | True | 1_000_000 |
+
+\* Prompt caching is an Anthropic API feature, not available via Claude Code CLI.
 
 ### `max_retries=0` (CRIT-06)
 
 Every underlying SDK client must have its internal retries disabled. For pydantic-ai models, pass through to the client:
 
 ```python
-# Anthropic
-from anthropic import AsyncAnthropic
-client = AsyncAnthropic(max_retries=0)
-model = AnthropicModel(model_name, anthropic_client=client)
-
-# OpenAI-compat (including Ollama)
+# OpenAI-compat (Gemini overflow, Ollama/Qwen)
 from openai import AsyncOpenAI
 client = AsyncOpenAI(max_retries=0, base_url=base_url, api_key=api_key)
-model = OpenAIModel(model_name, openai_client=client)
+model = OpenAIChatModel(model_name, openai_client=client)
+
+# claude_code — subprocess launcher, not a pydantic-ai Model; deferred to M4
+# google — GoogleModel via GoogleProvider; reserved, not in default tiers
 ```
 
 Our `retry_on_rate_limit()` (task 10) is the single authority. Without this, 3 (SDK) × 3 (ours) = 9 amplified retries on 429, doubling rate-limit pressure.
@@ -98,11 +100,12 @@ async def run_with_cost(
 
 ## Acceptance Criteria
 
-- [x] `build_model("sonnet", tiers, cost_tracker)` returns `(AnthropicModel, capabilities)` with `supports_prompt_caching=True`
-- [x] `build_model("local_coder", tiers, cost_tracker)` returns `(OpenAIModel, capabilities)` with `base_url` from Ollama config
-- [x] Underlying SDK clients have `max_retries=0` (verify via `client._client.max_retries` or equivalent)
-- [x] Integration test with a real provider key (Gemini via `openai_compat` or Anthropic) confirms cost recording fires after an `agent.run()`; a parallel Ollama integration test confirms the local path end-to-end
+- [x] `build_model("gemini", tiers, cost_tracker)` returns `(OpenAIChatModel, capabilities)` with `provider="openai_compat"` — the real overflow tier
+- [x] `build_model("local_coder", tiers, cost_tracker)` returns `(OpenAIChatModel, capabilities)` with `base_url` from Ollama config
+- [x] Underlying SDK clients have `max_retries=0`
+- [x] Integration test with `GEMINI_API_KEY` confirms cost recording fires after an `agent.run()`; Ollama integration test confirms the local path end-to-end
 - [x] Missing env var raises `ConfigurationError` naming the variable
+- [ ] `build_model` raises `NotImplementedError` for `claude_code` provider (M4 — subprocess launcher not yet implemented)
 
 ## Dependencies
 

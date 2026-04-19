@@ -1,7 +1,7 @@
 # Task 02 — Shared Types — Audit Issues
 
 **Source task:** [../task_02_shared_types.md](../task_02_shared_types.md)
-**Audited on:** 2026-04-18 (initial) · 2026-04-18 (re-audit)
+**Audited on:** 2026-04-18 (initial) · 2026-04-18 (re-audit) · 2026-04-18 (reopened — design-change sweep)
 **Audit scope:** full Task 02 surface —
 `ai_workflows/primitives/llm/types.py`, `tests/primitives/test_types.py`,
 `CHANGELOG.md` (M1 Task 02 section), `pyproject.toml` (no changes
@@ -16,15 +16,47 @@ additionally probed `Message.model_json_schema()` (discriminator
 present on `content.items`) and mutable-default isolation on
 `WorkflowDeps.allowed_executables` (per-instance copy — mutation on one
 instance does not leak to a second).
-**Status:** PASS (re-audit, 2026-04-18) — every Task 02 acceptance
-criterion is satisfied and every LOW observation (ISS-01 through
-ISS-05) is resolved. No open issues.
+**Status:** 🔴 REOPENED (2026-04-18) — spec was amended post-audit to
+adopt the Claude Code CLI design (SD-03). `types.py` still advertises
+the pre-amendment literal. See **M1-T02-ISS-06** below. ISS-01 through
+ISS-05 remain resolved; ISS-03's "fix" is now stale (captured under the
+new issue).
 
 ---
 
 ## 🔴 HIGH
 
-None.
+### M1-T02-ISS-06 — `ClientCapabilities.provider` literal missing `"claude_code"` (OPEN)
+
+**Severity:** HIGH · **Status:** 🔴 OPEN (2026-04-18) — introduced by the SD-03 design change
+
+**What's wrong.** The Task 02 spec
+([task_02_shared_types.md:74](../task_02_shared_types.md#L74)) now declares
+`provider: Literal["claude_code", "openai_compat", "ollama", "google"]`.
+The implementation at
+[types.py:87](../../../../ai_workflows/primitives/llm/types.py#L87)
+still declares the pre-CLI literal
+`Literal["anthropic", "openai_compat", "ollama", "google"]`. Any caller
+constructing `ClientCapabilities(provider="claude_code", ...)` — which
+Task 03's `_build_claude_code()` branch and Task 07's canonical
+`tiers.yaml` will do — fails at Pydantic validation.
+
+**Why this matters.** SD-03 / project-memory
+`project_provider_strategy.md` makes `claude_code` a first-class
+runtime provider (opus / sonnet / haiku tiers). Blocks the T03-DRIFT
+resolution and prevents loading the 5-tier `tiers.yaml`. The stale
+ISS-03 resolution (below) captures how the literal was amended before
+the CLI design landed; the amendment needs to be extended, not
+replaced — per memory, `anthropic` must stay alongside `claude_code` so
+the third-party `AnthropicModel` code path keeps a typed home.
+
+**Recommendation.** Update the literal to
+`Literal["claude_code", "anthropic", "openai_compat", "ollama", "google"]`
+(keeping `anthropic` for third-party callers). Add
+`test_client_capabilities_claude_code_provider_roundtrips` mirroring the
+ISS-03 test. Update the module docstring's enumeration if present.
+Update CHANGELOG with a new subsection under `M1 Task 02`. Reflip
+ISS-03's note to point at the new literal shape.
 
 ## 🟡 MEDIUM
 
@@ -64,6 +96,11 @@ in `types.py` and `task_02_shared_types.md`. Added
 `test_client_capabilities_google_provider_roundtrips` in `tests/primitives/test_types.py`
 (verifies JSON round-trip with `max_context=1_000_000` and `provider="google"`).
 Task 03 Builder can consume the extended literal without touching Task 02 files.
+
+> **Superseded by M1-T02-ISS-06 (2026-04-18):** the post-CLI design
+> (SD-03) requires adding `"claude_code"` to the literal. The ISS-03
+> shape above is the pre-CLI state; the amended shape includes
+> `"claude_code"` alongside `"anthropic"`. See ISS-06 for the fix.
 
 ### ✅ RESOLVED — M1-T02-ISS-04 — `design_docs/issues.md` entries for CRIT-05 and CRIT-09 still marked `[ ]`
 
@@ -151,3 +188,11 @@ adapter-specific types leaked into `primitives/llm/types.py`.
   added; milestone README entry flagged `— ✅ **Complete**
   (2026-04-18)`; CHANGELOG updated with a completion-marking
   subsection.
+- **M1-T02-ISS-06** (HIGH) 🔴 OPEN (2026-04-18) — `ClientCapabilities.provider`
+  literal in `types.py` still reads `["anthropic", ...]`; spec was
+  amended to `["claude_code", ...]` when SD-03 landed. Fix: extend the
+  literal to `["claude_code", "anthropic", "openai_compat", "ollama",
+  "google"]` (keep `anthropic` for third-party callers per project
+  memory), add round-trip test for `claude_code`. Blocks Task 03
+  claude_code branch + Task 07 tiers.yaml load. Must be paired with
+  M1-T02 task-status flip (✅ Complete → 🔴 Reopened) until fixed.

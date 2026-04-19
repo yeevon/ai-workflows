@@ -337,37 +337,6 @@ def test_openai_compat_requires_base_url(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set — skipping live Anthropic integration test",
-)
-async def test_integration_cost_recorded_after_real_agent_run():
-    """Verify cost_tracker.record() fires with non-zero token counts on a real Anthropic call."""
-    from pydantic_ai import Agent
-
-    tiers = {"sonnet": SONNET_TIER}
-    tracker = _null_tracker()
-
-    model, _ = build_model("sonnet", tiers, tracker)
-    agent = Agent(model, output_type=str)
-    deps = WorkflowDeps(
-        run_id="int-run-1",
-        workflow_id="int-wf-1",
-        component="test",
-        tier="sonnet",
-        project_root="/tmp",
-    )
-
-    result = await run_with_cost(agent, "Say 'ok' and nothing else.", deps, tracker)
-
-    assert result is not None
-    tracker.record.assert_awaited_once()
-    call_kwargs = tracker.record.call_args.kwargs
-    assert call_kwargs["usage"].input_tokens > 0
-    assert call_kwargs["usage"].output_tokens > 0
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
     not os.environ.get("GEMINI_API_KEY"),
     reason="GEMINI_API_KEY not set — skipping live Gemini integration test",
 )
