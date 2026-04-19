@@ -319,9 +319,21 @@ they prefer** before editing:
 
 Option 1 is cleaner; option 2 is lower-risk if we want zero behavior change.
 
-### M1-T03-ISS-12 — `TierConfig.max_retries` field added but never consumed (DEFERRED)
+### M1-T03-ISS-12 — `TierConfig.max_retries` field added but never consumed (RESOLVED)
 
-**Severity:** LOW · **Status:** ⏸️ DEFERRED — owner: Task 07 (tiers loader)
+**Severity:** LOW · **Status:** ✅ RESOLVED (2026-04-18, by M1 Task 07)
+
+**Resolution.** Task 07 chose option (a): keep the field and wire it
+through `load_tiers()`. The field now roundtrips from `tiers.yaml` to
+`TierConfig` (pinned by
+`tests/primitives/test_tiers_loader.py::test_tier_config_max_retries_roundtrips_through_load_tiers`)
+and defaults to `3` when absent
+(`::test_tier_config_max_retries_default_is_three`). Task 10
+(`retry_on_rate_limit`) will consume the value per-tier at retry time;
+SDK clients remain `max_retries=0` per CRIT-06. The decision is pinned
+in the `TierConfig` docstring at
+[ai_workflows/primitives/tiers.py](../../../../ai_workflows/primitives/tiers.py)
+so future readers see the rationale.
 
 **What's wrong.**
 [tiers.py:27](../../../../ai_workflows/primitives/tiers.py#L27) defines
@@ -404,7 +416,7 @@ types leaked into shared modules.
 - **M1-T03-ISS-09** ✅ RESOLVED — `openai_compat` caps fully tested: `test_build_openai_compat_returns_correct_type` + `test_openai_compat_capabilities_flags`.
 - **M1-T03-ISS-10** ✅ RESOLVED — `run_with_cost` annotated `-> "AgentRunResult[Any]"`.
 - **M1-T03-ISS-11** ✅ RESOLVED (conservative) — fallthrough branch kept; `test_unsupported_provider_raises_configuration_error` exercises it via `model_construct`.
-- **M1-T03-ISS-12** ⏸️ DEFERRED — `TierConfig.max_retries` ownership transferred to Task 07 (tiers loader).
+- **M1-T03-ISS-12** ✅ RESOLVED (2026-04-18, by M1 Task 07) — field kept + wired through `load_tiers()`; Task 10 is the consumer. Pinned by `test_tier_config_max_retries_roundtrips_through_load_tiers` and the `TierConfig` docstring.
 - **M1-T03-ISS-13** ✅ RESOLVED (2026-04-18) — `TierConfig.provider` literal extended to `["claude_code", "anthropic", "ollama", "openai_compat", "google"]` in `tiers.py`; `test_tier_config_accepts_claude_code_provider` pins the roundtrip.
 - **M1-T03-ISS-14** ✅ RESOLVED (2026-04-18) — `build_model()` now raises `NotImplementedError` for the `claude_code` branch, naming the tier, the model, and the M4 Orchestrator deferral. AC-6 ticked. `test_build_model_claude_code_raises_not_implemented` green.
 - **M1-T03-ISS-15** ✅ RESOLVED (2026-04-18) — `SONNET_TIER` → `ANTHROPIC_THIRD_PARTY_TIER`, `CLAUDE_CODE_SONNET_TIER` added, test-file header and `model_factory.py` module docstring rewritten against SD-03.

@@ -5,7 +5,29 @@
 # (input, output, cache_read, cache_write). The cost tracker (M1 Task 09)
 # multiplies usage events by these rates to enforce `max_run_cost_usd`.
 #
-# This stub is intentionally empty; pricing rows are filled in by Task 09
-# when the cost tracker lands.
+# Claude tiers: billed via Max subscription, not per-token API. Record as
+# $0 for cost-tracker purposes; budget cap applies to API tiers only.
+# Local models (Qwen via Ollama): zero cost, excluded from budget-cap
+# enforcement by the cost tracker.
 
-models: {}
+pricing:
+  # Claude Max CLI tiers — subscription-billed, zero per-token cost.
+  claude-opus-4-7:
+    input_per_mtok: 0.0
+    output_per_mtok: 0.0
+  claude-sonnet-4-6:
+    input_per_mtok: 0.0
+    output_per_mtok: 0.0
+  claude-haiku-4-5-20251001:
+    input_per_mtok: 0.0
+    output_per_mtok: 0.0
+
+  # Gemini overflow tier — billed per token (verify at console.cloud.google.com).
+  gemini-2.0-flash:
+    input_per_mtok: 0.10
+    output_per_mtok: 0.40
+
+  # Local models: zero cost, excluded from budget-cap aggregations.
+  qwen2.5-coder:32b:
+    input_per_mtok: 0.0
+    output_per_mtok: 0.0

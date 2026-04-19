@@ -1,5 +1,8 @@
 # Task 07 — Tiers Loader and Workflow Hash
 
+**Status:** ✅ Complete (2026-04-18) — see
+[issues/task_07_issue.md](issues/task_07_issue.md).
+
 **Issues:** P-21, P-22, P-23, P-24, P-25, CRIT-02
 
 ## What to Build
@@ -157,13 +160,13 @@ Stored in the `runs.workflow_dir_hash` column. On `aiw resume <run_id>`:
 
 ## Acceptance Criteria
 
-- [ ] `load_tiers()` expands `${OLLAMA_BASE_URL:-default}` from env
-- [ ] `--profile local` overlay overrides only declared keys
-- [ ] `compute_workflow_hash()` is deterministic (same dir → same hash)
-- [ ] Hash changes when any content file changes (test: touch prompt, hash differs)
-- [ ] `__pycache__` changes do NOT affect the hash
-- [ ] Unknown tier raises `UnknownTierError`
-- [ ] `sonnet` tier has `temperature: 0.1` (P-22 — restored to original tier name)
+- [x] `load_tiers()` expands `${OLLAMA_BASE_URL:-default}` from env
+- [x] `--profile local` overlay overrides only declared keys
+- [x] `compute_workflow_hash()` is deterministic (same dir → same hash)
+- [x] Hash changes when any content file changes (test: touch prompt, hash differs)
+- [x] `__pycache__` changes do NOT affect the hash
+- [x] Unknown tier raises `UnknownTierError`
+- [x] `sonnet` tier has `temperature: 0.1` (P-22 — restored to original tier name)
 
 ## Dependencies
 
@@ -174,12 +177,14 @@ Stored in the `runs.workflow_dir_hash` column. On `aiw resume <run_id>`:
 Forward-deferred items owned by this task. Treat each entry like an
 additional acceptance criterion and tick it when resolved.
 
-- [ ] **M1-T03-ISS-12** — `TierConfig.max_retries` field decision. Task 03's
-  `TierConfig` stub includes a `max_retries` attribute but nothing in Task 03
-  reads it — SDK `max_retries` is hard-wired to `0` per CRIT-06, and our
-  retry utility is not the `TierConfig.max_retries` consumer. Decide:
-  (a) wire `max_retries` through `load_tiers()` and have Task 10's retry
-  utility consume it per-tier, or (b) drop the field and rely on a single
-  global retry budget. Pin the decision in the `TierConfig` docstring and
-  add / remove the field accordingly.
+- [x] **M1-T03-ISS-12** — `TierConfig.max_retries` field decision. Resolved
+  as option (a): the field is kept and wired through `load_tiers()` so it
+  roundtrips from YAML → `TierConfig` (see
+  `test_tier_config_max_retries_roundtrips_through_load_tiers` and
+  `test_tier_config_max_retries_default_is_three` in
+  [tests/primitives/test_tiers_loader.py](../../../../tests/primitives/test_tiers_loader.py)).
+  Task 10 (`retry_on_rate_limit`) will read this per-tier at retry time;
+  SDK clients remain `max_retries=0` per CRIT-06. The decision and
+  rationale are pinned in the `TierConfig` docstring in
+  [ai_workflows/primitives/tiers.py](../../../../ai_workflows/primitives/tiers.py).
   Source: [issues/task_03_issue.md](issues/task_03_issue.md) — LOW.

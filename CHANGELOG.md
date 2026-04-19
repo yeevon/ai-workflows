@@ -7,6 +7,136 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 07: Tiers Loader and Workflow Hash (2026-04-18)
+
+Implements P-21 … P-25 and CRIT-02. Lands the tiers / pricing YAML loader
+(with env var expansion and profile overlay) plus the deterministic
+workflow-directory content hash utility that Task 08 will store in
+`runs.workflow_dir_hash` for resume safety. Closes the M1-T03-ISS-12
+carry-over on `TierConfig.max_retries` by keeping the field and wiring
+it through `load_tiers()`.
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/tiers.py` — expanded from the Task 03 stub.
+  Adds `ModelPricing` (rows in `pricing.yaml`), `UnknownTierError` (raised
+  on tier-name miss; distinct from `ConfigurationError`), `load_tiers()`
+  (env-var expansion via `${VAR:-default}`, profile overlay via
+  `tiers.<profile>.yaml`, deep-merge that only replaces declared keys),
+  `load_pricing()`, and a `get_tier()` helper that raises `UnknownTierError`.
+  Both loaders accept an internal `_tiers_dir` / `_pricing_dir` kwarg so
+  tests can point at `tmp_path` without `chdir`. `TierConfig` docstring
+  pins the ISS-12 decision: the field is kept and roundtripped; Task 10
+  reads it per-tier at retry time; SDK clients remain `max_retries=0`
+  per CRIT-06.
+- `ai_workflows/primitives/workflow_hash.py` — new module.
+  `compute_workflow_hash(workflow_dir)` returns a SHA-256 hex digest over
+  sorted `(relative-path, NUL, contents, NUL-NUL)` tuples. Ignored
+  patterns: `__pycache__/` (any depth), `*.pyc`, `*.log`, `.DS_Store`.
+  Raises `FileNotFoundError` / `NotADirectoryError` on malformed inputs.
+- `ai_workflows/primitives/llm/model_factory.py` — unknown-tier branch
+  now raises `UnknownTierError` (imported from `primitives.tiers`) so the
+  Task 07 AC is satisfied without changing the message format.
+- `tiers.yaml` — replaces the Task 01 stub with the canonical 5-tier
+  config: `opus` / `sonnet` / `haiku` (provider: `claude_code`),
+  `local_coder` (provider: `ollama`, `${OLLAMA_BASE_URL:-…}` base URL),
+  `gemini_flash` (provider: `openai_compat`, Gemini API). `sonnet` has
+  `temperature: 0.1` (P-22 regression guard).
+- `pricing.yaml` — replaces the Task 01 stub. Top-level key is now
+  `pricing:` (was `models:`) to match the spec; Claude CLI tiers record
+  $0 (subscription-billed); Gemini overflow `$0.10 / $0.40` per MTok;
+  local Qwen $0.
+- `tests/primitives/test_tiers_loader.py` — 19 tests covering every
+  loader AC: env expansion with and without default, profile overlay
+  deep-merge, unknown-tier error, P-22 `sonnet.temperature == 0.1`
+  regression guard against the committed file, carry-over
+  `max_retries` roundtrip + default, `load_pricing()` against the
+  committed file + unknown-field ValidationError + cache-rate defaults,
+  missing-file handling, and empty-mapping handling.
+- `tests/primitives/test_workflow_hash.py` — 18 tests covering
+  determinism, content-change detection across root + subdirectory
+  files, rename / add detection, ignored-pattern guards for
+  `__pycache__` (root and nested), stray `*.pyc`, `.DS_Store`, `*.log`,
+  and error handling for missing dirs / file inputs / empty dirs. Plus
+  a creation-order invariance guard that catches any regression in the
+  sort step of the hash.
+- `tests/primitives/test_model_factory.py` — `test_unknown_tier_raises_configuration_error`
+  renamed `test_unknown_tier_raises_unknown_tier_error` and now asserts
+  the new `UnknownTierError` class.
+- `design_docs/phases/milestone_1_primitives/task_07_tiers_loader.md` —
+  Status line added, every acceptance-criterion checkbox ticked, carry-over
+  M1-T03-ISS-12 ticked with the resolution pinned in the `TierConfig`
+  docstring.
+- `design_docs/phases/milestone_1_primitives/README.md` — Task 07 entry
+  flipped to `✅ Complete (2026-04-18)`.
+- `design_docs/phases/milestone_1_primitives/issues/task_03_issue.md` —
+  M1-T03-ISS-12 flipped from ⏸️ DEFERRED to ✅ RESOLVED with a pointer
+  to `primitives/tiers.py` and `test_tiers_loader.py`.
+
+**Acceptance criteria satisfied:**
+
+- AC-1: `load_tiers()` expands `${OLLAMA_BASE_URL:-default}` —
+  `test_load_tiers_expands_env_var_with_default` +
+  `test_load_tiers_falls_back_to_default_when_env_unset` +
+  `test_load_tiers_expands_env_var_without_default`.
+- AC-2: `--profile local` overlay overrides only declared keys —
+  `test_profile_local_overlay_overrides_only_declared_keys`
+  (asserts `base_url` changes, other fields stay) plus
+  `test_profile_without_overlay_file_is_noop`.
+- AC-3: `compute_workflow_hash()` is deterministic —
+  `test_compute_workflow_hash_is_deterministic` +
+  `test_compute_workflow_hash_is_repeatable_on_same_directory` +
+  `test_hash_is_stable_across_creation_order`.
+- AC-4: Hash changes when any content file changes —
+  `test_touching_a_prompt_changes_the_hash`,
+  `test_touching_workflow_yaml_changes_the_hash`,
+  `test_renaming_a_file_changes_the_hash`,
+  `test_adding_a_new_file_changes_the_hash`,
+  `test_schemas_subdir_contributes_to_hash`.
+- AC-5: `__pycache__` changes do NOT affect the hash —
+  `test_pycache_changes_do_not_affect_hash` +
+  `test_nested_pycache_is_ignored` +
+  `test_stray_pyc_outside_pycache_is_ignored` +
+  `test_ds_store_is_ignored` + `test_log_files_are_ignored`.
+- AC-6: Unknown tier raises `UnknownTierError` —
+  `test_get_tier_raises_unknown_tier_error_for_missing_name`
+  (loader helper) + `test_unknown_tier_raises_unknown_tier_error`
+  (`build_model` path) + `test_unknown_tier_error_is_not_a_configuration_error`
+  (pins the class separation).
+- AC-7: `sonnet` tier has `temperature: 0.1` (P-22) —
+  `test_committed_tiers_yaml_sonnet_has_temperature_0_1` loads the
+  committed `tiers.yaml` and pins the value.
+
+**Carry-over from M1 Task 03 audit:**
+
+- M1-T03-ISS-12 — `TierConfig.max_retries` decision: **keep the field
+  and wire it through `load_tiers()`**. The field now roundtrips from
+  YAML to `TierConfig` (`test_tier_config_max_retries_roundtrips_through_load_tiers`);
+  when absent it defaults to 3 (`test_tier_config_max_retries_default_is_three`).
+  Task 10 will read the value per-tier at retry time; SDK clients remain
+  `max_retries=0` per CRIT-06. Decision pinned in the `TierConfig`
+  docstring so future readers see the rationale.
+
+**Deviations from spec:**
+
+- `TierConfig.provider` literal keeps `"anthropic"` alongside
+  `"claude_code" / "ollama" / "openai_compat" / "google"`; the Task 07
+  spec dropped `"anthropic"`, but M1-T03-ISS-13 retained it for
+  third-party deployments per the `project_provider_strategy` memory.
+  Unchanged from the existing Task 03 resolution; called out here so the
+  gap between Task 07's inline YAML spec and the actual `TierConfig` is
+  not invisible.
+- `ModelPricing` ships with `cache_read_per_mtok` / `cache_write_per_mtok`
+  fields (defaulted to `0.0`) in addition to `input_per_mtok` /
+  `output_per_mtok`. The Task 07 spec shows only the two `input` /
+  `output` fields, but Task 09's `calculate_cost()` sums four rates;
+  including the cache rates now means Task 09 has no schema change.
+  Canonical `pricing.yaml` rows omit the cache fields — they default.
+- `load_tiers()` / `load_pricing()` accept an internal `_tiers_dir` /
+  `_pricing_dir` keyword-only argument used by tests to point at
+  `tmp_path`. Not part of the public contract; the spec signature
+  `load_tiers(profile: str | None = None)` is preserved for callers.
+
 ### Added — M1 Task 06: Stdlib Tools — fs + shell + http + git (2026-04-18)
 
 Implements P-13 … P-19 (the language-agnostic standard-library tools

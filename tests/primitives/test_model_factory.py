@@ -25,7 +25,7 @@ import pytest
 from ai_workflows.primitives.cost import CostTracker
 from ai_workflows.primitives.llm.model_factory import ConfigurationError, build_model, run_with_cost
 from ai_workflows.primitives.llm.types import TokenUsage, WorkflowDeps
-from ai_workflows.primitives.tiers import TierConfig
+from ai_workflows.primitives.tiers import TierConfig, UnknownTierError
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -201,8 +201,13 @@ def test_missing_custom_api_key_env_names_var(monkeypatch):
     assert "GEMINI_API_KEY" in str(exc_info.value)
 
 
-def test_unknown_tier_raises_configuration_error():
-    with pytest.raises(ConfigurationError) as exc_info:
+def test_unknown_tier_raises_unknown_tier_error():
+    """Task 07 AC: unknown tier raises ``UnknownTierError`` (not ``ConfigurationError``).
+
+    Keeping the two error classes separate lets callers distinguish a typo
+    in the tier name from a missing env var or malformed provider branch.
+    """
+    with pytest.raises(UnknownTierError) as exc_info:
         build_model("does_not_exist", _tiers(), _null_tracker())
     assert "does_not_exist" in str(exc_info.value)
 

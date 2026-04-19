@@ -42,7 +42,7 @@ from pydantic_ai.usage import RunUsage
 
 from ai_workflows.primitives.cost import CostTracker
 from ai_workflows.primitives.llm.types import ClientCapabilities, TokenUsage, WorkflowDeps
-from ai_workflows.primitives.tiers import TierConfig
+from ai_workflows.primitives.tiers import TierConfig, UnknownTierError
 
 if TYPE_CHECKING:
     from pydantic_ai import Agent, AgentRunResult
@@ -73,7 +73,7 @@ def build_model(
     _ = cost_tracker
 
     if tier_name not in tiers:
-        raise ConfigurationError(f"Unknown tier: {tier_name!r}")
+        raise UnknownTierError(f"Unknown tier: {tier_name!r}")
 
     config = tiers[tier_name]
 
