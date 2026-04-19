@@ -3,11 +3,14 @@ model: claude-sonnet-4-6
 thinking: high
 ---
 
+# /implement
+
 You are operating in **Builder mode** as defined in CLAUDE.md.
 
 The user wants you to implement: $ARGUMENTS
 
 Follow the Builder mode instructions from CLAUDE.md exactly:
+
 1. Read the task file in full.
 2. Read the matching issue file if it exists — treat it as authoritative amendments.
 3. Read the milestone README for scope context.

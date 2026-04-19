@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — Architecture pivot: LangGraph + MCP substrate (2026-04-19)
+
+Design-mode pivot away from the pydantic-ai-centric M1 plan toward a
+LangGraph orchestrator + MCP server substrate, triggered by the M1
+Task 13 spike findings and the observation that half of the old M4's
+hard parts (DAG, resume, human-gate, cost ledger) are already solved
+by LangGraph. **No runtime code change in this entry** — the M1
+primitives remain intact; the pivot is captured in `design_docs/`
+only. Execution is sequenced across nine new milestones starting with
+M1 reconciliation.
+
+**Files added:**
+
+- `design_docs/architecture.md` — v0.1 architecture of record.
+- `design_docs/analysis/langgraph_mcp_pivot.md` — grounding decision
+  document cited by every KDR.
+- `design_docs/nice_to_have.md` — parking lot of deferred
+  simplifications (Langfuse, Instructor / pydantic-ai, LangSmith,
+  Typer, Docker Compose, mkdocs, DeepAgents, standalone OTel). Tasks
+  for these items are forbidden without a matching trigger firing.
+- `design_docs/roadmap.md` — nine-milestone index.
+- `design_docs/phases/milestone_1_reconciliation/` — 13-task M1
+  reconciliation plan (audit → dependency swap → remove pydantic-ai
+  substrate → retune primitives → four-layer import-linter contract).
+- `design_docs/phases/milestone_2_graph/` — 9-task M2 plan for the
+  graph adapters (`TieredNode`, `ValidatorNode`, `HumanGate`,
+  `CostTrackingCallback`, `RetryingEdge`) plus LiteLLM adapter and
+  Claude Code subprocess driver.
+- `design_docs/phases/milestone_3_first_workflow/` through
+  `design_docs/phases/milestone_9_skill/` — README-level plans for
+  first workflow, MCP surface, multi-tier planner, slice_refactor,
+  evals, Ollama infra, and optional skill packaging. Per-task files
+  for M3+ are generated just-in-time as each prior milestone closes.
+
+**Files archived** (moved under
+`design_docs/archive/pre_langgraph_pivot_2026_04_19/`):
+
+- `design_docs/phases/milestone_1_primitives/` through
+  `design_docs/phases/milestone_7_additional_components/`.
+- `design_docs/issues.md` and the top-level analyses
+  (`analysis_summary.md`, `grill_me_results.md`, `search_analysis.md`,
+  `worflow_initial_design.md`).
+
+**KDRs introduced:** KDR-001 LangGraph substrate · KDR-002 MCP
+portable surface · KDR-003 no Anthropic API · KDR-004 validator-
+after-every-LLM-node · KDR-005 primitives layer preserved · KDR-006
+three-bucket retry taxonomy · KDR-007 LiteLLM adapter for Gemini +
+Qwen/Ollama · KDR-008 FastMCP for MCP server · KDR-009 LangGraph
+SqliteSaver owns checkpoints.
+
+**Conventions updated:**
+
+- Four-layer architecture replaces the three-layer structure:
+  `primitives → graph → workflows → surfaces` (enforced by
+  `import-linter` once M1 task 12 lands).
+- `CLAUDE.md` restored from commented-out state and rewritten for the
+  new structure; `design_docs/issues.md` references removed
+  (cross-cutting items now land as forward-deferred carry-over on the
+  appropriate future task).
+- `.claude/commands/audit.md` and `.claude/commands/clean-implement.md`
+  updated to drop references to the archived `issues.md`; audit
+  findings land exclusively under
+  `design_docs/phases/milestone_<M>_<name>/issues/`.
+
 ### Added — M1 Task 13: `claude_code` Subprocess Design-Validation Spike (2026-04-19)
 
 Design-validation spike for the `claude_code` provider reserved by M1
