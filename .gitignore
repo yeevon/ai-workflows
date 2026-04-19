@@ -30,3 +30,8 @@ runs/
 
 # Tiers overlay (machine-specific)
 tiers.local.yaml
+
+
+.vscode/
+.import_linter_cache/
+.ruff_cache/

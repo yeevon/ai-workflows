@@ -39,7 +39,7 @@ LOCAL_CODER_TIER = TierConfig(
 
 GEMINI_TIER = TierConfig(
     provider="openai_compat",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
     api_key_env="GEMINI_API_KEY",
     max_tokens=8192,
@@ -118,8 +118,8 @@ def test_build_ollama_model_returns_correct_type():
 
 def test_build_ollama_base_url_from_config():
     model, _ = build_model("local_coder", _tiers(), _null_tracker())
-    # The base_url is stored on the underlying OpenAI async client
-    assert "192.168.1.100" in str(model.provider.client.base_url)
+    base = str(model.provider.client.base_url)
+    assert base.startswith("http://192.168.1.100:11434/v1"), base
 
 
 def test_ollama_capabilities_flags():
@@ -220,17 +220,128 @@ async def test_run_with_cost_calls_record():
 
 
 # ---------------------------------------------------------------------------
-# AC-4: Integration test — real Anthropic call records cost (skip if no key)
+# ISS-02 + ISS-01 test: Google provider branch + retry default
+# ---------------------------------------------------------------------------
+
+
+def test_build_google_model_returns_correct_type(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    from pydantic_ai.models.google import GoogleModel
+
+    model, caps = build_model("google_native", _tiers(), _null_tracker())
+
+    assert isinstance(model, GoogleModel)
+    assert caps.provider == "google"
+    assert caps.max_context == 1_000_000
+
+
+def test_google_capabilities_flags(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    _, caps = build_model("google_native", _tiers(), _null_tracker())
+
+    assert caps.supports_vision is True
+    assert caps.supports_thinking is True
+    assert caps.supports_parallel_tool_calls is True
+    assert caps.supports_prompt_caching is False
+
+
+def test_missing_google_key_raises_configuration_error(monkeypatch):
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    with pytest.raises(ConfigurationError) as exc_info:
+        build_model("google_native", _tiers(), _null_tracker())
+    assert "GOOGLE_API_KEY" in str(exc_info.value)
+
+
+def test_google_client_retry_is_disabled(monkeypatch):
+    """Assert google-genai's default no-retry policy is in effect (ISS-01 / CRIT-06).
+
+    retry_options=None → retry_args() returns stop_after_attempt(1). If the
+    google-genai default ever changes, this test catches the regression.
+    """
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    model, _ = build_model("google_native", _tiers(), _null_tracker())
+    # Access the underlying api_client's retry stop strategy.
+    stop = model.provider.client._api_client._retry.stop  # pyright: ignore[reportPrivateUsage]
+    assert stop.max_attempt_number == 1
+
+
+# ---------------------------------------------------------------------------
+# ISS-09: openai_compat capability flags
+# ---------------------------------------------------------------------------
+
+
+def test_build_openai_compat_returns_correct_type(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    from pydantic_ai.models.openai import OpenAIChatModel
+
+    model, caps = build_model("gemini", _tiers(), _null_tracker())
+
+    assert isinstance(model, OpenAIChatModel)
+    assert caps.provider == "openai_compat"
+    assert caps.model == "gemini-2.5-flash"
+    assert caps.max_context == 128_000
+
+
+def test_openai_compat_capabilities_flags(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    _, caps = build_model("gemini", _tiers(), _null_tracker())
+
+    assert caps.supports_prompt_caching is False
+    assert caps.supports_parallel_tool_calls is True
+    assert caps.supports_structured_output is True
+    assert caps.supports_thinking is False
+    assert caps.supports_vision is False
+
+
+# ---------------------------------------------------------------------------
+# ISS-11 test (conservative): unsupported provider raises ConfigurationError
+# Uses model_construct to bypass Literal validation so the branch is reachable
+# ---------------------------------------------------------------------------
+
+
+def test_unsupported_provider_raises_configuration_error():
+    unsupported_tier = SONNET_TIER.model_construct(
+        provider="unsupported",
+        model="x",
+        max_tokens=1,
+        temperature=0.0,
+    )
+    with pytest.raises(ConfigurationError) as exc_info:
+        build_model("x", {"x": unsupported_tier}, _null_tracker())
+    assert "unsupported" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# ISS-05 test: openai_compat requires base_url
+# ---------------------------------------------------------------------------
+
+
+def test_openai_compat_requires_base_url(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    no_base_tier = TierConfig(
+        provider="openai_compat",
+        model="some-model",
+        max_tokens=1024,
+        temperature=0.1,
+    )
+    with pytest.raises(ConfigurationError) as exc_info:
+        build_model("no_base", {"no_base": no_base_tier}, _null_tracker())
+    assert "base_url" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# AC-4: Integration tests — real provider calls record cost
+# (each test skipped when the relevant key / URL is not set)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set — skipping live integration test",
+    reason="ANTHROPIC_API_KEY not set — skipping live Anthropic integration test",
 )
 async def test_integration_cost_recorded_after_real_agent_run():
-    """Verify cost_tracker.record() fires with non-zero token counts on a real call."""
+    """Verify cost_tracker.record() fires with non-zero token counts on a real Anthropic call."""
     from pydantic_ai import Agent
 
     tiers = {"sonnet": SONNET_TIER}
@@ -253,3 +364,74 @@ async def test_integration_cost_recorded_after_real_agent_run():
     call_kwargs = tracker.record.call_args.kwargs
     assert call_kwargs["usage"].input_tokens > 0
     assert call_kwargs["usage"].output_tokens > 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not os.environ.get("GEMINI_API_KEY"),
+    reason="GEMINI_API_KEY not set — skipping live Gemini integration test",
+)
+async def test_integration_gemini_cost_recorded_after_real_agent_run():
+    """Verify cost_tracker.record() fires with non-zero token counts on a real Gemini call.
+
+    Satisfies AC-4 (amended): openai_compat path confirmed end-to-end without
+    requiring an Anthropic API account.
+    """
+    from pydantic_ai import Agent
+
+    tiers = {"gemini": GEMINI_TIER}
+    tracker = _null_tracker()
+
+    model, _ = build_model("gemini", tiers, tracker)
+    agent = Agent(model, output_type=str)
+    deps = WorkflowDeps(
+        run_id="int-gemini-1",
+        workflow_id="int-wf-1",
+        component="test",
+        tier="gemini",
+        project_root="/tmp",
+    )
+
+    result = await run_with_cost(agent, "Say 'ok' and nothing else.", deps, tracker)
+
+    assert result is not None
+    tracker.record.assert_awaited_once()
+    call_kwargs = tracker.record.call_args.kwargs
+    assert call_kwargs["usage"].input_tokens > 0
+    assert call_kwargs["usage"].output_tokens > 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not os.environ.get("AIWORKFLOWS_OLLAMA_BASE_URL"),
+    reason="AIWORKFLOWS_OLLAMA_BASE_URL not set — skipping live Ollama integration test",
+)
+async def test_integration_ollama_cost_recorded_after_real_agent_run():
+    """Verify the Ollama (openai_compat) path works end-to-end against a real server."""
+    from pydantic_ai import Agent
+
+    ollama_model = os.environ.get("AIWORKFLOWS_OLLAMA_MODEL", "llama3.2")
+    ollama_tier = TierConfig(
+        provider="ollama",
+        model=ollama_model,
+        base_url=os.environ["AIWORKFLOWS_OLLAMA_BASE_URL"],
+        max_tokens=512,
+        temperature=0.1,
+    )
+    tiers = {"local": ollama_tier}
+    tracker = _null_tracker()
+
+    model, _ = build_model("local", tiers, tracker)
+    agent = Agent(model, output_type=str)
+    deps = WorkflowDeps(
+        run_id="int-ollama-1",
+        workflow_id="int-wf-1",
+        component="test",
+        tier="local",
+        project_root="/tmp",
+    )
+
+    result = await run_with_cost(agent, "Say 'ok' and nothing else.", deps, tracker)
+
+    assert result is not None
+    tracker.record.assert_awaited_once()

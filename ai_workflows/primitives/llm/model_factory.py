@@ -20,7 +20,7 @@ Provider → pydantic-ai Model mapping
 """
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
@@ -37,7 +37,7 @@ from ai_workflows.primitives.llm.types import ClientCapabilities, TokenUsage, Wo
 from ai_workflows.primitives.tiers import TierConfig
 
 if TYPE_CHECKING:
-    from pydantic_ai import Agent
+    from pydantic_ai import Agent, AgentRunResult
 
 
 class ConfigurationError(Exception):
@@ -47,7 +47,7 @@ class ConfigurationError(Exception):
 def build_model(
     tier_name: str,
     tiers: dict[str, TierConfig],
-    cost_tracker: CostTracker,  # noqa: ARG001 — reserved for future usage callback wiring
+    cost_tracker: CostTracker,
 ) -> tuple[AnthropicModel | OpenAIChatModel | GoogleModel, ClientCapabilities]:
     """Return a configured pydantic-ai Model and its capability descriptor.
 
@@ -56,6 +56,11 @@ def build_model(
     absent. The ``cost_tracker`` parameter is accepted now for API stability;
     active wiring happens in ``run_with_cost()``.
     """
+    # cost_tracker is reserved: pydantic-ai 1.x exposes no usage-callback hook,
+    # so active cost recording happens in run_with_cost(). Accepting the param
+    # here keeps the factory signature stable for when a hook lands upstream.
+    _ = cost_tracker
+
     if tier_name not in tiers:
         raise ConfigurationError(f"Unknown tier: {tier_name!r}")
 
@@ -78,7 +83,7 @@ async def run_with_cost(
     prompt: str,
     deps: WorkflowDeps,
     cost_tracker: CostTracker,
-):
+) -> "AgentRunResult[Any]":
     """Run an agent and record the resulting LLM cost.
 
     Calls ``agent.run()``, converts the returned ``Usage`` to our
@@ -160,6 +165,11 @@ def _build_ollama(config: TierConfig) -> tuple[OpenAIChatModel, ClientCapabiliti
 
 
 def _build_openai_compat(config: TierConfig) -> tuple[OpenAIChatModel, ClientCapabilities]:
+    if not config.base_url:
+        raise ConfigurationError(
+            f"openai_compat tier requires base_url; got None for model {config.model!r}. "
+            "Set base_url in tiers.yaml (e.g. https://generativelanguage.googleapis.com/v1beta/openai/)."
+        )
     api_key = _require_env(config.api_key_env or "OPENAI_API_KEY")
     client = AsyncOpenAI(api_key=api_key, base_url=config.base_url, max_retries=0)
     model = OpenAIChatModel(config.model, provider=OpenAIProvider(openai_client=client))
@@ -179,6 +189,11 @@ def _build_openai_compat(config: TierConfig) -> tuple[OpenAIChatModel, ClientCap
 
 def _build_google(config: TierConfig) -> tuple[GoogleModel, ClientCapabilities]:
     api_key = _require_env(config.api_key_env or "GOOGLE_API_KEY")
+    # google-genai's retry_args() maps retry_options=None → stop_after_attempt(1),
+    # i.e. one attempt, no retries. GoogleProvider passes no retry_options, so we
+    # inherit the "no retry" default. This satisfies CRIT-06 by the SDK default;
+    # if google-genai changes that default, test_google_client_retry_is_disabled
+    # will catch the regression before it reaches production.
     model = GoogleModel(config.model, provider=GoogleProvider(api_key=api_key))
     caps = ClientCapabilities(
         supports_prompt_caching=False,

@@ -51,7 +51,7 @@ Build the foundation on top of `pydantic-ai`. We don't reimplement what they've 
 
 1. `task_01_project_scaffolding.md` — ✅ **Complete** (2026-04-18)
 2. `task_02_shared_types.md` — ContentBlock discriminated union + ClientCapabilities — ✅ **Complete** (2026-04-18)
-3. `task_03_model_factory.md` — tier name → pydantic-ai Model instance
+3. `task_03_model_factory.md` — tier name → pydantic-ai Model instance — ✅ **Complete** (2026-04-18)
 4. `task_04_prompt_caching.md` — multi-breakpoint Anthropic cache strategy
 5. `task_05_tool_registry.md` — injected registry + `forensic_logger`
 6. `task_06_stdlib_tools.md` — fs + shell + http + git

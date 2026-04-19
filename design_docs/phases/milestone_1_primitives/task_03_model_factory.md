@@ -1,5 +1,7 @@
 # Task 03 — Model Factory
 
+**Status:** ✅ Complete (2026-04-18) — see [issues/task_03_issue.md](issues/task_03_issue.md).
+
 **Issues:** P-06, P-09, P-10, CRIT-05, CRIT-06
 
 ## What to Build
@@ -96,11 +98,11 @@ async def run_with_cost(
 
 ## Acceptance Criteria
 
-- [ ] `build_model("sonnet", tiers, cost_tracker)` returns `(AnthropicModel, capabilities)` with `supports_prompt_caching=True`
-- [ ] `build_model("local_coder", tiers, cost_tracker)` returns `(OpenAIModel, capabilities)` with `base_url` from Ollama config
-- [ ] Underlying SDK clients have `max_retries=0` (verify via `client._client.max_retries` or equivalent)
-- [ ] Integration test with real Anthropic key confirms cost recording fires after an `agent.run()`
-- [ ] Missing env var raises `ConfigurationError` naming the variable
+- [x] `build_model("sonnet", tiers, cost_tracker)` returns `(AnthropicModel, capabilities)` with `supports_prompt_caching=True`
+- [x] `build_model("local_coder", tiers, cost_tracker)` returns `(OpenAIModel, capabilities)` with `base_url` from Ollama config
+- [x] Underlying SDK clients have `max_retries=0` (verify via `client._client.max_retries` or equivalent)
+- [x] Integration test with a real provider key (Gemini via `openai_compat` or Anthropic) confirms cost recording fires after an `agent.run()`; a parallel Ollama integration test confirms the local path end-to-end
+- [x] Missing env var raises `ConfigurationError` naming the variable
 
 ## Dependencies
 

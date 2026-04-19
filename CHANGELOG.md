@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — M1 Task 03: Model Factory — Audit Follow-up (2026-04-18)
+
+Resolves ISS-09, ISS-10, ISS-11 surfaced in the post-resolution confirmation audit.
+ISS-12 (`TierConfig.max_retries`) deferred to Task 07 by user decision.
+
+**Files modified:**
+
+- `ai_workflows/primitives/llm/model_factory.py` — ISS-10: added `-> "AgentRunResult[Any]"` return annotation to `run_with_cost()`; `Any` added to `typing` imports; `AgentRunResult` added under `TYPE_CHECKING`.
+- `tests/primitives/test_model_factory.py` — ISS-09: added `test_build_openai_compat_returns_correct_type` + `test_openai_compat_capabilities_flags` (all four provider branches now have full model-type + caps-flags coverage). ISS-11: added `test_unsupported_provider_raises_configuration_error` (uses `model_construct` to bypass Literal, exercises the fallthrough `raise`).
+- `design_docs/phases/milestone_1_primitives/issues/task_03_issue.md` — ISS-09…ISS-12 marked RESOLVED / DEFERRED; status updated to ✅ PASS.
+
+**Gate result:** 63 passed (22 model-factory, 15 types, 26 scaffolding), 1 skipped, 0 broken contracts, ruff clean.
+
+### Fixed — M1 Task 03: Model Factory — Issue Resolution (2026-04-18)
+
+Resolves all eight issues filed by the Task 03 audit (ISS-01 through ISS-08).
+
+**Files added or modified:**
+
+- `pyproject.toml` — added `python-dotenv>=1.0` to `[dependency-groups.dev]`.
+- `tests/conftest.py` — new root conftest; auto-loads `.env` via `load_dotenv()` so integration tests read keys without manual `export`.
+- `ai_workflows/primitives/llm/model_factory.py` — ISS-01: explicit comment in `_build_google()` documenting reliance on google-genai's `stop_after_attempt(1)` default (CRIT-06 compliant). ISS-03: in-body `_ = cost_tracker` comment replaces `# noqa` annotation. ISS-05: `_build_openai_compat()` now raises `ConfigurationError` when `base_url` is falsy.
+- `tests/primitives/test_model_factory.py` — ISS-02: three new Google provider tests (`test_build_google_model_returns_correct_type`, `test_google_capabilities_flags`, `test_missing_google_key_raises_configuration_error`). ISS-01 test: `test_google_client_retry_is_disabled` asserts `stop.max_attempt_number == 1`. ISS-04: Ollama base-url assertion tightened to full prefix check. ISS-05 test: `test_openai_compat_requires_base_url`. ISS-08: two new live integration tests gated by `GEMINI_API_KEY` and `AIWORKFLOWS_OLLAMA_BASE_URL`.
+- `design_docs/phases/milestone_1_primitives/task_03_model_factory.md` — AC-4 amended to accept Gemini or Anthropic key; AC checkboxes ticked; Status line added.
+- `design_docs/phases/milestone_1_primitives/README.md` — Task 03 entry marked Complete.
+- `design_docs/issues.md` — CRIT-05 flipped to `[x]`; CRIT-06 flipped to `[~]`.
+- `design_docs/phases/milestone_1_primitives/issues/task_03_issue.md` — ISS-01 through ISS-07 marked RESOLVED; ISS-08 re-graded (Gemini + Ollama paths now have live tests).
+
+**Acceptance criteria re-graded:**
+
+- AC-1 through AC-3, AC-5: were ✅ PASS, remain so.
+- AC-4: was ⏸️ BLOCKED (Anthropic key required); now ✅ PASS via Gemini `openai_compat` integration test (`test_integration_gemini_cost_recorded_after_real_agent_run`) + Ollama path (`test_integration_ollama_cost_recorded_after_real_agent_run`).
+
+**Deviation noted:**
+
+- AC-4 satisfied via Gemini (`openai_compat`) rather than Anthropic API — user runs Claude Max (subscription) and does not maintain a separate pay-as-you-go Anthropic API account. The amended AC-4 accepts any real provider key. Anthropic integration test remains in the suite but stays skipped until a key is provided.
+
 ### Added — M1 Task 03: Model Factory (2026-04-18)
 
 Introduces the model factory that maps tier names to configured pydantic-ai
