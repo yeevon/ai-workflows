@@ -1,5 +1,7 @@
 # Task 08 — Storage Layer
 
+**Status:** ✅ Complete (2026-04-19) — see [issues/task_08_issue.md](issues/task_08_issue.md).
+
 **Issues:** P-26, P-28, P-29, P-30, P-31, CRIT-02, CRIT-10 (revises P-27)
 
 ## What to Build
@@ -128,13 +130,13 @@ This gives you:
 
 ## Acceptance Criteria
 
-- [ ] `SQLiteStorage` passes `isinstance(storage, StorageBackend)` structural check
-- [ ] First open applies `001_initial.sql`, second open does nothing (yoyo deduplicates)
-- [ ] WAL mode confirmed via `PRAGMA journal_mode` query
-- [ ] `create_run()` requires `workflow_dir_hash` — no null allowed
-- [ ] `get_total_cost()` excludes rows where `is_local=1`
-- [ ] Migration rollback works (test by creating 002, rolling back, confirming schema reverts)
-- [ ] Concurrent writes via `asyncio.gather` of 20 `log_llm_call()` calls succeed
+- [x] `SQLiteStorage` passes `isinstance(storage, StorageBackend)` structural check
+- [x] First open applies `001_initial.sql`, second open does nothing (yoyo deduplicates)
+- [x] WAL mode confirmed via `PRAGMA journal_mode` query
+- [x] `create_run()` requires `workflow_dir_hash` — no null allowed
+- [x] `get_total_cost()` excludes rows where `is_local=1`
+- [x] Migration rollback works (test by creating 002, rolling back, confirming schema reverts)
+- [x] Concurrent writes via `asyncio.gather` of 20 `log_llm_call()` calls succeed
 
 ## Dependencies
 

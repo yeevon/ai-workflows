@@ -20,7 +20,7 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` resolved · `[!]` blocke
 These break correctness or safety if left unresolved. From post-research analysis.
 
 - [ ] **CRIT-01** — Task-to-task data flow (supersedes C-14). Decision needed: typed Pydantic schemas per task with compile-time DAG type-checking (Haystack pattern). Without this, the Orchestrator is incomplete and every workflow reinvents this wheel.
-- [ ] **CRIT-02** — Workflow directory content hash stored in `runs` table. Resume refuses on mismatch unless `--force-workflow-version-mismatch`. Current design only snapshots `workflow.yaml`; prompts and `custom_tools.py` changes go undetected.
+- [~] **CRIT-02** — Workflow directory content hash stored in `runs` table. Resume refuses on mismatch unless `--force-workflow-version-mismatch`. Current design only snapshots `workflow.yaml`; prompts and `custom_tools.py` changes go undetected. *Partially resolved by M1 Task 07 (`compute_workflow_hash()`) + M1 Task 08 (`runs.workflow_dir_hash TEXT NOT NULL` schema + `create_run()` value validation). Resume refusal on mismatch lands with M1 Task 12 (`aiw resume`).*
 - [ ] **CRIT-03** — Budget cap `max_run_cost_usd` in workflow config (upgrades P-35 from deferred to critical). `CostTracker` checks after every LLM call, raises `BudgetExceeded`. Claude tiers (`opus`/`sonnet`/`haiku`) are priced $0 (Max subscription); only `gemini_flash` accrues real cost per token — but `gemini_flash` is the last-resort tier so runaway spend is low-risk by design.
 - [x] **CRIT-04** — Delete or rebrand the regex sanitizer (revises X-07). ContentBlock `tool_result` wrapping is the real defense and stays. Regex pattern matching against injection is theater; false security is worse than none. Either delete `primitives/tools/sanitizer.py` entirely, or rebrand as `forensic_logger.py` with docstring clarifying it is logging for post-hoc analysis, NOT a security control. *Resolved by M1 Task 05: the former sanitizer never landed; `forensic_logger.py` ships with explicit "NOT a security control" disclaimers on both the module and `log_suspicious_patterns()`, and is wired through `ToolRegistry.build_pydantic_ai_tools()` as logging-only (no mutation).*
 - [x] **CRIT-05** — `ClientCapabilities` descriptor on `LLMClient`. Pydantic model with `supports_prompt_caching`, `supports_parallel_tool_calls`, `supports_structured_output`, `max_context`, `supports_thinking`. Components check capabilities, never `isinstance()` provider class. Prevents layering violations. *Resolved by M1 Task 03: per-adapter wiring in all four `_build_*` helpers.*
@@ -28,7 +28,7 @@ These break correctness or safety if left unresolved. From post-research analysi
 - [~] **CRIT-07** — Multi-breakpoint prompt caching strategy (revises P-04). Implemented by M1 Task 04: `apply_cache_control()`, `build_cache_settings()`, `validate_prompt_template()` in `caching.py`. **Anthropic-only feature** — helpers are present for third-party deployments but not exercised in this project (no Anthropic API). Gemini and Qwen have no equivalent cache-control mechanism. AC-4 live validation permanently N/A for this deployment.
 - [ ] **CRIT-08** — Retry error taxonomy (revises P-37). Three classes: retryable-transient (429, 529, `APIConnectionError`, `overloaded_error`) → `retry_on_rate_limit`; retryable-semantic (Pydantic validation, parse errors) → `ModelRetry` feeding the error back to the LLM; non-retryable (`invalid_request_error`, auth) → raise immediately. Current 429/529-only is incomplete.
 - [x] **CRIT-09** — `ContentBlock` discriminated union. Add `type: Literal[...]` field to each block class. Apply `Field(discriminator='type')` on the union. Without the discriminator, Pydantic v2 attempts each variant in order — confusing errors, tanks performance on long messages. *Resolved by M1 Task 02.*
-- [ ] **CRIT-10** — Migration framework via `yoyo-migrations` or `sqlite-utils.Database.migrate()` (revises P-27). Adds a `_migrations` version table and rollback paths. 10-minute change in M1; a day of archaeology in M5.
+- [x] **CRIT-10** — Migration framework via `yoyo-migrations` or `sqlite-utils.Database.migrate()` (revises P-27). Adds a `_migrations` version table and rollback paths. 10-minute change in M1; a day of archaeology in M5. *Resolved by M1 Task 08: `SQLiteStorage._apply_migrations()` uses `yoyo 9.x` with the auto-managed `_yoyo_migration` table and sibling `*.rollback.sql` files; rollback round-tripping pinned by `test_migration_rollback_reverts_schema`.*
 - [ ] **CRIT-11** — AgentLoop subagent context isolation policy (completes X-01). Default: fresh context per subagent (Anthropic pattern). Opt-in shared thread with documented risk. Write this down before AgentLoop is built.
 
 ---
@@ -93,11 +93,11 @@ These break correctness or safety if left unresolved. From post-research analysi
 ### Storage
 
 - [x] **P-26** — Global `~/.ai-workflows/` directory. Override via `AIWORKFLOWS_HOME` env var or `--profile`.
-- [~] **P-27** — **REVISED by CRIT-10**: switch from manual SQL to `yoyo-migrations`.
+- [x] **P-27** — **REVISED by CRIT-10**: switch from manual SQL to `yoyo-migrations`. *Resolved by M1 Task 08.*
 - [x] **P-28** — SQLite WAL mode.
 - [x] **P-29** — Intermediate artifacts as files in `runs/<run_id>/`. Paths in SQLite.
 - [x] **P-30** — Run directory `~/.ai-workflows/runs/<run_id>/`.
-- [ ] **P-31** — `StorageBackend` protocol for future cloud backend.
+- [x] **P-31** — `StorageBackend` protocol for future cloud backend. *Resolved by M1 Task 08: `ai_workflows.primitives.storage.StorageBackend` `Protocol` (runtime-checkable). `SQLiteStorage` satisfies it; cloud backends implement the same interface.*
 
 ### Cost Tracking
 
@@ -194,7 +194,7 @@ These break correctness or safety if left unresolved. From post-research analysi
 
 - [x] **W-01** — `pyyaml` + Pydantic validation.
 - [x] **W-02** — `flow:` + `after:`/`before:` DAG merge.
-- [~] **W-03** — **REVISED by CRIT-02**: snapshot entire workflow directory, store content hash.
+- [~] **W-03** — **REVISED by CRIT-02**: snapshot entire workflow directory, store content hash. *Hash side resolved by M1 Task 07 (`compute_workflow_hash`) + M1 Task 08 (`runs.workflow_dir_hash`); directory snapshot copying to `~/.ai-workflows/runs/<run_id>/workflow/` lands with M1 Task 12 `aiw run`.*
 - [ ] **W-04** — `run.py` entry point: CLI arg parsing only. Decide at M3.
 - [ ] **W-05** — Cross-workflow data sharing model. Decide at M6.
 

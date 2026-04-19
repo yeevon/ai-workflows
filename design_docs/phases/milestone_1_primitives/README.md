@@ -57,7 +57,7 @@ Build the foundation on top of `pydantic-ai`. We don't reimplement what they've 
 5. `task_05_tool_registry.md` — injected registry + `forensic_logger` — ✅ **Complete** (2026-04-18)
 6. `task_06_stdlib_tools.md` — fs + shell + http + git — ✅ **Complete** (2026-04-18)
 7. `task_07_tiers_loader.md` — tiers.yaml + pricing.yaml + profile + dir-hash utility — ✅ **Complete** (2026-04-18)
-8. `task_08_storage.md` — SQLite + yoyo-migrations + workflow_dir_hash
+8. `task_08_storage.md` — SQLite + yoyo-migrations + workflow_dir_hash — ✅ **Complete** (2026-04-19)
 9. `task_09_cost_tracker.md` — tagging + budget cap enforcement
 10. `task_10_retry.md` — retry taxonomy
 11. `task_11_logging.md` — structlog + logfire configuration

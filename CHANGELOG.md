@@ -7,6 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 08: Storage Layer (2026-04-19)
+
+Implements CRIT-10, P-26 … P-31 (revises P-27), W-03 and the CRIT-02
+`workflow_dir_hash` column paired with Task 07's hash utility. Lands the
+SQLite run log with WAL mode, yoyo-migrations-managed schema, and the
+`StorageBackend` protocol that future cloud backends will slot into.
+
+**Files added or modified:**
+
+- `migrations/001_initial.sql` — replaces the Task 01 bootstrap stub.
+  Creates the five canonical tables (`runs`, `tasks`, `llm_calls`,
+  `artifacts`, `human_gate_states`) plus `idx_llm_calls_run` and
+  `idx_tasks_run_status`. `runs.workflow_dir_hash TEXT NOT NULL` holds
+  the Task 07 hash for CRIT-02 resume safety; `runs.budget_cap_usd`
+  covers CRIT-03; `llm_calls.is_escalation` tags retry escalations
+  (C-21); `llm_calls.is_local` flags rows excluded from cost
+  aggregations. Format is the raw-SQL form consumed by `yoyo 9.x
+  read_migrations()` — statements split by `sqlparse` on `;`.
+- `migrations/001_initial.rollback.sql` — new companion file.
+  yoyo-migrations 9.x expects rollback statements in a sibling
+  `.rollback.sql` file (not an inline `-- rollback:` separator);
+  verified against the yoyo source at
+  `.venv/.../yoyo/migrations.py:190-192`.
+- `ai_workflows/primitives/storage.py` — new module. Exports the
+  `StorageBackend` `Protocol` (runtime-checkable) and the
+  `SQLiteStorage` default implementation. `SQLiteStorage.open(db_path)`
+  is the async factory; it applies pending migrations via yoyo and flips
+  `PRAGMA journal_mode = WAL`. Blocking `sqlite3` calls are pushed to
+  `asyncio.to_thread`; every write serialises through an `asyncio.Lock`
+  so 20-wide `asyncio.gather` of `log_llm_call()` never collides on the
+  WAL writer. `create_run()` validates `workflow_dir_hash` at the Python
+  layer (`None` / `""` → `ValueError`) before the DB sees it, so the
+  error message names the field instead of surfacing as a raw
+  `IntegrityError`. `upsert_task` and `log_llm_call` reject unknown
+  kwargs with `TypeError` so caller typos fail loudly. `get_total_cost`
+  and `get_cost_breakdown` both filter `is_local = 0`; ready for Task 09
+  to call `update_run_status(total_cost_usd=...)` on run completion.
+- `ai_workflows/primitives/__init__.py` — docstring already lists
+  `storage` alongside the other single-file modules; no edit needed.
+- `tests/primitives/test_storage.py` — 32 tests covering every
+  acceptance criterion: protocol conformance (AC-1), first-open migration
+  plus second-open dedupe (AC-2), WAL pragma probe (AC-3), workflow hash
+  validation with `None` / `""` / happy-path (AC-4), `is_local`
+  exclusion in `get_total_cost` + `get_cost_breakdown` (AC-5), migration
+  rollback via a transient `002_tmp.sql` in `tmp_path` (AC-6), and 20
+  concurrent writes via `asyncio.gather` (AC-7). Plus coverage of
+  artifact logging, gate upsert semantics (rendered_at preserved on
+  second write, resolved_at set on terminal status), run ordering,
+  task scoping, and `initialize()` idempotency.
+- `design_docs/phases/milestone_1_primitives/task_08_storage.md` — Status
+  line added, every acceptance-criterion checkbox ticked.
+- `design_docs/phases/milestone_1_primitives/README.md` — Task 08 entry
+  flipped to `✅ Complete (2026-04-19)`.
+- `design_docs/issues.md` — CRIT-02 flipped to `[x]` (hash stored,
+  `workflow_dir_hash` column lives in `runs`, schema rejects null; resume
+  refusal happens in Task 12 `aiw resume`); CRIT-10 flipped to `[x]`
+  (yoyo-migrations wired); P-27 `[~]` → `[x]` (manual SQL replaced);
+  P-31 flipped to `[x]` (`StorageBackend` protocol shipped); W-03
+  `[~]` → `[x]` (directory content hash stored; workflow directory
+  snapshot copying remains a Task 12 concern).
+
+**Acceptance criteria satisfied:**
+
+- AC-1: `isinstance(storage, StorageBackend)` structural check —
+  `test_sqlite_storage_satisfies_storage_backend_protocol` +
+  `test_sqlite_storage_pre_open_still_satisfies_protocol` pin the
+  runtime-checkable protocol against both post-open and pre-open
+  instances.
+- AC-2: First open applies `001_initial.sql`, second open is a no-op —
+  `test_first_open_applies_001_initial` asserts the single
+  `_yoyo_migration` row with `migration_id == "001_initial"`;
+  `test_second_open_is_noop` reopens the same DB and asserts the row
+  count stays at 1. `test_first_open_creates_every_schema_table` +
+  `test_first_open_creates_required_indexes` catch accidental
+  schema drift.
+- AC-3: WAL mode via `PRAGMA journal_mode` — `test_wal_mode_is_enabled_after_open`.
+- AC-4: `create_run()` requires `workflow_dir_hash` — three tests:
+  `test_create_run_rejects_none_workflow_dir_hash`,
+  `test_create_run_rejects_empty_workflow_dir_hash`,
+  `test_create_run_persists_workflow_dir_hash`.
+- AC-5: `get_total_cost()` excludes `is_local=1` —
+  `test_get_total_cost_excludes_is_local_rows` +
+  `test_get_total_cost_is_zero_when_only_local_calls` +
+  `test_get_cost_breakdown_groups_by_component_excluding_local`.
+- AC-6: Migration rollback works — `test_migration_rollback_reverts_schema`
+  seeds `001_initial.sql` + a synthetic `002_tmp.sql` (with
+  `002_tmp.rollback.sql`) into `tmp_path/migrations`, opens the storage,
+  asserts the probe table exists, rolls 002 back via yoyo's API, asserts
+  the probe table is gone while `runs` / `llm_calls` stay.
+- AC-7: 20 concurrent writes via `asyncio.gather` —
+  `test_twenty_concurrent_log_llm_call_succeeds` fires 20
+  `log_llm_call` coroutines, sums to `$0.20` via `get_total_cost`,
+  and counts 20 rows directly in `llm_calls`.
+
+**Deviations from spec:**
+
+- The task spec shows `class SQLiteStorage: def __init__(self, db_path: str)`
+  with no async setup path, but calls `_apply_migrations()` /
+  `_enable_wal()` as `async`. Resolved by adding an
+  `async classmethod open()` factory — `SQLiteStorage.open(path)` builds,
+  migrates, and flips WAL in a single awaitable. The sync `__init__`
+  still works for protocol-conformance checks that don't need the DB;
+  `initialize()` is exposed directly for callers that want to own the
+  await step.
+- `SQLiteStorage` gains a keyword-only `migrations_dir` argument (on
+  `__init__` and `open`) so tests can point the loader at a
+  `tmp_path/migrations` tree for the rollback AC. Production callers
+  leave it unset — the default resolves to the repo-root `migrations/`
+  directory via `Path(__file__).parent.parent.parent`. Once P-21
+  (package-data shipping via `importlib.resources`) closes, this default
+  will move to a resource loader.
+- yoyo-migrations 9.x does NOT parse an inline `-- rollback:` separator
+  — rollback statements live in a sibling `*.rollback.sql` file (see
+  `yoyo/migrations.py:190-192`). The task spec sketches only the
+  forward SQL; the rollback file is an implementation-level addition
+  required by the migration-rollback AC.
+- `upsert_task` and `log_llm_call` raise `TypeError` on unknown kwargs
+  rather than silently dropping them. The spec's `**kwargs` signature
+  suggests a passthrough; the conservative reading is "fail loud on a
+  caller typo" — a silent drop would mask a misspelt column name
+  forever.
+- Foreign keys enabled per connection (`PRAGMA foreign_keys = ON`).
+  The spec's schema declares `REFERENCES runs(run_id)` but SQLite needs
+  the pragma to enforce it. Enabling it is the safer default.
+
 ### Added — M1 Task 07: Tiers Loader and Workflow Hash (2026-04-18)
 
 Implements P-21 … P-25 and CRIT-02. Lands the tiers / pricing YAML loader
