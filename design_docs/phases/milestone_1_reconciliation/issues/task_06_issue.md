@@ -34,8 +34,12 @@ Task files `task_02`…`task_13` were drafted **before** the reconciliation audi
 
 ## Carry-over from prior audits
 
-_None._
+### From [M1-T03-ISS-01](task_03_issue.md) (T03 post-build audit, 2026-04-19)
+
+Task 03 deleted `ai_workflows/primitives/llm/model_factory.py`. `tests/primitives/test_tiers_loader.py:195` imports `ConfigurationError` from that now-gone module (`test_unknown_tier_error_is_not_a_configuration_error`). Post-T03 the test raises `ModuleNotFoundError` at runtime. The LiteLLM-era tiers module owns its own configuration-error taxonomy — the cross-module import is no longer meaningful.
+
+- [ ] **M1-T03-ISS-01 · MEDIUM** — In `tests/primitives/test_tiers_loader.py::test_unknown_tier_error_is_not_a_configuration_error`, drop the `from ai_workflows.primitives.llm.model_factory import ConfigurationError` line and re-anchor the assertion against the `ConfigurationError` surface exposed by the post-refit `primitives/tiers.py` (or delete the test if the new shape makes the cross-class check pointless). Source: [task_03_issue.md § HIGH — M1-T03-ISS-01](task_03_issue.md).
 
 ## Propagation status
 
-Post-build audit will overwrite this file with implementation findings.
+Post-build audit will overwrite this file with implementation findings. When the T03 carry-over checkbox ticks, [task_03_issue.md](task_03_issue.md) flips the corresponding line from `DEFERRED` to `RESOLVED` on the next T03 re-audit touch point.

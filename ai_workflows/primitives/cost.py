@@ -1,19 +1,26 @@
 """Cost tracking, budget enforcement, and the CostTracker implementation.
 
-Produced by M1 Task 09 (CRIT-03, P-32 … P-35). Builds on the Task 07 pricing
-loader and the Task 08 storage layer to turn every LLM call into a priced,
-logged, and budget-checked transaction.
+Hosts :class:`TokenUsage` as the canonical token-count record (relocated
+here by M1 Task 03 when the pre-pivot ``primitives.llm.types`` module was
+deleted; :class:`TokenUsage` is a plain pydantic v2 model with no
+pydantic-ai coupling, and ``cost`` is its only remaining consumer per
+[architecture.md §4.1](../../design_docs/architecture.md)). Field shape
+and tracker API will be pruned in M1 Task 08 per KDR-007.
 
 Responsibilities
 ----------------
-* :func:`calculate_cost` — pure function that multiplies a ``TokenUsage`` by
-  a ``ModelPricing`` row and divides by 1e6. Returns ``0.0`` for models not
-  in the pricing table (with a structured WARNING) so a missing entry never
-  crashes a workflow.
+* :class:`TokenUsage` — per-call input/output/cache token counts; the
+  shared record every adapter emits and every aggregator consumes.
+* :func:`calculate_cost` — pure function that multiplies a ``TokenUsage``
+  by a ``ModelPricing`` row and divides by 1e6. Returns ``0.0`` for models
+  not in the pricing table (with a structured WARNING) so a missing entry
+  never crashes a workflow.
 * :class:`BudgetExceeded` — the exception the tracker raises when a run's
   total cost crosses ``budget_cap_usd``. Carries ``run_id``,
   ``current_cost``, and ``cap`` so the Pipeline / Orchestrator can log the
-  failure and mark the run ``failed`` with reason ``budget_exceeded``.
+  failure and mark the run ``failed`` with reason ``budget_exceeded``. M1
+  Task 08 will replace this with the ``NonRetryable`` bucket from
+  [task 07](../../design_docs/phases/milestone_1_reconciliation/task_07_refit_retry_policy.md).
 * :class:`CostTracker` — concrete implementation. Wraps a
   :class:`~ai_workflows.primitives.storage.StorageBackend`, a pricing
   mapping, and an optional ``budget_cap_usd``. Every ``record()`` call
@@ -24,15 +31,9 @@ Responsibilities
 
 Design notes
 ------------
-* The protocol used by the Task 03 model factory is this same class. It is
-  still runtime-checkable via duck typing (``MagicMock(spec=CostTracker)``
-  in the existing ``test_model_factory.py`` continues to work) because
-  ``record()`` keeps its Task 03 signature. A separate ``Protocol`` class
-  is not needed — Python's structural type-checking is adequate.
 * Running total is never cached in the tracker — we always ask the storage
   backend via ``get_total_cost``, so a second ``CostTracker`` that mounts
-  the same DB reads the true aggregate. This matches the M4 checkpoint /
-  resume story (CRIT-02 + P-30).
+  the same DB reads the true aggregate.
 * ``runs.total_cost_usd`` is intentionally **not** stamped from within
   ``record()``. The Pipeline / Orchestrator stamps it once on terminal
   state via ``storage.update_run_status("completed", total_cost_usd=...)``.
@@ -51,9 +52,26 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import structlog
+from pydantic import BaseModel
 
-from ai_workflows.primitives.llm.types import TokenUsage
 from ai_workflows.primitives.tiers import ModelPricing
+
+
+class TokenUsage(BaseModel):
+    """Token counts returned by the provider after each call.
+
+    Relocated from ``ai_workflows.primitives.llm.types`` in M1 Task 03 so
+    ``cost`` owns its canonical aggregation record directly. Field shape
+    (``cost_usd``, ``model``, recursive ``sub_models``) is expanded in
+    M1 Task 08 per KDR-007; this stub preserves the Task 02 surface so
+    ``CostTracker.record`` and ``test_cost.py`` keep working across the
+    cut-over.
+    """
+
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 if TYPE_CHECKING:
     from ai_workflows.primitives.storage import StorageBackend

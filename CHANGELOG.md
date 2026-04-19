@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed — M1 Task 03: Remove pydantic-ai LLM substrate (2026-04-19)
+
+Deleted the `ai_workflows/primitives/llm/` subpackage and its matching tests.
+The pydantic-ai-coupled `Model`/`ModelResponse` layer is replaced by
+`TieredNode` + the LiteLLM adapter that land in M2
+([architecture.md §4.2 / §6](design_docs/architecture.md), KDR-001 / KDR-005 /
+KDR-007).
+
+**Files removed:**
+
+- `ai_workflows/primitives/llm/__init__.py`
+- `ai_workflows/primitives/llm/caching.py` (Anthropic multi-breakpoint
+  cache helpers — KDR-003 forbids the Anthropic API path; LiteLLM and the
+  Claude Code subprocess do not use in-process caching).
+- `ai_workflows/primitives/llm/model_factory.py` (pydantic-ai `Model`
+  factory — replaced by the LiteLLM adapter in M2).
+- `ai_workflows/primitives/llm/types.py` (`Message`, `ContentBlock`,
+  `Response`, `ClientCapabilities`, `WorkflowDeps` — LiteLLM supplies the
+  OpenAI-shaped contract downstream; `TokenUsage` relocated, see below).
+- `tests/primitives/test_caching.py`
+- `tests/primitives/test_model_factory.py`
+- `tests/primitives/test_types.py`
+
+**Conflict resolved against task spec:** the Task 03 spec told the Builder
+to leave `llm/__init__.py` in place as a one-line-docstring stub. The
+pre-build audit ([issues/task_03_issue.md §AUD-03-01](design_docs/phases/milestone_1_reconciliation/issues/task_03_issue.md))
+flipped that row to REMOVE because [architecture.md §4.1](design_docs/architecture.md)
+names no `llm/` sub-topic — provider drivers land under
+`primitives/providers/` in M2, so pre-creating an empty `llm/` package
+would carry forward a dead naming convention. The audit's direction is
+followed; the entire `llm/` directory is gone.
+
+**Pulled forward from M1 Task 08** (`TokenUsage` relocation):
+
+- `TokenUsage` moved from the deleted `primitives/llm/types.py` into
+  `ai_workflows/primitives/cost.py` (its architectural home per
+  [architecture.md §4.1](design_docs/architecture.md) — `cost` is the only
+  surviving consumer once `llm/*` and `tools/*` are gone). The Task-02
+  field surface (`input_tokens`, `output_tokens`, `cache_read_tokens`,
+  `cache_write_tokens`) is preserved verbatim; Task 08 still owns the
+  field-shape changes (`cost_usd`, `model`, recursive `sub_models`), the
+  `NonRetryable` budget integration with [task 07](design_docs/phases/milestone_1_reconciliation/task_07_refit_retry_policy.md),
+  and the `Storage` coupling refit.
+- `ai_workflows/primitives/cost.py` — module docstring refreshed to cite
+  the new `TokenUsage` home and the pre-pivot references removed; imports
+  drop `from ai_workflows.primitives.llm.types`.
+- `tests/primitives/test_cost.py` — single-line import swap to
+  `from ai_workflows.primitives.cost import TokenUsage`.
+- `design_docs/phases/milestone_1_reconciliation/task_08_prune_cost_tracker.md`
+  — annotated with the "Pulled forward by task 03" note so the T08 Builder
+  starts from the current `cost.py` surface.
+
+**Other edits:**
+
+- `ai_workflows/primitives/__init__.py` — docstring rewritten: drops the
+  `llm/` + `tools/` re-export paragraph, cites [architecture.md §4.1](design_docs/architecture.md)
+  directly, points M2 provider drivers at `primitives/providers/`.
+- `tests/test_scaffolding.py` — `test_layered_packages_import` parametrize
+  list drops `ai_workflows.primitives.llm` (module no longer exists).
+  `ai_workflows.primitives.tools` stays until M1 Task 04 removes it.
+
+**Acceptance criteria satisfied (T03-scope reading):**
+
+- AC-1 `grep -r "from pydantic_ai" ai_workflows/ tests/` returns zero for
+  files T03 owns or touched (surviving matches are under `retry.py`,
+  `tiers.py`, `test_retry.py`, `test_tiers_loader.py`, `scripts/m1_smoke.py`
+  — forward-deferred to T06 / T07 / T13 per audit.md ownership map).
+- AC-2 same reading — `ContentBlock`, `ClientCapabilities`, `model_factory`,
+  `prompt_caching` are gone from T03-owned files; downstream-owned
+  residues are deferred.
+- AC-3 superseded by AUD-03-01 — `primitives/llm/` does not exist at all
+  after this task.
+- AC-4 pytest green for T03-scope (the three tests this task removes stop
+  failing; no test T03 touched is left red).
+- AC-5 ruff green.
+
+**Carry-over ticked:**
+
+- M1-T02-ISS-01 (pydantic-ai / anthropic imports under `primitives/llm/`) —
+  closed for the `llm/*` portion by deleting the three modules. `retry.py`
+  and `logging.py` portions remain owned by T07 and T09 respectively.
+
 ### Changed — M1 Task 02: Dependency swap (2026-04-19)
 
 Replaced the pydantic-ai-era runtime dependencies with the LangGraph + MCP +

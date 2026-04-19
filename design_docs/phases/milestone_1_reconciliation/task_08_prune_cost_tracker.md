@@ -10,9 +10,11 @@ Keep `TokenUsage` and `CostTracker`'s per-run aggregation surface, but strip pyd
 
 ### `ai_workflows/primitives/cost.py`
 
+**Pulled forward by [task 03](task_03_remove_llm_substrate.md):** `TokenUsage` was relocated from the (now-deleted) `ai_workflows/primitives/llm/types.py` into `ai_workflows/primitives/cost.py` as a plain pydantic v2 `BaseModel` with the Task-02 field surface (`input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`). `cost.py` and `tests/primitives/test_cost.py` import `TokenUsage` from `ai_workflows.primitives.cost` now. T03 did **not** add `cost_usd`, `model`, or `sub_models` — those remain T08 deliverables.
+
 Keep or adjust:
 
-- `TokenUsage` dataclass / pydantic model — fields: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`, `model`, optional `sub_models: list[TokenUsage]` (recursive for modelUsage).
+- `TokenUsage` pydantic model — **extend** the Task-02 surface already relocated into this module with: `cost_usd`, `model`, optional `sub_models: list[TokenUsage]` (recursive for modelUsage).
 - `CostTracker` class:
   - `record(run_id, usage: TokenUsage) -> None` — single entry point that accepts an already-costed `TokenUsage`. LiteLLM enriches before we see it; the Claude Code driver computes cost from `pricing.yaml`.
   - `total(run_id) -> float`

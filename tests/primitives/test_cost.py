@@ -21,9 +21,9 @@ from structlog.testing import capture_logs
 from ai_workflows.primitives.cost import (
     BudgetExceeded,
     CostTracker,
+    TokenUsage,
     calculate_cost,
 )
-from ai_workflows.primitives.llm.types import TokenUsage
 from ai_workflows.primitives.storage import SQLiteStorage
 from ai_workflows.primitives.tiers import ModelPricing
 
