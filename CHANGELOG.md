@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 12: CLI primitives (2026-04-19)
+
+Wires the `aiw` console script for run-log visibility on top of the
+primitives built in Tasks 08/09/11. Implements `aiw list-runs`,
+`aiw inspect <run_id>`, `aiw resume <run_id>` (stub with real DB
+reads), `aiw run <workflow>` (placeholder + `--profile` flag for
+forward-compat), plus global `--log-level` / `--db-path` options.
+Resolves CL-01, CL-02, CL-04, CL-05 and carry-overs `M1-T04-ISS-01`
+(cache_read / cache_write visible in `aiw inspect`) and
+`M1-T09-ISS-02` (budget line formatted as
+`$current / $cap (pct% used)` or `$current (no cap)`).
+
+**Files added or modified:**
+
+- `ai_workflows/cli.py` — rewrote to add four commands, a root Typer
+  callback that parses `--log-level`/`--db-path`, and small formatting
+  helpers (`_format_cost`, `_format_timestamp`, `_format_duration`,
+  `_truncate`, `_int_or_zero`). Commands run async storage calls via
+  `asyncio.run` so the app remains sync at the Typer boundary.
+- `ai_workflows/primitives/storage.py` — added `list_llm_calls(run_id)`
+  to both the `StorageBackend` protocol and `SQLiteStorage`. Returns
+  rows oldest-first so the `aiw inspect` per-call table renders in
+  chronological order. Needed by the M1-T04-ISS-01 carry-over (cache
+  token columns) and by the spec's "LLM Calls: N total" line.
+- `tests/test_cli.py` — 16 tests, one per AC plus both carry-overs,
+  negative paths (missing run exits 1), and empty-DB rendering. Tests
+  are sync and drive the seeded DB via `asyncio.run(_seed_basic(...))`
+  so the CLI's own `asyncio.run` doesn't collide with pytest-asyncio's
+  auto-mode loop.
+- `pyproject.toml` — added `[tool.ruff.lint.flake8-bugbear]
+  extend-immutable-calls = ["typer.Option", "typer.Argument"]` so the
+  Typer idiom doesn't trip B008. This is the documented Typer/Click
+  escape hatch — the calls are evaluated once at import time and
+  treated as parameter markers, not mutable defaults.
+
+**Deviations from spec:**
+
+- `aiw inspect` accepts an optional `--workflow-dir` flag. The spec
+  sketch says "computes current hash to flag drift", but the `runs`
+  table doesn't store the workflow directory path — only the hash. The
+  flag is opt-in so the common case (`aiw inspect <id>`) still
+  prints the stored hash with a hint, and AC-3 ("flags mismatch if the
+  directory has changed") is testable end-to-end by passing the path.
+- `LogLevel` is a `StrEnum` rather than `str, Enum` — identical runtime
+  behaviour, clearer intent, and it satisfies ruff UP042.
+- The per-call table includes `cache_read` / `cache_write` columns
+  unconditionally (carry-over M1-T04-ISS-01). Values render as `0`
+  when a call had no cache activity, which keeps the column widths
+  stable across calls.
+
 ### Added — M1 Task 11: Logging (structlog + logfire) (2026-04-19)
 
 Implements P-43 (log-level defaults: INFO events, DEBUG LLM I/O) and

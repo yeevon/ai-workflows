@@ -103,7 +103,7 @@ This is a CLI-rendering concern, not a tracker concern. The tracker ships a `bud
 | ID | Severity | Owner | Status |
 | --- | --- | --- | --- |
 | M1-T09-ISS-01 | LOW | M2 Task 05 (Pipeline) | DEFERRED (propagated) |
-| M1-T09-ISS-02 | LOW | M1 Task 12 (`aiw inspect`) | DEFERRED (propagated) |
+| M1-T09-ISS-02 | LOW | M1 Task 12 (`aiw inspect`) | ✅ RESOLVED (M1 Task 12) |
 | M1-T09-ISS-03 | LOW | M3 Task 01 (Workflow Loader) | DEFERRED (propagated) |
 
 **Propagation status:**

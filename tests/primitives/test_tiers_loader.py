@@ -284,9 +284,9 @@ def test_load_pricing_parses_committed_file():
         assert pricing[claude_model].input_per_mtok == 0.0
         assert pricing[claude_model].output_per_mtok == 0.0
 
-    # Gemini overflow has non-zero rates.
-    assert pricing["gemini-2.0-flash"].input_per_mtok == pytest.approx(0.10)
-    assert pricing["gemini-2.0-flash"].output_per_mtok == pytest.approx(0.40)
+    # Gemini overflow has non-zero rates (gemini-2.5-flash paid tier).
+    assert pricing["gemini-2.5-flash"].input_per_mtok == pytest.approx(0.30)
+    assert pricing["gemini-2.5-flash"].output_per_mtok == pytest.approx(2.50)
 
     # Local Qwen is free.
     assert pricing["qwen2.5-coder:32b"].input_per_mtok == 0.0

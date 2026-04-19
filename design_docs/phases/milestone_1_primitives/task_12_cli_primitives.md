@@ -1,6 +1,8 @@
 # Task 12 — CLI Primitives Commands
 
-**Issues:** CL-01, CL-02, CL-04, CL-05, CRIT-02
+**Status:** ✅ Complete (2026-04-19)
+
+**Issues:** CL-01, CL-02, CL-04, CL-05, CRIT-02 (resolves carry-overs M1-T04-ISS-01, M1-T09-ISS-02)
 
 ## What to Build
 
@@ -82,13 +84,37 @@ Accepts `--profile` flag for forward compatibility.
 
 ## Acceptance Criteria
 
-- [ ] `aiw list-runs` renders correctly with seeded test data
-- [ ] `aiw inspect <id>` shows cost breakdown
-- [ ] `aiw inspect <id>` flags `workflow_dir_hash` mismatch if the directory has changed
-- [ ] `aiw inspect <nonexistent>` exits 1 with clear "not found" message
-- [ ] `aiw resume <id>` prints placeholder without error
-- [ ] `aiw --help` lists all commands
-- [ ] `--log-level DEBUG` produces human-readable console output
+- [x] `aiw list-runs` renders correctly with seeded test data
+  — pinned by `tests/test_cli.py::test_list_runs_renders_seeded_runs`,
+  `::test_list_runs_truncates_long_workflow_names`,
+  `::test_list_runs_with_empty_db_prints_header_and_message`.
+- [x] `aiw inspect <id>` shows cost breakdown
+  — pinned by `::test_inspect_shows_cost_breakdown` (per-component
+  aggregate excluding local calls) and
+  `::test_inspect_shows_per_task_breakdown` (per-task column).
+- [x] `aiw inspect <id>` flags `workflow_dir_hash` mismatch if the
+  directory has changed
+  — pinned by `::test_inspect_flags_mismatch_when_directory_changed`,
+  which seeds a workflow dir, hashes it, drifts it, and asserts the
+  `current match: OK` → `current match: MISMATCH` flip. Implementation
+  accepts an optional `--workflow-dir` flag because `runs` stores the
+  hash only, not the path.
+- [x] `aiw inspect <nonexistent>` exits 1 with clear "not found" message
+  — pinned by `::test_inspect_missing_run_exits_1_with_message`.
+- [x] `aiw resume <id>` prints placeholder without error
+  — pinned by `::test_resume_prints_placeholder` and a negative
+  `::test_resume_missing_run_exits_1`. The stub still hits
+  `storage.get_run(...)` so the SQLite round-trip is exercised.
+- [x] `aiw --help` lists all commands
+  — pinned by `::test_aiw_help_lists_every_command` (asserts
+  `list-runs`, `inspect`, `resume`, `run`, `version` all appear).
+- [x] `--log-level DEBUG` produces human-readable console output
+  — pinned by `::test_debug_log_level_produces_human_readable_console`
+  (drives the production `configure_logging(level="DEBUG", stream=...)`
+  pipeline and asserts the ConsoleRenderer's `[debug` bracket, event
+  name, and key=value tokens all land in the captured stream; the same
+  test also asserts the end-to-end `aiw --log-level DEBUG list-runs`
+  invocation exits cleanly).
 
 ## Dependencies
 
@@ -102,7 +128,7 @@ Forward-deferred items owned by this task. Treat each entry like an
 additional acceptance criterion and tick it when the corresponding test or
 change lands.
 
-- [ ] **M1-T04-ISS-01** — Complete Task 04's AC-5 by surfacing
+- [x] **M1-T04-ISS-01** — Complete Task 04's AC-5 by surfacing
   `cache_read_tokens` and `cache_write_tokens` from `TokenUsage` in the
   `aiw inspect <run_id>` renderer. Task 04 verified the fields flow from
   pydantic-ai's `RunUsage` → our `TokenUsage` → the cost tracker; this
@@ -110,8 +136,13 @@ change lands.
   the per-call usage table, and a CLI-level test that shells
   `aiw inspect <run_id>` and greps for `cache_read`.
   Source: [issues/task_04_issue.md](issues/task_04_issue.md) — LOW.
+  Resolved by M1 Task 12 — `_render_call_table()` in
+  `ai_workflows/cli.py` prints a per-call table with
+  `cache_read` / `cache_write` columns; seeded the opus call with
+  200/100 cache tokens and pinned the render in
+  `tests/test_cli.py::test_inspect_surfaces_cache_read_and_cache_write`.
 
-- [ ] **M1-T09-ISS-02** — `aiw inspect <run_id>` must surface the run's
+- [x] **M1-T09-ISS-02** — `aiw inspect <run_id>` must surface the run's
   budget cap and running total in the shape sketched by Task 09:
   `Budget: $<current> / $<cap> (<pct>% used)` when the run has a cap,
   and `Budget: $<current> (no cap)` when `runs.budget_cap_usd IS NULL`.
@@ -122,3 +153,9 @@ change lands.
   `aiw inspect <run_id>` against a seeded DB and greps for the
   formatted line.
   Source: [issues/task_09_issue.md](issues/task_09_issue.md) — LOW.
+  Resolved by M1 Task 12 — `_render_budget_line()` in
+  `ai_workflows/cli.py` renders the cap / no-cap shapes verbatim;
+  pinned by `tests/test_cli.py::test_inspect_budget_line_with_cap`
+  (asserts `Budget: $0.42 / $5.00 (8% used)`) and
+  `::test_inspect_budget_line_without_cap` (asserts
+  `Budget: $0.00 (no cap)`).

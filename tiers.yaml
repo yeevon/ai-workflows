@@ -54,9 +54,11 @@ tiers:
 
   # Overflow / last-resort tier — paid Gemini API (GEMINI_API_KEY).
   # Used only when both haiku AND local_coder cannot handle the task.
+  # Note: gemini-2.0-flash was retired for new users (2026); pinning to
+  # gemini-2.5-flash as the current successor.
   gemini_flash:
     provider: openai_compat
-    model: gemini-2.0-flash
+    model: gemini-2.5-flash
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key_env: GEMINI_API_KEY
     max_tokens: 4096

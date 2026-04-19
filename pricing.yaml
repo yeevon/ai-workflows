@@ -22,10 +22,12 @@ pricing:
     input_per_mtok: 0.0
     output_per_mtok: 0.0
 
-  # Gemini overflow tier — billed per token (verify at console.cloud.google.com).
-  gemini-2.0-flash:
-    input_per_mtok: 0.10
-    output_per_mtok: 0.40
+  # Gemini overflow tier — billed per token (verify at ai.google.dev/pricing).
+  # Rates for gemini-2.5-flash (paid tier, text / image / video input under
+  # 200k tokens). Update if Google changes the price sheet.
+  gemini-2.5-flash:
+    input_per_mtok: 0.30
+    output_per_mtok: 2.50
 
   # Local models: zero cost, excluded from budget-cap aggregations.
   qwen2.5-coder:32b:

@@ -166,8 +166,10 @@ No additions cross the layering boundary: `caching.py` imports only
 
 ## Issue log — tracked for cross-task follow-up
 
-- **M1-T04-ISS-01** ⏸️ DEFERRED — AC-5 `aiw inspect` surfacing owned by
-  Task 12. Must be picked up when the CLI command lands.
+- **M1-T04-ISS-01** ✅ RESOLVED by M1 Task 12 — `aiw inspect <run_id>`
+  now prints a per-call usage table with `cache_read` / `cache_write`
+  columns. Pinned by
+  `tests/test_cli.py::test_inspect_surfaces_cache_read_and_cache_write`.
 - **M1-T04-ISS-02** ⏸️ DEFERRED — `validate_prompt_template()` contract
   needs to split system vs. user when M3 prompt schema exists.
 - **M1-T04-ISS-03** ⏸️ DEFERRED (informational) — `apply_cache_control()`

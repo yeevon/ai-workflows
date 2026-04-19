@@ -116,6 +116,10 @@ class StorageBackend(Protocol):
         """Return the USD total for a run, excluding ``is_local=1`` rows."""
         ...
 
+    async def list_llm_calls(self, run_id: str) -> list[dict[str, Any]]:
+        """Return every ``llm_calls`` row for a run, oldest-first."""
+        ...
+
     async def get_gate_state(
         self, run_id: str, gate_id: str
     ) -> dict[str, Any] | None:
@@ -526,6 +530,23 @@ class SQLiteStorage:
             )
             (total,) = cursor.fetchone()
             return float(total)
+
+    async def list_llm_calls(self, run_id: str) -> list[dict[str, Any]]:
+        """Return every ``llm_calls`` row for a run, oldest-first.
+
+        Used by Task 12 ``aiw inspect`` to render the per-call usage table
+        (including ``cache_read_tokens`` / ``cache_write_tokens`` — see
+        carry-over ``M1-T04-ISS-01``) and the total call count.
+        """
+        return await asyncio.to_thread(self._list_llm_calls_sync, run_id)
+
+    def _list_llm_calls_sync(self, run_id: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM llm_calls WHERE run_id = ? ORDER BY id",
+                (run_id,),
+            )
+            return [_row_to_dict(cursor, row) for row in cursor.fetchall()]
 
     # ------------------------------------------------------------------
     # Artifacts

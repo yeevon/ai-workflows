@@ -57,6 +57,13 @@ target-version = "py312"
 # Sensible default rule set; tighten as the codebase grows.
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+# ``typer.Option`` / ``typer.Argument`` are the idiomatic way to declare
+# CLI parameters in Typer. They look like mutable-default function calls
+# to B008 but are evaluated once at import time and treated as markers,
+# so they're safe. Same rationale applies to ``typer.Context``.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
 [tool.importlinter]
 root_package = "ai_workflows"
 
