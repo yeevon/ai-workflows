@@ -31,9 +31,10 @@ Now that `slice_refactor` demands a DAG (cross-repo dependencies), promote the l
 
 ## Task Order
 
-1. `task_01_planner.md` — two-phase Planner
-2. `task_02_agent_loop.md` — fresh-context subagents
-3. `task_03_orchestrator.md` — DAG executor, promotes Pipeline
-4. `task_04_human_gate.md` — full gate with `strict_review`
-5. `task_05_aiw_resume.md` — full resume with DAG
-6. `task_06_ollama_infrastructure.md` — NEW — health check + circuit breaker + Haiku fallback
+1. `task_00_claude_code_launcher.md` — NEW — `claude_code` provider subprocess launcher. Sequenced first because the Planner's default `planning_tier: "opus"` cannot run until this lands. Inherits pre-validated design decisions from the M1 Task 13 spike ([spike](../milestone_1_primitives/task_13_claude_code_spike.md)).
+2. `task_01_planner.md` — two-phase Planner
+3. `task_02_agent_loop.md` — fresh-context subagents
+4. `task_03_orchestrator.md` — DAG executor, promotes Pipeline
+5. `task_04_human_gate.md` — full gate with `strict_review`
+6. `task_05_aiw_resume.md` — full resume with DAG
+7. `task_06_ollama_infrastructure.md` — NEW — health check + circuit breaker + Haiku fallback

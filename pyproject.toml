@@ -52,6 +52,11 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Spike artefacts are throwaway design-validation code. They live under
+# scripts/spikes/ and are deleted with their task's findings (see M1
+# Task 13). Excluding them from lint keeps stylistic debt from bleeding
+# into ruff output for a file we plan to remove.
+extend-exclude = ["scripts/spikes"]
 
 [tool.ruff.lint]
 # Sensible default rule set; tighten as the codebase grows.

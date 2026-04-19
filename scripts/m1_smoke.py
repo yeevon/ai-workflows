@@ -27,10 +27,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 
-# Load .env from the repo root so GEMINI_API_KEY / OLLAMA_BASE_URL are
-# available. Mirrors the behaviour of tests/conftest.py.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
-
 from ai_workflows.primitives.cost import BudgetExceeded, CostTracker
 from ai_workflows.primitives.llm.model_factory import build_model, run_with_cost
 from ai_workflows.primitives.llm.types import WorkflowDeps
@@ -38,6 +34,14 @@ from ai_workflows.primitives.logging import configure_logging
 from ai_workflows.primitives.storage import SQLiteStorage
 from ai_workflows.primitives.tiers import load_pricing, load_tiers
 from ai_workflows.primitives.workflow_hash import compute_workflow_hash
+
+# Load .env from the repo root so GEMINI_API_KEY / OLLAMA_BASE_URL are
+# visible by the time any function below actually reads them. The
+# ai_workflows.* imports above do not touch os.environ at import time
+# (env lookups are inside build_model / load_tiers bodies), so deferring
+# load_dotenv() to after the imports keeps ruff E402 happy without
+# noqa noise. Mirrors the behaviour of tests/conftest.py.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
 DB_PATH = Path("/tmp/aiw_m1_smoke.db")
 SMOKE_PROMPT = "Reply in one short sentence: what is 2 + 2?"

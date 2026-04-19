@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 13: `claude_code` Subprocess Design-Validation Spike (2026-04-19)
+
+Design-validation spike for the `claude_code` provider reserved by M1
+Tasks 03/07. Validates the five architectural assumptions the M1
+scaffolding has baked into `tiers.yaml` and `model_factory.py` against
+the real `claude` CLI v2.1.114, so a direction change (if warranted)
+lands while the primitives are cheap to reshape. Net outcome:
+**Confirm-path** — all five assumptions hold with three narrow 🔧
+ADJUSTMENTS propagated forward to a new M4 task. Resolves
+`M1-EXIT-ISS-02` (H-2) from the M1 exit-criteria audit, and
+`M1-EXIT-ISS-01` (H-1, ruff reorder) is bundled into AC-7 of the same
+task.
+
+**Files added:**
+
+- `design_docs/phases/milestone_1_primitives/task_13_claude_code_spike.md` —
+  full task spec + populated § Findings section. Answers each of
+  AC-1..AC-5 with one of ✅ CONFIRMED / 🔧 ADJUSTMENT / ⚠️ DIRECTION
+  CHANGE plus observed evidence from the PoC run.
+- `scripts/spikes/claude_code_poc.py` — throwaway PoC. Invokes
+  `claude -p --output-format json --model <m> ...` against opus /
+  sonnet / haiku (via alias and via full ID), exercises two failure
+  modes (invalid model id; unknown flag), probes `--system-prompt`,
+  and dumps a structured JSON blob. Excluded from ruff via
+  `extend-exclude = ["scripts/spikes"]`; not wired into pytest.
+- `design_docs/phases/milestone_4_orchestration/task_00_claude_code_launcher.md` —
+  NEW M4 task inserted before `task_01_planner.md` because the
+  Planner's default `planning_tier: "opus"` cannot run until this
+  lands. Carry-over from prior audits section encodes every decision
+  Task 13 baked in (CLI surface, token-usage mapping, Model ABC
+  subclass, flag-mapping audit, error taxonomy) so the M4 builder
+  inherits answered questions rather than open ones.
+
+**Files modified:**
+
+- `scripts/m1_smoke.py` — AC-7. `load_dotenv()` call moved *after* the
+  imports. All `os.environ.get()` lookups in `ai_workflows.*` are
+  inside function bodies (not at module import time), so deferring
+  `load_dotenv()` keeps env vars visible at call time without
+  triggering ruff's E402 (module-level import not at top of file).
+  No `# noqa: E402` comments and no `scripts/` ruff exclusion — both
+  would hide the ordering choice from future smoke scripts.
+- `pyproject.toml` — added `extend-exclude = ["scripts/spikes"]` to
+  `[tool.ruff]`. Spike artefacts are throwaway; lint noise on a file
+  slated for deletion with the task's findings is not useful signal.
+- `design_docs/phases/milestone_4_orchestration/README.md` — inserted
+  `task_00_claude_code_launcher.md` at the top of the task order;
+  renumbered 01..06 → 01..07 in the listing (task files themselves
+  keep their existing numbers — only the README order is renumbered).
+- `design_docs/phases/milestone_1_primitives/issues/m1_exit_criteria_audit.md` —
+  flipped `M1-EXIT-ISS-01` and `M1-EXIT-ISS-02` to ✅ RESOLVED with
+  dates and pointers; rewrote § Status headline and § Propagation
+  status to reflect the completed spike.
+
+**Acceptance criteria satisfied:** AC-1 (CLI surface documented),
+AC-2 (token-usage reporting strategy decided), AC-3 (Model ABC vs.
+bypass decided with sketched prototype), AC-4 (per-field flag audit),
+AC-5 (error-taxonomy mapping), AC-6 (propagation output written —
+Confirm-path, new M4 task), AC-7 (H-1 ruff reorder bundled), AC-8
+(no production code in `ai_workflows/` changed — only docs, a smoke
+script reorder, a ruff exclude, a new M4 task, and an M1 audit flip).
+
+**Deviations from spec:** none. All eight ACs answered with concrete
+observed evidence; the CHANGELOG entry above lists every file touched.
+
 ### Added — M1 Task 12: CLI primitives (2026-04-19)
 
 Wires the `aiw` console script for run-log visibility on top of the
