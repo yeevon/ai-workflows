@@ -118,7 +118,7 @@ These break correctness or safety if left unresolved. From post-research analysi
 ### Logging
 
 - [x] **P-42** — `structlog`. **Augmented by IMP-02**: `logfire` for OTel output in M3.
-- [ ] **P-43** — Log level defaults: INFO events, DEBUG LLM I/O.
+- [x] **P-43** — Log level defaults: INFO events, DEBUG LLM I/O. **Resolved by M1 Task 11** — `primitives/logging.py::configure_logging(level=...)` maps the four-class rubric documented in the task: INFO = run lifecycle / cost / retries / forensic; DEBUG = full LLM + tool I/O; WARNING = forensic hits / missing pricing / rate-limit retries; ERROR = BudgetExceeded / SecurityError / HumanGate rejections.
 - [x] **P-44** — Sensitive data: local-only, gitignored.
 
 ---

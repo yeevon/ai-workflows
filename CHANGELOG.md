@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 11: Logging (structlog + logfire) (2026-04-19)
+
+Implements P-43 (log-level defaults: INFO events, DEBUG LLM I/O) and
+resolves carry-overs `M1-T05-ISS-02` (forensic WARNING survives the
+real structlog pipeline) and `M1-T01-ISS-08` (CI secret-scan regex
+parsed from `.github/workflows/ci.yml` at test time). P-42 and P-44
+were already flipped when `structlog` was adopted and the
+``~/.ai-workflows`` gitignored path was settled; this task delivers
+the production configuration those issues described.
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/logging.py` — new module. Exports
+  `configure_logging(level, run_id=None, run_root=None, *, stream=None)`
+  and `DEFAULT_RUN_ROOT`. Wires two sinks: stderr (``ConsoleRenderer``
+  in DEBUG, ``JSONRenderer`` in INFO+) and an optional per-run file at
+  ``<run_root>/<run_id>/run.log`` that is always JSON. Uses
+  ``send_to_logfire="if-token-present"`` so logfire never egresses
+  unless ``LOGFIRE_TOKEN`` is set, and
+  ``logfire.instrument_pydantic(record="all")`` in place of the spec's
+  deprecated ``pydantic_plugin=PydanticPlugin(...)`` kwarg (logfire ≥3
+  moved it to ``DeprecatedKwargs``). The internal `_TeeRenderer` fans
+  each record out to stderr + file with independent renderers.
+- `tests/primitives/test_logging.py` — 15 tests covering all 6 ACs
+  plus the forensic carry-over: INFO suppresses DEBUG, WARNING
+  suppresses INFO/DEBUG, case-insensitive level, DEBUG console
+  output is human-readable non-JSON, INFO JSON is parseable per line,
+  per-run file created at `runs/<run_id>/run.log`, per-run file is
+  always JSON even in DEBUG mode, no file written without a run_id,
+  `send_to_logfire="if-token-present"` passed through,
+  `instrument_pydantic(record="all")` invoked, `get_logger()` works
+  from arbitrary module names and with no name, and the forensic
+  `tool_output_suspicious_patterns` WARNING lands in the per-run JSON
+  sink with all four expected keys.
+- `tests/test_scaffolding.py` — extracts the secret-scan regex from
+  `.github/workflows/ci.yml` at test time via
+  `_extract_ci_secret_scan_regex()`; existing
+  `test_secret_scan_regex_matches_known_key_shapes` now consumes the
+  parsed regex, and a new `test_secret_scan_regex_is_extracted_from_ci_yml`
+  guards the extractor itself.
+- `design_docs/phases/milestone_1_primitives/README.md` — Task 11 line
+  flipped to ✅ Complete (2026-04-19).
+- `design_docs/phases/milestone_1_primitives/task_11_logging.md` —
+  status line added, all AC checkboxes ticked with pinning-test names,
+  and both carry-over items ticked.
+- `design_docs/issues.md` — P-43 flipped `[ ]` → `[x]`.
+
+**Deviations from spec:**
+
+- Spec's ``pydantic_plugin=logfire.PydanticPlugin(record="all")`` is
+  replaced with ``logfire.instrument_pydantic(record="all")``. The old
+  kwarg is listed in logfire 4.32's ``DeprecatedKwargs`` type; using
+  the supported API avoids a future-proof trap.
+- Spec's ``send_to_logfire=False`` (with "can flip via env var"
+  comment) is replaced with ``send_to_logfire="if-token-present"``.
+  That is the logfire SDK's documented knob for exactly AC-5's
+  "don't send unless ``LOGFIRE_TOKEN`` is set". The spec comment
+  matches the AC, not the literal ``False`` value.
+- Two-sink delivery is implemented via a small `_TeeRenderer` (the
+  final processor) rather than stdlib-logging handlers. Keeps the
+  module stdlib-free and the pipeline observable in a single place.
+- ``configure_logging`` gains a keyword-only ``stream`` parameter for
+  tests (default ``sys.stderr``). Monkeypatching ``sys.stderr``
+  directly doesn't survive the ``pytest-logfire`` plugin's capture
+  machinery; an explicit stream is the stable workaround and leaves
+  production callers unaffected.
+
 ### Added — M1 Task 10: Retry Taxonomy (2026-04-19)
 
 Implements P-36, P-40, P-41, CRIT-06, CRIT-08 (revises P-37). Lands the
