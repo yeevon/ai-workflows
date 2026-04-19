@@ -1,14 +1,11 @@
 # Per-model pricing data for the cost tracker.
 #
-# Keys are model IDs (matching what the provider returns in usage events),
-# values are dollar prices per million tokens broken down by category
-# (input, output, cache_read, cache_write). The cost tracker (M1 Task 09)
-# multiplies usage events by these rates to enforce `max_run_cost_usd`.
-#
-# Claude tiers: billed via Max subscription, not per-token API. Record as
-# $0 for cost-tracker purposes; budget cap applies to API tiers only.
-# Local models (Qwen via Ollama): zero cost, excluded from budget-cap
-# enforcement by the cost tracker.
+# After M1 Task 06, `pricing.yaml` carries only Claude Code CLI tiers —
+# LiteLLM supplies the pricing table for Gemini and Ollama/Qwen routes
+# per KDR-007 / architecture.md §4.1. M1 Task 08's CostTracker refit
+# will revisit this file if sub-model / override entries are needed for
+# `modelUsage` breakdown; until then the Claude CLI tiers are recorded
+# at $0 because Claude Max bills via subscription, not per-token API.
 
 pricing:
   # Claude Max CLI tiers — subscription-billed, zero per-token cost.
@@ -19,17 +16,5 @@ pricing:
     input_per_mtok: 0.0
     output_per_mtok: 0.0
   claude-haiku-4-5-20251001:
-    input_per_mtok: 0.0
-    output_per_mtok: 0.0
-
-  # Gemini overflow tier — billed per token (verify at ai.google.dev/pricing).
-  # Rates for gemini-2.5-flash (paid tier, text / image / video input under
-  # 200k tokens). Update if Google changes the price sheet.
-  gemini-2.5-flash:
-    input_per_mtok: 0.30
-    output_per_mtok: 2.50
-
-  # Local models: zero cost, excluded from budget-cap aggregations.
-  qwen2.5-coder:32b:
     input_per_mtok: 0.0
     output_per_mtok: 0.0

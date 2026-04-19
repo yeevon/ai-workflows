@@ -50,7 +50,14 @@ T05 trimmed `StorageBackend` to the seven run-registry + gate-log methods mandat
   - `tests/test_cli.py` at lines 56, 59, 63, 77, 89 (`aiw inspect` seed) remains **out of scope for T08** — those lines live inside the T11 MODIFY row ([audit.md §3](../audit.md)) and are retired when T11 rewrites the CLI stub.
   Source: [task_05_issue.md §M1-T05-ISS-01](task_05_issue.md).
 
+### From [M1-T06-ISS-02](task_06_issue.md#-medium--m1-t06-iss-02-pricingyaml-trim-overlaps-t08-scope-deferred-for-re-shape-by-t08) (T06 post-build audit, 2026-04-19)
+
+T06's AC-3 ("`pricing.yaml` contains only Claude Code CLI entries") overlapped this task's own audit-row MODIFY for `pricing.yaml` (see [../audit.md](../audit.md) §1a). Per [CLAUDE.md](../../../../CLAUDE.md) Builder convention ("Issue file is authoritative amendment to task file. If they disagree, task file wins; call out the conflict first."), the T06 Builder executed the trim: removed the `gemini-2.5-flash` + `qwen2.5-coder:32b` rows, left the three claude CLI rows (`claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`) at zero rates. The current file already matches the shape T08 would otherwise have had to produce, **but T08 still owns the right to reshape further** if the `CostTracker.modelUsage` refit needs sub-model override entries (per audit.md §1a wording: "`pricing.yaml` reduces to only sub-model / override entries that `CostTracker.modelUsage` still needs").
+
+- [ ] **M1-T06-ISS-02 · MEDIUM** — If the `CostTracker` refit requires sub-model override rows in `pricing.yaml`, add them on top of the existing three claude CLI entries; otherwise leave the file as-is. If `CostTracker` no longer reads `pricing.yaml` at all (LiteLLM supplies every base-per-call cost), drop the file and remove the `load_pricing` import/call sites in `ai_workflows/primitives/tiers.py` + any callers. Explicitly document the net decision (kept / reshaped / dropped) in the T08 CHANGELOG block. Source: [task_06_issue.md §M1-T06-ISS-02](task_06_issue.md#-medium--m1-t06-iss-02-pricingyaml-trim-overlaps-t08-scope-deferred-for-re-shape-by-t08).
+
 ## Propagation status
 
 Post-build audit will overwrite this file with implementation findings.
-On completion of the carry-over above, [task_05_issue.md](task_05_issue.md) flips `M1-T05-ISS-01` from `DEFERRED` to `RESOLVED (commit sha)` on the next T05 re-audit touch point.
+On completion of the M1-T05-ISS-01 carry-over above, [task_05_issue.md](task_05_issue.md) flips `M1-T05-ISS-01` from `DEFERRED` to `RESOLVED (commit sha)` on the next T05 re-audit touch point.
+On completion of the M1-T06-ISS-02 carry-over, [task_06_issue.md](task_06_issue.md) flips `M1-T06-ISS-02` from `DEFERRED` to `RESOLVED (commit sha)` on the next T06 re-audit touch point.

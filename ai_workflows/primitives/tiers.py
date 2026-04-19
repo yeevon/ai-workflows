@@ -1,29 +1,35 @@
-"""Tier configuration models + YAML loaders.
+"""Tier configuration models + YAML loader.
 
-Produced by M1 Task 03 (``TierConfig`` stub) and expanded by M1 Task 07
-(``load_tiers()`` / ``load_pricing()``).
+Produced by M1 Task 06 (``TierConfig`` refit) — replaces the pre-pivot
+``(provider, model, max_tokens, temperature, …)`` shape with a
+discriminated ``route`` union that matches
+[architecture.md §4.1](../../design_docs/architecture.md) and KDR-007:
+LiteLLM-backed tiers (Gemini, Ollama/Qwen) and the Claude Code CLI
+subprocess tier are the two route kinds this project supports.
 
 Responsibilities
 ----------------
-* ``TierConfig`` — shape of a single tier (provider, model, limits).
-* ``ModelPricing`` — shape of a single row in ``pricing.yaml``.
-* ``load_tiers(profile=None)`` — read ``tiers.yaml``, expand ``${ENV:-default}``
-  placeholders, optionally overlay ``tiers.<profile>.yaml`` (deep-merge,
-  only declared keys are overridden), and validate each tier against
-  ``TierConfig``.
-* ``load_pricing()`` — read ``pricing.yaml``, validate each row against
-  ``ModelPricing``. Used by Task 09's ``CostTracker.calculate_cost()``.
-* ``UnknownTierError`` — raised on lookup of a tier not present in the
-  loaded mapping. Satisfies the Task 07 AC ("Unknown tier raises
-  ``UnknownTierError``") and keeps the separation of concerns clear —
-  ``ConfigurationError`` (in ``llm.model_factory``) is for missing env
-  vars and malformed provider branches; ``UnknownTierError`` is purely
-  about tier-name misses.
+* ``LiteLLMRoute`` — tier routed through LiteLLM; ``model`` is a LiteLLM
+  model string (``"gemini/gemini-2.5-flash"``, ``"ollama/qwen2.5-coder:32b"``).
+* ``ClaudeCodeRoute`` — tier routed through the ``claude`` CLI subprocess
+  (KDR-003 — no Anthropic API key is consulted).
+* ``Route`` — discriminated union; Pydantic picks the variant from ``kind``.
+* ``TierConfig`` — name + route + concurrency cap + per-call timeout.
+* ``ModelPricing`` — per-million-token rates loaded from ``pricing.yaml``.
+  Consumed by ``CostTracker.calculate_cost`` (M1 Task 08).
+* ``TierRegistry.load(root, profile=None)`` — primary loader surface per
+  the M1 Task 06 spec; reads ``tiers.yaml``, optionally overlays
+  ``tiers.<profile>.yaml``, expands ``${ENV:-default}`` placeholders, and
+  validates each tier against ``TierConfig``.
+* ``load_pricing(root)`` — reads ``pricing.yaml`` into
+  ``{model_id: ModelPricing}``.
+* ``UnknownTierError`` — raised by :func:`get_tier` for missing tier names.
 
 See also
 --------
-* ``primitives/workflow_hash.py`` — the directory-content hash utility
-  that pairs with this module for CRIT-02 resume safety.
+* ``primitives/cost.py`` — the sole consumer of ``ModelPricing``.
+* M2 Task 01 / Task 02 — LiteLLM adapter and ``ClaudeCodeSubprocess``
+  driver that consume ``LiteLLMRoute`` / ``ClaudeCodeRoute``.
 """
 
 from __future__ import annotations
@@ -31,68 +37,64 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UnknownTierError(Exception):
-    """Raised when a tier name is not present in the loaded tiers mapping.
+    """Raised by :func:`get_tier` when a tier name is not in the loaded map."""
 
-    Kept separate from ``llm.model_factory.ConfigurationError`` so callers can
-    distinguish a typo ("unknown tier") from a missing environment variable or
-    malformed provider branch ("bad configuration"). The Task 07 AC pins this
-    contract ("unknown tier raises ``UnknownTierError``").
+
+class LiteLLMRoute(BaseModel):
+    """Route for a tier that LiteLLM adapts (Gemini, Ollama/Qwen).
+
+    ``model`` is a LiteLLM model string — the provider prefix before the
+    slash picks the adapter (``"gemini/…"``, ``"ollama/…"``, etc.).
+    ``api_base`` pins a non-default HTTP endpoint, used for Ollama.
     """
+
+    kind: Literal["litellm"] = "litellm"
+    model: str
+    api_base: str | None = None
+
+
+class ClaudeCodeRoute(BaseModel):
+    """Route for a tier driven by the ``claude`` CLI subprocess.
+
+    The ``cli_model_flag`` string is forwarded as ``claude --model <flag>``
+    by the ``ClaudeCodeSubprocess`` driver that lands in M2. KDR-003: no
+    Anthropic API key is consulted anywhere — auth is OAuth via the Max
+    subscription the CLI already holds.
+    """
+
+    kind: Literal["claude_code"] = "claude_code"
+    cli_model_flag: str
+
+
+Route = Annotated[LiteLLMRoute | ClaudeCodeRoute, Field(discriminator="kind")]
 
 
 class TierConfig(BaseModel):
-    """Configuration for a single model tier as loaded from ``tiers.yaml``.
+    """A single named tier as loaded from ``tiers.yaml``.
 
-    ``max_retries`` (M1-T03-ISS-12 decision, pinned by M1 Task 07)
-    --------------------------------------------------------------
-    The field is **kept** and wired through ``load_tiers()`` so it roundtrips
-    from YAML → ``TierConfig``. Task 10 (``retry_on_rate_limit``) reads this
-    per-tier value at retry time; until Task 10 lands the value is not
-    consulted at runtime, but the loader and schema are stable so Task 10
-    has no loader-side work.
-
-    The field specifically describes **our** retry layer's budget. The
-    underlying SDK clients are always built with ``max_retries=0`` (CRIT-06);
-    this setting never leaks into SDK construction.
+    ``max_concurrency`` caps in-flight calls at the provider semaphore
+    level (architecture.md §8.6). ``per_call_timeout_s`` is the
+    driver-level wall-clock timeout enforced by the M2 drivers.
     """
 
-    provider: Literal["claude_code", "anthropic", "ollama", "openai_compat", "google"]
-    # claude_code   → subprocess `claude` CLI (Claude Max subscription, no API key);
-    #                 implementation lands in M4 with the Orchestrator component.
-    # anthropic     → native AnthropicModel; retained for third-party deployments
-    #                 that run on the Anthropic API directly (not used in default
-    #                 tiers for this repo — see memory: project_provider_strategy).
-    # ollama        → local Ollama server (Qwen, free) via OpenAI-compatible API.
-    # openai_compat → Gemini / DeepSeek / OpenRouter via OpenAI-compatible API.
-    # google        → native Google SDK (reserved; not in default tiers).
-    model: str
-    max_tokens: int
-    temperature: float
-    base_url: str | None = None
-    api_key_env: str | None = None
-    # Budget for our retry layer (Task 10). Underlying SDK clients are always 0.
-    max_retries: int = 3
+    name: str
+    route: Route
+    max_concurrency: int = 1
+    per_call_timeout_s: int = 120
 
 
 class ModelPricing(BaseModel):
-    """Per-million-token pricing for a single model, loaded from ``pricing.yaml``.
+    """Per-million-token pricing row.
 
-    Task 09's ``calculate_cost()`` multiplies these rates by the usage counts
-    in ``TokenUsage``:
-
-        (in * in_rate + out * out_rate + cr * cr_rate + cw * cw_rate) / 1e6
-
-    Cache rates default to ``0.0`` so the canonical ``pricing.yaml`` rows
-    (which only list ``input_per_mtok`` / ``output_per_mtok``) validate.
-    Anthropic tiers that do expose cache-read / cache-write rates can add
-    the fields explicitly.
+    Cache rates default to ``0.0`` so pricing entries that do not break
+    out cache read/write prices validate cleanly.
     """
 
     input_per_mtok: float
@@ -102,18 +104,16 @@ class ModelPricing(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Env var expansion + deep-merge helpers
+# Env expansion + deep-merge helpers
 # ---------------------------------------------------------------------------
 
 
-# Matches ``${VAR}`` and ``${VAR:-default}`` — default may contain anything
-# except a closing brace. No ``$VAR`` bare-word form (too ambiguous inside
-# URLs / shell fragments).
+# ``${VAR}`` and ``${VAR:-default}``; default stops at the closing brace.
 _ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}")
 
 
 def _expand_env_in_string(value: str) -> str:
-    """Return ``value`` with every ``${VAR}`` / ``${VAR:-default}`` expanded."""
+    """Expand every ``${VAR}`` / ``${VAR:-default}`` placeholder in ``value``."""
 
     def replace(match: re.Match[str]) -> str:
         var = match.group(1)
@@ -123,9 +123,8 @@ def _expand_env_in_string(value: str) -> str:
             return env_value
         if default is not None:
             return default
-        # Unset and no default — leave the placeholder in the string so the
-        # downstream validator sees the defect at construction time instead
-        # of silently substituting an empty string.
+        # Leave the placeholder untouched so the downstream validator sees
+        # the defect instead of silently substituting an empty string.
         return match.group(0)
 
     return _ENV_VAR_RE.sub(replace, value)
@@ -143,12 +142,11 @@ def _expand_env_recursive(node: Any) -> Any:
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Return a new dict with overlay's keys merged on top of base.
+    """Return a new dict with ``overlay``'s keys merged on top of ``base``.
 
-    Nested dicts are merged recursively. Lists and scalars in the overlay
-    replace the base entirely — we never concatenate lists, because a
-    tiers-overlay that wants to *replace* (not append to) an allowlist
-    would otherwise be impossible to express.
+    Nested dicts merge recursively. Lists and scalars in ``overlay``
+    replace the base value — concatenating lists would make it impossible
+    for an overlay to express "replace this allowlist".
     """
     merged: dict[str, Any] = {**base}
     for key, overlay_value in overlay.items():
@@ -160,104 +158,8 @@ def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
     return merged
 
 
-# ---------------------------------------------------------------------------
-# Public loaders
-# ---------------------------------------------------------------------------
-
-
-def _project_root() -> Path:
-    """Return the directory from which YAML config files are resolved.
-
-    P-21 ("package data via ``importlib.resources`` when installed") is still
-    open, so for now we look in the current working directory. Tests inject
-    the root via the ``_tiers_dir`` / ``_pricing_dir`` keyword argument.
-    """
-    return Path.cwd()
-
-
-def load_tiers(
-    profile: str | None = None,
-    *,
-    _tiers_dir: Path | None = None,
-) -> dict[str, TierConfig]:
-    """Load ``tiers.yaml`` (plus optional ``tiers.<profile>.yaml`` overlay).
-
-    Parameters
-    ----------
-    profile:
-        Name of an overlay file to apply on top of the base ``tiers.yaml``.
-        ``profile="local"`` looks for ``tiers.local.yaml``. Overlay values
-        deep-merge — only the keys the overlay declares are overridden.
-    _tiers_dir:
-        Internal override used by tests to point the loader at a temp
-        directory. Production callers always leave this as ``None``.
-
-    Returns
-    -------
-    dict[str, TierConfig]
-        Mapping from tier name (``opus``, ``sonnet``, ``local_coder``, …) to
-        validated ``TierConfig``.
-
-    Notes
-    -----
-    * Every string value is passed through ``${VAR:-default}`` expansion
-      before validation. A ``base_url`` like
-      ``"${OLLAMA_BASE_URL:-http://192.168.1.100:11434/v1}"`` yields the
-      env var when set, else the default.
-    * The top-level ``tiers:`` key is required. An empty mapping is allowed
-      (useful for the Task 01 stub) and returns an empty dict.
-    """
-    root = _tiers_dir or _project_root()
-    base_path = root / "tiers.yaml"
-    base = _load_yaml_section(base_path, section="tiers")
-
-    if profile is not None:
-        overlay_path = root / f"tiers.{profile}.yaml"
-        if overlay_path.exists():
-            overlay = _load_yaml_section(overlay_path, section="tiers")
-            base = _deep_merge(base, overlay)
-
-    expanded = _expand_env_recursive(base)
-    return {name: TierConfig(**cfg) for name, cfg in expanded.items()}
-
-
-def load_pricing(
-    *,
-    _pricing_dir: Path | None = None,
-) -> dict[str, ModelPricing]:
-    """Load ``pricing.yaml`` and return ``{model_id: ModelPricing}``.
-
-    The top-level ``pricing:`` key is required. Every row is validated
-    against ``ModelPricing``; unknown keys cause a Pydantic ``ValidationError``
-    (catches typos like ``inpput_per_mtok`` at load time, not at first call).
-    """
-    root = _pricing_dir or _project_root()
-    path = root / "pricing.yaml"
-    raw = _load_yaml_section(path, section="pricing")
-    return {model_id: ModelPricing(**row) for model_id, row in raw.items()}
-
-
-def get_tier(tiers: dict[str, TierConfig], name: str) -> TierConfig:
-    """Look up a tier by name, raising ``UnknownTierError`` if absent.
-
-    Small helper that matches the Task 07 AC ("unknown tier raises
-    ``UnknownTierError``"). Callers that prefer the raw dict lookup can
-    still use ``tiers[name]``; this helper exists for the common case
-    where the error class matters.
-    """
-    try:
-        return tiers[name]
-    except KeyError as exc:
-        raise UnknownTierError(f"Unknown tier: {name!r}") from exc
-
-
-# ---------------------------------------------------------------------------
-# Internal YAML helpers
-# ---------------------------------------------------------------------------
-
-
-def _load_yaml_section(path: Path, *, section: str) -> dict[str, Any]:
-    """Read ``path``, return the mapping under ``section`` (or ``{}`` if null)."""
+def _read_yaml_mapping(path: Path) -> dict[str, Any]:
+    """Read ``path`` and return its top-level mapping."""
     if not path.exists():
         raise FileNotFoundError(f"Required config file missing: {path}")
     with path.open("r", encoding="utf-8") as fh:
@@ -266,11 +168,89 @@ def _load_yaml_section(path: Path, *, section: str) -> dict[str, Any]:
         raise ValueError(
             f"{path} must be a YAML mapping at the top level, got {type(loaded).__name__}"
         )
-    body = loaded.get(section)
+    return loaded
+
+
+# ---------------------------------------------------------------------------
+# Public loaders
+# ---------------------------------------------------------------------------
+
+
+def _project_root() -> Path:
+    """Return the directory from which YAML config files are resolved."""
+    return Path.cwd()
+
+
+class TierRegistry:
+    """Tier loader.
+
+    The registry is stateless — ``load`` returns the validated mapping
+    directly and callers cache it if they need to. Matches the
+    ``TierRegistry.load(path)`` shape named in the M1 Task 06 spec.
+    """
+
+    @classmethod
+    def load(
+        cls,
+        root: Path | None = None,
+        *,
+        profile: str | None = None,
+    ) -> dict[str, TierConfig]:
+        """Read ``tiers.yaml`` into ``{name: TierConfig}``.
+
+        Parameters
+        ----------
+        root:
+            Directory containing ``tiers.yaml``. Defaults to the current
+            working directory.
+        profile:
+            Overlay stem. ``profile="local"`` layers ``tiers.local.yaml``
+            on top of the base — only declared keys are overridden.
+
+        Notes
+        -----
+        Every string leaf is passed through ``${VAR:-default}`` expansion
+        before validation, so an ``api_base: "${OLLAMA_BASE_URL:-…}"`` row
+        picks up the env value when set and falls back otherwise.
+        """
+        root = root or _project_root()
+        base = _read_yaml_mapping(root / "tiers.yaml")
+
+        if profile is not None:
+            overlay_path = root / f"tiers.{profile}.yaml"
+            if overlay_path.exists():
+                overlay = _read_yaml_mapping(overlay_path)
+                base = _deep_merge(base, overlay)
+
+        expanded = _expand_env_recursive(base)
+        return {name: TierConfig(name=name, **cfg) for name, cfg in expanded.items()}
+
+
+def load_pricing(root: Path | None = None) -> dict[str, ModelPricing]:
+    """Load ``pricing.yaml`` and return ``{model_id: ModelPricing}``.
+
+    The top-level ``pricing:`` key is required; every row is validated
+    against ``ModelPricing`` so typos (``inpput_per_mtok``) surface at
+    load time instead of at first pricing lookup. After M1 Task 06 this
+    file carries only Claude Code CLI entries — LiteLLM supplies the
+    pricing table for LiteLLM-routed tiers (KDR-007).
+    """
+    root = root or _project_root()
+    path = root / "pricing.yaml"
+    loaded = _read_yaml_mapping(path)
+    body = loaded.get("pricing")
     if body is None:
         return {}
     if not isinstance(body, dict):
         raise ValueError(
-            f"{path}: expected ``{section}:`` to be a mapping, got {type(body).__name__}"
+            f"{path}: expected ``pricing:`` to be a mapping, got {type(body).__name__}"
         )
-    return body
+    return {model_id: ModelPricing(**row) for model_id, row in body.items()}
+
+
+def get_tier(tiers: dict[str, TierConfig], name: str) -> TierConfig:
+    """Return ``tiers[name]`` or raise :class:`UnknownTierError`."""
+    try:
+        return tiers[name]
+    except KeyError as exc:
+        raise UnknownTierError(f"Unknown tier: {name!r}") from exc

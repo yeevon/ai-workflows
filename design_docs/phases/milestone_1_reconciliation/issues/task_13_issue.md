@@ -34,8 +34,15 @@ Task files `task_02`…`task_13` were drafted **before** the reconciliation audi
 
 ## Carry-over from prior audits
 
-_None at this stage — all M1 tasks either have their own pre-build issue file amendments or are closed. Any `DEFERRED (owner: TBD)` entries raised across task 02…12 audits must be surfaced here before the milestone can close._
+_Forward-deferred items raised across task 02…12 audits land here as they propagate. All must be resolved (or re-homed with an explicit owner) before the milestone can close._
+
+### From [M1-T06-ISS-04](task_06_issue.md#-low--m1-t06-iss-04-scriptsm1_smokepy-imports-the-removed-load_tiers--owned-by-t13) (T06 post-build audit, 2026-04-19)
+
+T06 removed `load_tiers` (replaced by `TierRegistry.load`). `scripts/m1_smoke.py:35` still contains `from ai_workflows.primitives.tiers import load_pricing, load_tiers`. The file was already broken post-T03 (imports `pydantic_ai`, `llm.model_factory`, `WorkflowDeps`), so no gate is regressed — the file cannot be executed. T06 does not newly break it; it just widens the set of stale imports already in the file.
+
+- [ ] **M1-T06-ISS-04 · LOW** — Decide `scripts/m1_smoke.py`'s fate during M1 close-out: **either rewrite `scripts/m1_smoke.py` against the post-pivot substrate (LiteLLM adapter + `TierRegistry.load`, no `pydantic_ai`, no `WorkflowDeps`) or delete it entirely.** The file is currently unreachable because it imports `pydantic_ai`, `llm.model_factory`, `WorkflowDeps`, and `load_tiers` — all removed in M1. Document the decision in the T13 CHANGELOG block. Source: [task_06_issue.md §M1-T06-ISS-04](task_06_issue.md#-low--m1-t06-iss-04-scriptsm1_smokepy-imports-the-removed-load_tiers--owned-by-t13).
 
 ## Propagation status
 
 Post-build audit of this task will overwrite this file with implementation findings. The milestone does not close until every issue file in this directory reads `✅ PASS`.
+On completion of the M1-T06-ISS-04 carry-over, [task_06_issue.md](task_06_issue.md) flips it from `DEFERRED` to `RESOLVED (commit sha)` on the next T06 re-audit touch point.

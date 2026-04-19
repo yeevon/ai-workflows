@@ -1,65 +1,60 @@
 # Model tier configuration for ai-workflows.
 #
-# Each tier is a named (provider, model, parameters) bundle. Components
-# reference tiers by name (e.g. `tier: "haiku"`) rather than hard-coding
-# model IDs, so a workflow can be retargeted by editing one file.
+# Each top-level key is a tier name. Its value is a TierConfig (see
+# `ai_workflows/primitives/tiers.py`): a discriminated `route` plus
+# concurrency/timeout knobs. Two route kinds exist:
 #
-# This top-level file is committed and represents the project default.
-# Machine- or user-specific overrides go in `tiers.local.yaml` (gitignored)
-# and are merged on top at load time by `ai_workflows.primitives.tiers`.
+#   * kind: litellm      — routed through LiteLLM (Gemini, Ollama/Qwen).
+#                          `model` is a LiteLLM model string.
+#   * kind: claude_code  — routed through the `claude` CLI subprocess;
+#                          `cli_model_flag` is forwarded as `--model`.
 #
-# Provider strategy (see design_docs/phases/milestone_1_primitives/README.md)
-# --------------------------------------------------------------------------
-# Claude tiers (`opus`, `sonnet`, `haiku`) run via the `claude` CLI using the
-# developer's Claude Max subscription — no Anthropic API key required. The
-# subprocess launcher itself lands in M4 with the Orchestrator component;
-# this file reserves the tier names today so the loader AC can be verified.
-# `gemini_flash` is the paid-API overflow tier (used only when both `haiku`
-# and `local_coder` cannot handle a task). `local_coder` (Qwen) is free and
-# private, served by a LAN Ollama instance.
+# This file is committed and represents the project default. Machine- or
+# user-specific overrides go in `tiers.local.yaml` (gitignored) and are
+# deep-merged on top at load time.
+#
+# Provider strategy (KDR-003 / KDR-007, architecture.md §4.1)
+# -----------------------------------------------------------
+# * `planner` / `implementer` — Gemini via LiteLLM (GEMINI_API_KEY).
+# * `local_coder` — Qwen via a LAN Ollama instance (zero-cost, private).
+# * `opus` / `sonnet` / `haiku` — Claude Code CLI subprocess using the
+#    developer's Claude Max subscription (OAuth; no Anthropic API key).
 
-tiers:
-  # Orchestration tier — drives multi-step workflows, long-horizon planning.
-  # Uses Claude Max subscription via `claude` CLI (no API key).
-  opus:
-    provider: claude_code
-    model: claude-opus-4-7
-    max_tokens: 8192
-    temperature: 0.1
+planner:
+  route:
+    kind: litellm
+    model: gemini/gemini-2.5-flash
+  max_concurrency: 2
+  per_call_timeout_s: 180
 
-  # Implementation tier — large / complex code generation, multi-file edits.
-  # Uses Claude Max subscription via `claude` CLI.
-  sonnet:
-    provider: claude_code
-    model: claude-sonnet-4-6
-    max_tokens: 8192
-    temperature: 0.1
+implementer:
+  route:
+    kind: litellm
+    model: gemini/gemini-2.5-flash
+  max_concurrency: 2
 
-  # Fast Claude tier — simple single-turn tasks, classification, routing.
-  # Uses Claude Max subscription via `claude` CLI.
-  haiku:
-    provider: claude_code
-    model: claude-haiku-4-5-20251001
-    max_tokens: 4096
-    temperature: 0.1
+local_coder:
+  route:
+    kind: litellm
+    model: ollama/qwen2.5-coder:32b
+    api_base: "${OLLAMA_BASE_URL:-http://localhost:11434}"
+  max_concurrency: 1
 
-  # Local coding tier — free, private, runs on LAN Ollama instance.
-  # First choice for coding tasks; zero API cost.
-  local_coder:
-    provider: ollama
-    model: qwen2.5-coder:32b
-    base_url: "${OLLAMA_BASE_URL:-http://192.168.1.100:11434/v1}"
-    max_tokens: 8192
-    temperature: 0.1
+opus:
+  route:
+    kind: claude_code
+    cli_model_flag: opus
+  max_concurrency: 1
+  per_call_timeout_s: 600
 
-  # Overflow / last-resort tier — paid Gemini API (GEMINI_API_KEY).
-  # Used only when both haiku AND local_coder cannot handle the task.
-  # Note: gemini-2.0-flash was retired for new users (2026); pinning to
-  # gemini-2.5-flash as the current successor.
-  gemini_flash:
-    provider: openai_compat
-    model: gemini-2.5-flash
-    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
-    api_key_env: GEMINI_API_KEY
-    max_tokens: 4096
-    temperature: 0.1
+sonnet:
+  route:
+    kind: claude_code
+    cli_model_flag: sonnet
+  max_concurrency: 1
+
+haiku:
+  route:
+    kind: claude_code
+    cli_model_flag: haiku
+  max_concurrency: 2

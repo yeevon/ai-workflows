@@ -7,6 +7,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M1 Task 06: Refit TierConfig + tiers.yaml (2026-04-19)
+
+Rewrote `ai_workflows/primitives/tiers.py` around the discriminated
+`route` union mandated by
+[architecture.md §4.1](design_docs/architecture.md) and KDR-007. Tiers
+now declare either a `LiteLLMRoute` (Gemini / Ollama/Qwen through
+LiteLLM) or a `ClaudeCodeRoute` (the `claude` CLI subprocess driver
+that lands in M2) — the pre-pivot `(provider, model, max_tokens,
+temperature, max_retries, …)` shape is gone.
+
+**Files modified:**
+
+- `ai_workflows/primitives/tiers.py` — new surface. `LiteLLMRoute`,
+  `ClaudeCodeRoute`, `Route = Annotated[… discriminator="kind"]`,
+  `TierConfig(name, route, max_concurrency, per_call_timeout_s)`,
+  `TierRegistry.load(root, profile=None)`, `load_pricing(root)`,
+  `get_tier()`, `UnknownTierError`. Env expansion (`${VAR:-default}`)
+  and `tiers.<profile>.yaml` overlay both carried forward from the
+  pre-T06 loader.
+- `tiers.yaml` — rewritten to the six-tier set from the spec
+  (`planner`, `implementer`, `local_coder`, `opus`, `sonnet`,
+  `haiku`). Top-level `tiers:` wrapper dropped — the file *is* the
+  tier mapping. Gemini tiers use `gemini/gemini-2.5-flash` (the
+  retired-model correction committed in the pre-pivot repo); Ollama
+  tier uses `ollama/qwen2.5-coder:32b` to match the installed model.
+- `pricing.yaml` — trimmed to the three Claude Code CLI entries
+  (`claude-opus-4-7`, `claude-sonnet-4-6`,
+  `claude-haiku-4-5-20251001`). LiteLLM supplies pricing for LiteLLM
+  routes per KDR-007.
+- `tests/primitives/test_tiers_loader.py` — rewritten (26 tests).
+  Covers committed-file parsing, discriminator round-trip for both
+  variants, route-kind rejection, env expansion, profile overlay,
+  malformed YAML rejection, missing-file handling, pricing
+  claude-only guarantee, pricing validation, and `ModelPricing`
+  cache-rate defaults.
+
+**Acceptance criteria satisfied:**
+
+- AC-1 `tiers.yaml` parses into `dict[str, TierConfig]` without
+  errors. `test_committed_tiers_yaml_parses_into_tier_config_mapping`
+  pins the exact tier-name set.
+- AC-2 Each tier's `route` validates as either `LiteLLMRoute` or
+  `ClaudeCodeRoute`.
+  `test_committed_tiers_resolve_to_the_correct_route_variant`
+  enforces the discriminator per tier.
+- AC-3 `pricing.yaml` contains only Claude Code CLI entries.
+  `test_committed_pricing_yaml_has_only_claude_cli_entries` pins the
+  set to the three claude models.
+- AC-4 Discriminator round-trip
+  (`test_discriminator_round_trip_from_*_dict`), unknown-tier lookup
+  (`test_get_tier_raises_unknown_tier_error_for_missing_name`), and
+  malformed-YAML rejection
+  (`test_malformed_yaml_tier_rejected_with_validation_error` +
+  `test_non_mapping_top_level_rejected`) all covered.
+- AC-5 `uv run pytest tests/primitives/test_tiers_loader.py` → 22
+  passed; `uv run ruff check` + `uv run lint-imports` green.
+  Full-suite pytest stays red on pre-existing T07 / T08 / T09 / T11
+  carry-over (`test_cost.py`, `test_retry.py`, `test_cli.py`,
+  `test_scaffolding.py`) — same T-scope reading applied in T02–T05.
+
+**Carry-over ticked:**
+
+- M1-T03-ISS-01 (post-T03 — `test_unknown_tier_error_is_not_a_configuration_error`
+  imported `ConfigurationError` from the deleted
+  `ai_workflows.primitives.llm.model_factory`). The post-refit tier
+  surface exposes a single `UnknownTierError`; the cross-class
+  comparison is meaningless, so the test is dropped. No class-ness
+  assertion replaces it — the new suite's discriminator + unknown
+  tier coverage supersedes the old intent.
+
+**Deviations from spec / audit:**
+
+- `pricing.yaml` trim lives in **T06** per task-file AC-3.
+  [audit.md §1a](design_docs/phases/milestone_1_reconciliation/audit.md)
+  assigned the `pricing.yaml` modify row to T08; per CLAUDE.md
+  Builder convention "task file wins; call out the conflict first",
+  the trim is executed here. T08 retains the right to reshape
+  `pricing.yaml` further when the `CostTracker` surface shrinks
+  (e.g. if sub-model override entries are needed for `modelUsage`).
+- Spec's `TierConfig` shape omits `max_retries`; the pre-T06
+  module had a `max_retries` field (M1-T03-ISS-12 carry-over from the
+  pre-pivot retry design). KDR-007 delegates transient retry to
+  LiteLLM under the LiteLLM adapter, so per-tier retry budgets at
+  our layer are no longer meaningful; the field is dropped. T07's
+  three-bucket `RetryPolicy` refit owns the retry semantics going
+  forward.
+- Spec's `tiers.yaml` example used `gemini/gemini-2.0-flash` and
+  `ollama/qwen2.5-coder:14b`. Replaced with `gemini/gemini-2.5-flash`
+  (the committed post-pivot model) and `ollama/qwen2.5-coder:32b`
+  (the installed Qwen variant) — spec note "Values can stay as-is
+  from the pre-pivot file if the audit confirms they were never
+  LiteLLM-sourced" justifies this realism.
+- `load_tiers()` free function removed; `TierRegistry.load(root)` is
+  the primary loader per the spec. Downstream `scripts/m1_smoke.py`
+  still imports `load_tiers` — that file is already broken post-T03
+  (imports `pydantic_ai`, `llm.model_factory`) and belongs to T13
+  (milestone close-out) per the milestone-1 README.
+
 ### Changed — M1 Task 05: Trim Storage to Run Registry + Gate Log (2026-04-19)
 
 Shrank `ai_workflows/primitives/storage.py` and its SQLite schema to the
