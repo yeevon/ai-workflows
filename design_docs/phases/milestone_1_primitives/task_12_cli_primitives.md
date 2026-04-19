@@ -110,3 +110,15 @@ change lands.
   the per-call usage table, and a CLI-level test that shells
   `aiw inspect <run_id>` and greps for `cache_read`.
   Source: [issues/task_04_issue.md](issues/task_04_issue.md) — LOW.
+
+- [ ] **M1-T09-ISS-02** — `aiw inspect <run_id>` must surface the run's
+  budget cap and running total in the shape sketched by Task 09:
+  `Budget: $<current> / $<cap> (<pct>% used)` when the run has a cap,
+  and `Budget: $<current> (no cap)` when `runs.budget_cap_usd IS NULL`.
+  Data plumbing is already in place — `storage.get_run(run_id)` returns
+  `budget_cap_usd`; `storage.get_total_cost(run_id)` returns the SUM
+  aggregate; `CostTracker.budget_cap_usd` exposes the cap as a
+  read-only property. Add one CLI-level test that invokes
+  `aiw inspect <run_id>` against a seeded DB and greps for the
+  formatted line.
+  Source: [issues/task_09_issue.md](issues/task_09_issue.md) — LOW.

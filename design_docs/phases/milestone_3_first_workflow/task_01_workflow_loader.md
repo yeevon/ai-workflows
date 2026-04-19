@@ -113,3 +113,22 @@ additional acceptance criterion and tick it when resolved.
       and early-return for `"user"`.
   Pick one and wire the workflow loader's prompt-file pass to call it.
   Source: [../milestone_1_primitives/issues/task_04_issue.md](../milestone_1_primitives/issues/task_04_issue.md) — LOW.
+
+- [ ] **M1-T09-ISS-03** — Surface `max_run_cost_usd` in the workflow
+  YAML schema and emit a no-cap WARNING at workflow-load time. The
+  Task 09 `CostTracker` already raises `BudgetExceeded` when a run
+  crosses its cap, and emits a construction-time WARNING when
+  `budget_cap_usd=None`. Workflow loader work:
+  (1) the workflow Pydantic model declares
+      `max_run_cost_usd: float | None = 10.00` (default cap from the
+      Task 09 spec);
+  (2) when the user *explicitly* sets `max_run_cost_usd: null`, log
+      `event="workflow.no_budget_cap"` WARNING at load time (before
+      any tracker is constructed) with the workflow's `name`;
+  (3) pass the parsed value through to `CostTracker(budget_cap_usd=...)`
+      in the `aiw run` entry point.
+  Acceptance test: loading a workflow with `max_run_cost_usd: null`
+  emits exactly one `workflow.no_budget_cap` WARNING; loading a
+  workflow that omits the field falls back to the default and stays
+  silent.
+  Source: [../milestone_1_primitives/issues/task_09_issue.md](../milestone_1_primitives/issues/task_09_issue.md) — LOW.

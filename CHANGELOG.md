@@ -7,6 +7,135 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 09: Cost Tracker with Budget Enforcement (2026-04-19)
+
+Implements CRIT-03, P-32 … P-34 and resolves P-35. Lands the
+`CostTracker`, `BudgetExceeded`, and `calculate_cost()` primitives that
+turn every LLM call into a priced, logged, and budget-checked
+transaction. Sits on top of the Task 07 `ModelPricing` loader and the
+Task 08 `StorageBackend` so no schema work is needed here.
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/cost.py` — expanded from the Task 03 Protocol
+  stub. Now exports `calculate_cost()` (pure pricing arithmetic), the
+  `BudgetExceeded` exception (`run_id` / `current_cost` / `cap`
+  attributes, message format `"Run X exceeded budget: $A.BC > $D.EF
+  cap"`), and a concrete `CostTracker` class. `CostTracker.record()`
+  prices the call, persists one `llm_calls` row via the storage backend,
+  re-runs `storage.get_total_cost()` as the cap check (strict `>`
+  comparison, so `new_total == cap` is still permitted), and raises
+  `BudgetExceeded` **after** the row is written so the run log preserves
+  the exact state at the moment of breach. Construction with
+  `budget_cap_usd=None` emits a structured `cost.no_budget_cap` WARNING
+  via structlog; explicit caps stay silent. `calculate_cost()` multiplies
+  `TokenUsage` by the four rate columns in `ModelPricing` (input /
+  output / cache_read / cache_write) and divides by 1e6; models not in
+  the pricing mapping emit a `cost.model_not_in_pricing` WARNING and
+  return 0.0 so a config gap is diagnosable rather than fatal. The
+  concrete class reuses the name `CostTracker` so the Task 03 model
+  factory type hint and `MagicMock(spec=CostTracker)` fixture continue
+  to work unchanged.
+- `tests/primitives/test_cost.py` — 23 tests covering every acceptance
+  criterion and edge case: AC-1 Gemini arithmetic + scaling + cache-rate
+  math + unknown-model warning + zero-rate passthrough; AC-2 local row
+  stores `$0.00` + `is_local=1` even when the model has non-zero
+  pricing; AC-3 `run_total()` excludes local rows over a mixed-cost
+  run; AC-4 `component_breakdown()` groups and excludes local; AC-5
+  cap triggers at the second call that breaches, the breaching row is
+  still persisted, equal-to-cap does not raise, None cap never raises;
+  AC-6 `BudgetExceeded` message contains run_id and the `$current` /
+  `$cap` amounts and exposes the attributes programmatically; AC-7
+  `None` cap logs exactly one WARNING while explicit cap emits none; AC-8
+  `is_escalation=True` lands as `is_escalation=1` in storage; plus
+  `task_id` threading, empty-run aggregates, the `budget_cap_usd`
+  read-only property, and a structural-compat test that pins
+  `MagicMock(spec=CostTracker)` against the concrete class for
+  `test_model_factory.py`. Uses real `SQLiteStorage` (no storage
+  mocks) so the tracker→storage wiring is pinned end-to-end.
+- `design_docs/phases/milestone_1_primitives/task_09_cost_tracker.md` —
+  Status line added, every acceptance-criterion checkbox ticked.
+- `design_docs/phases/milestone_1_primitives/README.md` — Task 09
+  entry flipped to `✅ Complete (2026-04-19)`.
+- `design_docs/issues.md` — CRIT-03 flipped `[ ]` → `[~]` (tracker and
+  enforcement resolved; workflow-YAML `max_run_cost_usd` field wiring
+  alongside the "null → warning at workflow load" path lands with M3
+  Task 01; `aiw inspect` surfacing of cap / remaining budget is M1
+  Task 12); P-35 flipped `[~]` → `[x]` (budget limits now enforced at
+  the primitive).
+
+**Acceptance criteria satisfied:**
+
+- AC-1: `calculate_cost()` matches expected USD —
+  `test_calculate_cost_matches_expected_for_gemini` pins the
+  1 MTok in + 1 MTok out Gemini case at $0.50;
+  `test_calculate_cost_scales_per_token` covers the per-token scaling;
+  `test_calculate_cost_includes_cache_rates` pins the four-rate sum
+  (cache read + cache write);
+  `test_calculate_cost_unknown_model_returns_zero_and_warns` pins the
+  graceful-degradation path.
+- AC-2: Local model records `$0.00` and `is_local=1` —
+  `test_record_local_model_sets_cost_zero_and_is_local_flag` probes the
+  DB row directly; `test_record_local_overrides_nonzero_pricing` pins
+  that `is_local=True` wins over a priced model.
+- AC-3: `run_total()` excludes `is_local=1` —
+  `test_run_total_excludes_is_local_rows` mixes one $0.50 priced call
+  with ten local calls and asserts the total stays $0.50.
+- AC-4: `component_breakdown()` groups per component —
+  `test_component_breakdown_groups_per_component`
+  (asserts `{planner: 0.10, validator: 0.40}`);
+  `test_component_breakdown_excludes_local` pins the is_local filter.
+- AC-5: Budget cap triggers `BudgetExceeded` at or before the breaching
+  call — `test_budget_cap_triggers_budget_exceeded`;
+  `test_budget_exceeded_row_is_persisted` pins that the breaching row
+  *is* written before the exception fires;
+  `test_budget_cap_not_triggered_below_cap` pins the strict `>` semantics
+  (equal-to-cap allowed); `test_budget_cap_none_never_raises` pins the
+  no-cap path.
+- AC-6: `BudgetExceeded` message includes run_id, current_cost, cap —
+  `test_budget_exceeded_message_contains_run_id_and_dollar_amounts` +
+  `test_budget_exceeded_exposes_attributes`.
+- AC-7: `null` budget cap logs a WARNING at construction —
+  `test_null_budget_cap_logs_warning_at_construction` +
+  `test_explicit_cap_does_not_log_warning` (pin both sides).
+- AC-8: Escalation calls have `is_escalation=1` —
+  `test_escalation_flag_persists_as_is_escalation_one` writes one
+  escalation row and one normal row, asserts `[1, 0]`.
+
+**Deviations from spec:**
+
+- The spec sketches `class CostTracker: def __init__(storage, pricing,
+  budget_cap_usd)`. This is the concrete class. Task 03's stub shipped
+  `CostTracker` as a `Protocol`. Resolved by replacing the Protocol
+  with a concrete class of the same name — Python's structural typing
+  means `run_with_cost()`'s `cost_tracker: CostTracker` parameter, and
+  `MagicMock(spec=CostTracker)` in `tests/primitives/test_model_factory.py`,
+  both continue to work. A dedicated regression test
+  (`test_cost_tracker_structural_compat_with_model_factory`) pins
+  this contract.
+- `runs.total_cost_usd` is **not** updated from inside `record()`.
+  Source of truth is the `llm_calls` SUM aggregate via
+  `storage.get_total_cost()` (always fresh, survives a crash);
+  `storage.update_run_status()` requires a status argument and the
+  tracker does not own status transitions. The Pipeline / Orchestrator
+  stamps `runs.total_cost_usd` once at run terminal via
+  `update_run_status("completed", total_cost_usd=...)`. Schema column
+  survives as a denormalised cache for `aiw list-runs`.
+- The spec's "Workflow YAML Integration" block and "aiw inspect
+  Integration" block describe workflow-load-time and CLI-time
+  behaviour respectively. The no-cap WARNING fires **at tracker
+  construction** (which is per-run), which satisfies AC-7 as written.
+  The workflow-YAML-load no-cap warning and `aiw inspect` surfacing of
+  "Budget: $x / $y (z% used)" land with M3 Task 01 and M1 Task 12
+  respectively — the tracker ships its own `budget_cap_usd` property
+  so Task 12 has no schema-side work.
+- `calculate_cost()` returns `0.0` for models not in pricing rather
+  than raising. The spec calls for a WARNING and `0.0` — a missing
+  pricing row during a workflow run should not crash it; the warning
+  is the signal. The canonical `pricing.yaml` lists every tier in
+  `tiers.yaml`, so this path is only reachable if a new model is
+  introduced without a pricing row.
+
 ### Added — M1 Task 08: Storage Layer (2026-04-19)
 
 Implements CRIT-10, P-26 … P-31 (revises P-27), W-03 and the CRIT-02

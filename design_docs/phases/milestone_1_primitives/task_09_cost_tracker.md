@@ -1,5 +1,7 @@
 # Task 09 — Cost Tracker with Budget Enforcement
 
+**Status:** ✅ Complete (2026-04-19) — see [issues/task_09_issue.md](issues/task_09_issue.md).
+
 **Issues:** P-32, P-33, P-34, CRIT-03 (revises P-35)
 
 ## What to Build
@@ -99,14 +101,14 @@ Budget: $3.47 / $5.00 (69% used)
 
 ## Acceptance Criteria
 
-- [ ] `calculate_cost()` matches expected USD for known (model, tokens) pairs
-- [ ] Local model records $0.00 and `is_local=1` in the llm_calls row
-- [ ] `run_total()` excludes rows with `is_local=1`
-- [ ] `component_breakdown()` groups by component and returns per-component USD
-- [ ] Budget cap triggers `BudgetExceeded` at or before the call that exceeds
-- [ ] `BudgetExceeded` includes run_id, current_cost, cap in the message
-- [ ] `null` budget cap logs a warning on run start
-- [ ] Escalation calls have `is_escalation=1`
+- [x] `calculate_cost()` matches expected USD for known (model, tokens) pairs
+- [x] Local model records $0.00 and `is_local=1` in the llm_calls row
+- [x] `run_total()` excludes rows with `is_local=1`
+- [x] `component_breakdown()` groups by component and returns per-component USD
+- [x] Budget cap triggers `BudgetExceeded` at or before the call that exceeds
+- [x] `BudgetExceeded` includes run_id, current_cost, cap in the message
+- [x] `null` budget cap logs a warning on run start
+- [x] Escalation calls have `is_escalation=1`
 
 ## Dependencies
 

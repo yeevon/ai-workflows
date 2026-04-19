@@ -101,3 +101,23 @@ The `CostTracker` enforces the cap. When `BudgetExceeded` is raised inside a ste
 - All prior M2 tasks
 - M1 Task 08 (storage)
 - M1 Task 09 (cost tracker with budget cap)
+
+## Carry-over from prior audits
+
+Forward-deferred items owned by this task. Treat each entry like an
+additional acceptance criterion and tick it when resolved.
+
+- [ ] **M1-T09-ISS-01** — On `BudgetExceeded` the Pipeline must mark the
+  run `failed` before re-raising. Task 09 pins that the tracker
+  **raises** the exception but does not touch `runs.status` — status
+  transitions belong to the Pipeline. Implementation: wrap each step's
+  `cost_tracker.record()` (or the step body that drives it) in a
+  try/except for `BudgetExceeded`; on catch, call
+  `storage.update_run_status(run_id, "failed")`, emit
+  `event="pipeline.run_failed_budget_exceeded"` with `run_id`,
+  `current_cost`, `cap`, then re-raise so outer loops see the same
+  exception. Acceptance test: run a 3-step pipeline where step 3
+  crosses the cap — assert `storage.get_run(run_id)["status"] ==
+  "failed"` AND steps 1 and 2 rows remain `completed` (complements
+  existing AC-6).
+  Source: [../../milestone_1_primitives/issues/task_09_issue.md](../../milestone_1_primitives/issues/task_09_issue.md) — LOW.
