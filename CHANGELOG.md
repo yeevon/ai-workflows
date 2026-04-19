@@ -7,6 +7,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 03: Model Factory (2026-04-18)
+
+Introduces the model factory that maps tier names to configured pydantic-ai
+Model instances, enforcing `max_retries=0` on every underlying SDK client.
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/tiers.py` — new module; `TierConfig` Pydantic model
+  (stub for Task 07, which will add `load_tiers()` / `load_pricing()`).
+- `ai_workflows/primitives/cost.py` — new module; `CostTracker` Protocol
+  (stub for Task 09, which will provide the SQLite-backed implementation).
+- `ai_workflows/primitives/llm/model_factory.py` — new module; `build_model()`,
+  `run_with_cost()`, `ConfigurationError`, and internal `_build_*` helpers.
+- `tests/primitives/test_model_factory.py` — 13 tests (12 unit + 1 live
+  integration skipped when `ANTHROPIC_API_KEY` is absent).
+
+**Acceptance criteria satisfied:**
+
+- AC-1: `build_model("sonnet", tiers, cost_tracker)` returns
+  `(AnthropicModel, ClientCapabilities)` with `supports_prompt_caching=True`.
+- AC-2: `build_model("local_coder", tiers, cost_tracker)` returns
+  `(OpenAIChatModel, ClientCapabilities)` with `base_url` from Ollama config.
+- AC-3: Underlying SDK clients have `max_retries=0` — verified via
+  `model.provider.client.max_retries` for all three provider branches.
+- AC-4: Integration test wires a live `agent.run()` → `cost_tracker.record()`
+  call; skipped in CI when `ANTHROPIC_API_KEY` is absent.
+- AC-5: Missing env var raises `ConfigurationError` naming the variable.
+
+**Deviations from spec:**
+
+- `OpenAIModel` → `OpenAIChatModel`: pydantic-ai ≥ 1.0 renamed `OpenAIModel`
+  to `OpenAIChatModel` (the old name is deprecated). All tests and code use
+  the new name.
+- `Usage` → `RunUsage`: pydantic-ai ≥ 1.0 renamed the usage dataclass.
+  `_convert_usage()` uses `RunUsage` to avoid deprecation warnings.
+- Provider construction uses `XxxProvider` wrappers (e.g. `AnthropicProvider`,
+  `OpenAIProvider`) rather than passing `anthropic_client=` directly to the
+  Model constructor — the direct-kwarg API was removed in pydantic-ai 1.0.
+- `cost_tracker` parameter accepted by `build_model` but not yet actively wired
+  (no pydantic-ai usage-callback hook exists); active cost recording is in
+  `run_with_cost()` as described in the spec's cost-tracking section.
+
+### Added — M1 Task 02: Shared Types (2026-04-18)
+
+Introduces all canonical shared types consumed by every higher layer.
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/llm/types.py` — new module containing
+  `TextBlock`, `ToolUseBlock`, `ToolResultBlock`, `ContentBlock`
+  (discriminated union), `Message`, `TokenUsage`, `Response`,
+  `ClientCapabilities`, and `WorkflowDeps`.
+- `tests/primitives/test_types.py` — 15 tests covering all four
+  acceptance criteria (14 original + 1 added in audit follow-up).
+
+**Acceptance criteria satisfied:**
+
+- AC-1: `Message(content=[{"type":"text","text":"hi"}])` parses via
+  discriminated-union dispatch — confirmed by `test_message_parses_text_block_from_dict`.
+- AC-2: 50 `tool_use` blocks parse in < 5 ms — confirmed by
+  `test_fifty_tool_use_blocks_parse_quickly`.
+- AC-3: Invalid `type` value raises a clear `ValidationError` naming
+  the allowed literals — confirmed by two validation-error tests.
+- AC-4: `ClientCapabilities` serialises to/from JSON without loss —
+  confirmed by JSON and dict round-trip tests.
+
+**Audit follow-up (M1-T02-ISS-01, ISS-03, ISS-04):**
+
+- ISS-01: Tightened AC-3 test assertion from `or` to `and` — all three
+  discriminator tag names must appear in the error string; previously
+  a single name was sufficient, defeating the discriminator-regression guard.
+- ISS-03: Extended `ClientCapabilities.provider` literal to include
+  `"google"` (1M-context Gemini differentiator); updated task spec and
+  added `test_client_capabilities_google_provider_roundtrips`.
+- ISS-04: Marked `CRIT-09` `[x]` resolved and `CRIT-05` `[~]` in-progress
+  in `design_docs/issues.md`.
+
+#### Completion marking (2026-04-18)
+
+Closes the last open Task 02 issue (M1-T02-ISS-05, surfaced in the
+re-audit) — design-doc bookkeeping only, no code or test changes.
+
+- **`design_docs/phases/milestone_1_primitives/task_02_shared_types.md`** —
+  added top-of-file `Status: ✅ Complete (2026-04-18)` line linking to the
+  audit log; ticked all four acceptance-criterion checkboxes.
+- **`design_docs/phases/milestone_1_primitives/README.md`** — appended
+  `— ✅ **Complete** (2026-04-18)` to the Task 02 entry in the task-order
+  list, matching the Task 01 convention.
+- **`design_docs/phases/milestone_1_primitives/issues/task_02_issue.md`** —
+  flipped ISS-05 from OPEN to ✅ RESOLVED; updated the audit Status line to
+  note every LOW (ISS-01 … ISS-05) is now closed.
+
+**Deviations:** none.
+
 ### Added — M1 Task 01: Project Scaffolding (2026-04-18)
 
 Initial project skeleton built on the `pydantic-ai` ecosystem. Establishes

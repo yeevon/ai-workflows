@@ -1,5 +1,7 @@
 # Task 02 — Shared Types
 
+**Status:** ✅ Complete (2026-04-18) — see [issues/task_02_issue.md](issues/task_02_issue.md).
+
 **Issues:** P-01, P-02, P-07, CRIT-05, CRIT-09
 
 ## What to Build
@@ -69,7 +71,7 @@ class ClientCapabilities(BaseModel):
     supports_thinking: bool = False
     supports_vision: bool = False
     max_context: int
-    provider: Literal["anthropic", "openai_compat", "ollama"]
+    provider: Literal["anthropic", "openai_compat", "ollama", "google"]
     model: str
 
 
@@ -97,10 +99,10 @@ Anthropic supports prompt caching; Ollama does not. If a `Worker` component want
 
 ## Acceptance Criteria
 
-- [ ] Discriminated union dispatches correctly — `Message(content=[{"type":"text", "text":"hi"}])` parses without trying other variants
-- [ ] A message with 50 tool_use blocks parses in < 5ms
-- [ ] Invalid `type` value raises a clear Pydantic error naming the allowed literals
-- [ ] `ClientCapabilities` is serializable to/from JSON for logging
+- [x] Discriminated union dispatches correctly — `Message(content=[{"type":"text", "text":"hi"}])` parses without trying other variants
+- [x] A message with 50 tool_use blocks parses in < 5ms
+- [x] Invalid `type` value raises a clear Pydantic error naming the allowed literals
+- [x] `ClientCapabilities` is serializable to/from JSON for logging
 
 ## Dependencies
 
