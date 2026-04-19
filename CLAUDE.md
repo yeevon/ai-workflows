@@ -1,4 +1,4 @@
-# CLAUDE.md — ai-workflows conventions
+<!-- # CLAUDE.md — ai-workflows conventions
 
 Loaded into every Claude Code conversation. Defines Builder and Auditor
 modes and shared project conventions. Step-by-step procedures live in
@@ -157,4 +157,4 @@ flip DEFERRED → RESOLVED in the originating issue file.
   `CHANGELOG.md` in the same commit.
 - **Propagation discipline.** Forward-deferred items must appear as
   carry-over in the target task before the audit is complete.
-- **Ask before** force-push, `reset --hard`, or any destructive git op.
+- **Ask before** force-push, `reset --hard`, or any destructive git op. -->
