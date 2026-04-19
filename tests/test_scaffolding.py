@@ -37,7 +37,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
     [
         "ai_workflows",
         "ai_workflows.primitives",
-        "ai_workflows.primitives.tools",
         "ai_workflows.components",
         "ai_workflows.workflows",
         "ai_workflows.cli",

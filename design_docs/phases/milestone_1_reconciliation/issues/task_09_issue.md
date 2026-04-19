@@ -39,6 +39,19 @@ Task 02 removed `logfire>=2.0` from `pyproject.toml` but `ai_workflows/primitive
 
 - [ ] **M1-T02-ISS-01 · MEDIUM** — Remove `import logfire` from `primitives/logging.py`; verify `tests/test_scaffolding.py::test_layered_packages_import[ai_workflows.cli]`, `test_aiw_help_runs`, `test_aiw_version_command`, `test_aiw_console_script_resolves` all return green. Record shape unchanged (see "Record shape" note above — this is purely about the import line). Source: [task_02_issue.md §Propagation status](task_02_issue.md#propagation-status).
 
+### From [M1-T04-ISS-01](task_04_issue.md#-medium--m1-t04-iss-01-stale-forensic_logger-references-in-t09-owned-files) (T04 post-build audit, 2026-04-19)
+
+Task 04 deleted `ai_workflows/primitives/tools/` wholesale, including `forensic_logger.py`. Two stale references now dangle inside files already slated for T09 MODIFY per [audit.md §1 / §3](../audit.md):
+
+| Location | Nature |
+| --- | --- |
+| `ai_workflows/primitives/logging.py:35-40` | Module docstring `Related` section cross-references `:mod:`ai_workflows.primitives.tools.forensic_logger`` and the `M1-T05-ISS-02` carry-over that the forensic event rode on. Cosmetic; docstring points at a deleted module. |
+| `tests/primitives/test_logging.py:~248-280` | `test_forensic_warning_lands_in_run_json_sink_under_production_config` contains `from ai_workflows.primitives.tools.forensic_logger import log_suspicious_patterns` at line 255. Currently masked by the upstream `import logfire` collection error, but surfaces as an ImportError the instant T09 unblocks logfire removal. |
+
+The `log_suspicious_patterns` primitive was part of the pre-pivot tool-registry observability hook and is out of scope under [architecture.md §8.1](../../../architecture.md) (`StructuredLogger` is the single observability surface). There is no replacement to emit the `tool_output_suspicious_patterns` WARNING — the concept belongs to the deleted tool registry.
+
+- [ ] **M1-T04-ISS-01 · MEDIUM** — (a) Drop or rewrite the `Related` paragraph in `ai_workflows/primitives/logging.py:35-40` so it no longer mentions `primitives.tools.forensic_logger` or the `M1-T05-ISS-02` forensic carry-over. (b) Retire or rewrite `tests/primitives/test_logging.py::test_forensic_warning_lands_in_run_json_sink_under_production_config` (lines ~248-280) — the simplest move is to delete the test; if the run-JSON-sink smoke coverage is still worth keeping, rewrite it around a plain `structlog` WARNING and drop the `log_suspicious_patterns` dependency entirely. Source: [task_04_issue.md §M1-T04-ISS-01](task_04_issue.md#-medium--m1-t04-iss-01-stale-forensic_logger-references-in-t09-owned-files).
+
 ## Propagation status
 
 Post-build audit will overwrite this file with implementation findings. When the T02 carry-over checkbox ticks, [task_02_issue.md](task_02_issue.md) flips ISS-01 from `DEFERRED` to `RESOLVED` on the next T02 re-audit touch point.

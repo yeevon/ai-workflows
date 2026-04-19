@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed — M1 Task 04: Remove tool registry + stdlib tools (2026-04-19)
+
+Deleted the `ai_workflows/primitives/tools/` subpackage and its matching
+tests. Under [architecture.md §4.1 / §3](design_docs/architecture.md),
+LangGraph nodes are plain Python and the pydantic-ai agent-style tool
+registry + `forensic_logger` no longer have a consumer. Tool exposure
+lives at the MCP surface (KDR-002 / KDR-008); no stdlib helper (`fs`,
+`git`, `http`, `shell`) had a surviving consumer per
+[audit.md §1](design_docs/phases/milestone_1_reconciliation/audit.md).
+
+**Files removed:**
+
+- `ai_workflows/primitives/tools/__init__.py`
+- `ai_workflows/primitives/tools/forensic_logger.py`
+- `ai_workflows/primitives/tools/fs.py`
+- `ai_workflows/primitives/tools/git.py`
+- `ai_workflows/primitives/tools/http.py`
+- `ai_workflows/primitives/tools/registry.py`
+- `ai_workflows/primitives/tools/shell.py`
+- `ai_workflows/primitives/tools/stdlib.py`
+- `tests/primitives/test_tool_registry.py` (flat-level; called out by
+  [AUD-04-02](design_docs/phases/milestone_1_reconciliation/issues/task_04_issue.md))
+- `tests/primitives/tools/__init__.py`
+- `tests/primitives/tools/conftest.py`
+- `tests/primitives/tools/test_fs.py`
+- `tests/primitives/tools/test_git.py`
+- `tests/primitives/tools/test_http.py`
+- `tests/primitives/tools/test_shell.py`
+- `tests/primitives/tools/test_stdlib.py`
+
+**Conditional branch skipped (AUD-04-01):** the Task 04 spec included an
+"If audit keeps any stdlib helper" fallback that would move KEEP helpers
+into a flat `primitives/` module. The audit marked every file under
+`primitives/tools/` as REMOVE, so no helper is retained and no flat
+replacement module is created.
+
+**Other edits:**
+
+- `tests/test_scaffolding.py` — `test_layered_packages_import` parametrize
+  list drops `ai_workflows.primitives.tools` (module no longer exists).
+
+**Acceptance criteria satisfied:**
+
+- AC-1 `ai_workflows/primitives/tools/` directory no longer exists.
+- AC-2 `grep -r "forensic_logger|ToolRegistry|from ai_workflows.primitives.tools" ai_workflows/ tests/`
+  returns zero matches for T04-owned code. Two residual docstring /
+  import references survive under T09-owned files
+  (`primitives/logging.py` "Related" docstring section +
+  `tests/primitives/test_logging.py::test_forensic_warning_...`); both
+  forward-deferred to T09 as `M1-T04-ISS-01`.
+- AC-3 N/A — no stdlib helper kept (AUD-04-01).
+- AC-4 pytest green for T04-scope. Collection errors dropped 11 → 3
+  (the 5 `tests/primitives/tools/test_*.py` plus the flat
+  `test_tool_registry.py` cleared); remaining 3 are `test_logging.py`
+  (logfire) + `test_retry.py` (anthropic) + `test_cli.py` (logfire via
+  CLI path) — all forward-deferred to T07 / T09 per
+  [M1-T02-ISS-01 propagation](design_docs/phases/milestone_1_reconciliation/issues/task_02_issue.md#propagation-status).
+- AC-5 ruff green.
+
+**Carry-over ticked:**
+
+- M1-T02-ISS-01 (pydantic-ai imports under `primitives/tools/*`) —
+  closed for the `tools/*` slice by deleting the subpackage. `retry.py`
+  (T07) and `logging.py` (T09) remain open.
+
 ### Removed — M1 Task 03: Remove pydantic-ai LLM substrate (2026-04-19)
 
 Deleted the `ai_workflows/primitives/llm/` subpackage and its matching tests.
