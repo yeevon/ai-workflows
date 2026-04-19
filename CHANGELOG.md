@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M1 Task 05: Trim Storage to Run Registry + Gate Log (2026-04-19)
+
+Shrank `ai_workflows/primitives/storage.py` and its SQLite schema to the
+seven-method run-registry + gate-log surface prescribed by
+[architecture.md §4.1](design_docs/architecture.md) and KDR-009.
+LangGraph's built-in `SqliteSaver` now owns every checkpoint blob; the
+pre-pivot `tasks` / `artifacts` / `llm_calls` / `human_gate_states` tables
+and the `runs.profile` / `runs.workflow_dir_hash` columns fall away.
+
+**Files added:**
+
+- `migrations/002_reconciliation.sql` — drops legacy tables + columns and
+  creates `gate_responses (run_id, gate_id, prompt, response,
+  responded_at, strict_review)` with a composite primary key.
+- `migrations/002_reconciliation.rollback.sql` — restores pre-pivot
+  tables, indexes, and dropped `runs` columns; drops `gate_responses`.
+
+**Files modified:**
+
+- `ai_workflows/primitives/storage.py` — `StorageBackend` protocol
+  trimmed to `create_run`, `update_run_status`, `get_run`, `list_runs`,
+  `record_gate`, `record_gate_response`, `get_gate`. `SQLiteStorage`
+  implementation matches; write path still funnels through the shared
+  `asyncio.Lock` + `asyncio.to_thread` pair, and `PRAGMA journal_mode =
+  WAL` stays on.
+- `tests/primitives/test_storage.py` — rewritten (26 tests). Covers
+  protocol conformance and the exact surface set, first-open applies
+  001+002, second-open idempotency, legacy tables / columns dropped,
+  `gate_responses` columns present, WAL mode, `create_run` + None
+  budget, `update_run_status` (terminal / non-terminal / explicit
+  `finished_at`), `list_runs` ordering / limit / `status_filter`, gate
+  round-trip, upsert preservation, response-without-record no-op,
+  `strict_review=False` → 0, rollback restoration (transient migrations
+  dir), 20-concurrent `record_gate`, and `initialize` idempotency.
+
+**Acceptance criteria satisfied:**
+
+- AC-1 Migration applies on a fresh DB (`_yoyo_migration` contains
+  `001_initial` + `002_reconciliation`) and is idempotent on reapply
+  (row count stays at 2).
+- AC-2 Rolling back `002_reconciliation` restores `tasks`, `artifacts`,
+  `llm_calls`, `human_gate_states`, `workflow_dir_hash`, and `profile`;
+  drops `gate_responses`.
+- AC-3 Protocol contains only the seven methods named in the task spec;
+  `test_storage_protocol_only_exposes_the_trimmed_surface` guards
+  against regression.
+- AC-4 `uv run pytest tests/primitives/test_storage.py` → 26 passed.
+- AC-5 `uv run pytest` full-suite is still red on pre-existing T06 /
+  T07 / T08 / T09 / T11 carry-over (see "Deviations" below); T05-scope
+  is green.
+- AC-6 `grep -r "log_llm_call\|upsert_task\|log_artifact" ai_workflows/
+  tests/` returns zero T05-owned matches. Surviving hits live under
+  `ai_workflows/primitives/cost.py` (2) + `tests/primitives/test_cost.py`
+  (3) + `tests/test_cli.py` (5) — all forward-deferred to T08 / T11 per
+  new `M1-T05-ISS-01`.
+
+**Deviations from spec:**
+
+- `list_runs(filter?)` in the task spec is ambiguous on filter shape.
+  Implemented as `status_filter: str | None = None` — the only column on
+  the trimmed `runs` table that a caller could realistically filter by.
+  Protocol conformance test enforces the exact signature set.
+- AC-5 "`uv run pytest` green overall" is interpreted at T05 scope (the
+  reshape does not regress `test_storage.py`; other failures are
+  owned by future tasks). Matches the T02 / T03 / T04 precedent where
+  downstream-owned collection errors were acceptable.
+
+**Carry-over ticked:**
+
+- AUD-05-01 (`workflow_dir_hash` column fate) — column dropped in
+  `002_reconciliation.sql`; re-addition, if any, owned by T10's ADR per
+  the pre-build amendment.
+
 ### Removed — M1 Task 04: Remove tool registry + stdlib tools (2026-04-19)
 
 Deleted the `ai_workflows/primitives/tools/` subpackage and its matching

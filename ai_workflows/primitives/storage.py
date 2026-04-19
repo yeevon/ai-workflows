@@ -1,35 +1,42 @@
-"""SQLite-backed run log with WAL mode and yoyo-managed migrations.
+"""SQLite-backed run registry and gate-response log.
 
-Produced by M1 Task 08 (closes CRIT-10, P-26 … P-31, W-03; introduces the
-CRIT-02 ``workflow_dir_hash`` column paired with
-:func:`ai_workflows.primitives.workflow_hash.compute_workflow_hash`).
+Trimmed by M1 Task 05 per KDR-009 and
+[architecture.md §4.1](../../design_docs/architecture.md): `Storage` now
+owns only the run registry and the gate-response log. Every
+checkpoint-adjacent surface that existed on the pre-pivot storage
+layer — `tasks`, `artifacts`, `llm_calls`, `human_gate_states`,
+`workflow_dir_hash` — moves to LangGraph's `SqliteSaver` (KDR-009), the
+in-memory `CostTracker` aggregate prepared by M1 Task 08, and (for the
+`workflow_dir_hash` fate) the ADR produced by M1 Task 10. The schema
+reshape lands in the paired `migrations/002_reconciliation.sql`
+migration + rollback.
 
 Responsibilities
 ----------------
-* :class:`StorageBackend` — structural protocol every backend (SQLite now;
-  cloud backends later) must satisfy. Components and workflows depend on
-  this interface, never on ``SQLiteStorage`` directly.
-* :class:`SQLiteStorage` — default implementation. Opens a SQLite database
-  at ``db_path``, applies any pending migrations from the repo-local
-  ``migrations/`` directory via yoyo-migrations, and flips
-  ``PRAGMA journal_mode = WAL`` so cost-tracking writes and ``aiw inspect``
-  reads can interleave without blocking.
+* :class:`StorageBackend` — structural protocol every backend (SQLite
+  now; cloud backends later) must satisfy. Reduced to the seven methods
+  listed in
+  [task_05_trim_storage.md](../../design_docs/phases/milestone_1_reconciliation/task_05_trim_storage.md).
+* :class:`SQLiteStorage` — default implementation. Opens a SQLite
+  database at ``db_path``, applies pending migrations from the
+  repo-local ``migrations/`` directory via yoyo-migrations, and flips
+  ``PRAGMA journal_mode = WAL`` so writes and ``aiw inspect`` reads can
+  interleave without blocking.
 
 Concurrency model
 -----------------
-Every write method serialises through a single :class:`asyncio.Lock` so
-20 concurrent ``asyncio.gather(log_llm_call(...))`` calls never collide on
-the WAL writer. Reads take fresh connections and do not touch the lock.
-Blocking ``sqlite3`` calls are pushed to :func:`asyncio.to_thread` so the
-event loop stays responsive.
+Every write method serialises through a single :class:`asyncio.Lock`.
+Reads take fresh connections and do not touch the lock. Blocking
+``sqlite3`` calls are pushed to :func:`asyncio.to_thread` so the event
+loop stays responsive.
 
 See also
 --------
-* ``migrations/001_initial.sql`` — the schema applied on first open.
-* ``primitives/workflow_hash.py`` — the hash value stored in
-  ``runs.workflow_dir_hash`` (CRIT-02).
-* ``primitives/cost.py`` — the ``CostTracker`` protocol that Task 09's
-  implementation layers on top of this storage.
+* ``migrations/001_initial.sql`` — the pre-pivot schema.
+* ``migrations/002_reconciliation.sql`` — the trim landed by this task.
+* ``primitives/cost.py`` — the ``CostTracker`` surface that M1 Task 08
+  refits on top of this storage (in-memory aggregate, no
+  per-call SQL row).
 """
 
 from __future__ import annotations
@@ -45,18 +52,15 @@ from typing import Any, Protocol, runtime_checkable
 class StorageBackend(Protocol):
     """Structural protocol every run-log storage backend must satisfy.
 
-    The SQLite implementation ships in this module; cloud/remote backends
-    will live under their own namespace (e.g. ``primitives.storage_cloud``)
-    once the M5 multi-tenant story is designed. Higher layers type-hint on
-    this protocol so swapping backends is a one-line change in the
-    workflow wiring.
+    The seven methods below are the full surface after M1 Task 05: run
+    registry (create / update / get / list) plus the gate log (record
+    gate, record response, get gate).
     """
 
     async def create_run(
         self,
         run_id: str,
         workflow_id: str,
-        workflow_dir_hash: str,
         budget_cap_usd: float | None,
     ) -> None:
         """Insert a new ``runs`` row in status ``pending``."""
@@ -66,83 +70,57 @@ class StorageBackend(Protocol):
         self,
         run_id: str,
         status: str,
+        finished_at: str | None = None,
         total_cost_usd: float | None = None,
     ) -> None:
-        """Update the ``runs.status`` column and optionally total cost."""
-        ...
-
-    async def upsert_task(
-        self,
-        run_id: str,
-        task_id: str,
-        component: str,
-        status: str,
-        **kwargs: Any,
-    ) -> None:
-        """Insert or update a ``tasks`` row keyed by ``(task_id, run_id)``."""
-        ...
-
-    async def log_llm_call(self, run_id: str, **fields: Any) -> None:
-        """Append one row to ``llm_calls``."""
-        ...
-
-    async def log_artifact(
-        self,
-        run_id: str,
-        artifact_type: str,
-        file_path: str,
-        task_id: str | None = None,
-    ) -> None:
-        """Append one row to ``artifacts``."""
+        """Update the ``runs.status`` column and optional finished_at / total cost."""
         ...
 
     async def get_run(self, run_id: str) -> dict[str, Any] | None:
         """Return the ``runs`` row as a dict, or ``None`` when absent."""
         ...
 
-    async def list_runs(self, limit: int = 50) -> list[dict[str, Any]]:
-        """Return the most recent runs, newest first."""
+    async def list_runs(
+        self,
+        limit: int = 50,
+        status_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return the most recent runs, newest first. Optional status filter."""
         ...
 
-    async def get_tasks(self, run_id: str) -> list[dict[str, Any]]:
-        """Return every ``tasks`` row for a run."""
-        ...
-
-    async def get_cost_breakdown(self, run_id: str) -> dict[str, float]:
-        """Return ``{component: sum_cost_usd}`` for non-local calls."""
-        ...
-
-    async def get_total_cost(self, run_id: str) -> float:
-        """Return the USD total for a run, excluding ``is_local=1`` rows."""
-        ...
-
-    async def list_llm_calls(self, run_id: str) -> list[dict[str, Any]]:
-        """Return every ``llm_calls`` row for a run, oldest-first."""
-        ...
-
-    async def get_gate_state(
-        self, run_id: str, gate_id: str
-    ) -> dict[str, Any] | None:
-        """Return the ``human_gate_states`` row, or ``None`` when unseen."""
-        ...
-
-    async def update_gate_state(
+    async def record_gate(
         self,
         run_id: str,
         gate_id: str,
-        status: str,
-        decision: str | None = None,
+        prompt: str,
+        strict_review: bool,
     ) -> None:
-        """Upsert a ``human_gate_states`` row."""
+        """Insert a pending ``gate_responses`` row (response + responded_at null)."""
+        ...
+
+    async def record_gate_response(
+        self,
+        run_id: str,
+        gate_id: str,
+        response: str,
+    ) -> None:
+        """Stamp an already-recorded gate with its response and ``responded_at``."""
+        ...
+
+    async def get_gate(
+        self,
+        run_id: str,
+        gate_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the ``gate_responses`` row, or ``None`` when unseen."""
         ...
 
 
 def _default_migrations_dir() -> Path:
     """Return the repo-root ``migrations/`` directory.
 
-    The package is run from source during M1; P-21 (shipping migrations as
-    package data via ``importlib.resources``) is still open. Tests override
-    this via the ``migrations_dir`` kwarg on :meth:`SQLiteStorage.__init__`.
+    Tests override this via the ``migrations_dir`` kwarg on
+    :meth:`SQLiteStorage.__init__`.
     """
     return Path(__file__).resolve().parent.parent.parent / "migrations"
 
@@ -160,20 +138,10 @@ def _row_to_dict(cursor: sqlite3.Cursor, row: sqlite3.Row) -> dict[str, Any]:
 class SQLiteStorage:
     """SQLite-backed :class:`StorageBackend` with WAL mode and yoyo migrations.
 
-    Use :meth:`open` as the async factory — it builds the instance, applies
-    migrations, and flips WAL in a single awaitable. The raw constructor is
-    kept sync so tests that only need a path (e.g. the protocol-conformance
-    check) can skip the async hop.
-
-    Example
-    -------
-    >>> storage = await SQLiteStorage.open("~/.ai-workflows/runs.db")
-    >>> await storage.create_run(
-    ...     run_id="r1",
-    ...     workflow_id="wf",
-    ...     workflow_dir_hash="abc123...",
-    ...     budget_cap_usd=5.0,
-    ... )
+    Use :meth:`open` as the async factory — it builds the instance,
+    applies migrations, and flips WAL in a single awaitable. The raw
+    constructor is kept sync so tests that only need a path (e.g. the
+    protocol-conformance check) can skip the async hop.
     """
 
     def __init__(
@@ -188,8 +156,6 @@ class SQLiteStorage:
             if migrations_dir is not None
             else _default_migrations_dir()
         )
-        # Serialises every write so concurrent ``log_llm_call`` invocations
-        # never collide on the WAL writer. Reads are unguarded.
         self._write_lock = asyncio.Lock()
         self._initialized = False
 
@@ -222,8 +188,6 @@ class SQLiteStorage:
         await asyncio.to_thread(self._apply_migrations_sync)
 
     def _apply_migrations_sync(self) -> None:
-        # Imported lazily so the primitives layer stays importable in
-        # environments where yoyo is not yet installed (e.g. doc builds).
         from yoyo import get_backend, read_migrations
 
         backend = get_backend(f"sqlite:///{self._db_path}")
@@ -258,23 +222,13 @@ class SQLiteStorage:
         self,
         run_id: str,
         workflow_id: str,
-        workflow_dir_hash: str,
         budget_cap_usd: float | None,
     ) -> None:
-        """Insert a new ``runs`` row.
-
-        ``workflow_dir_hash`` must be a non-empty string — ``None`` or ``""``
-        raises :class:`ValueError` before hitting the DB so callers see the
-        Python-level error message (the SQLite ``NOT NULL`` would otherwise
-        surface as an ``IntegrityError``).
-        """
-        if workflow_dir_hash is None or workflow_dir_hash == "":
-            raise ValueError("workflow_dir_hash is required and must be non-empty")
+        """Insert a new ``runs`` row in status ``pending``."""
         await self._run_write(
             self._create_run_sync,
             run_id,
             workflow_id,
-            workflow_dir_hash,
             budget_cap_usd,
         )
 
@@ -282,21 +236,18 @@ class SQLiteStorage:
         self,
         run_id: str,
         workflow_id: str,
-        workflow_dir_hash: str,
         budget_cap_usd: float | None,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO runs (
-                    run_id, workflow_id, workflow_dir_hash, status,
-                    started_at, budget_cap_usd
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    run_id, workflow_id, status, started_at, budget_cap_usd
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
                     workflow_id,
-                    workflow_dir_hash,
                     "pending",
                     _utcnow(),
                     budget_cap_usd,
@@ -308,34 +259,49 @@ class SQLiteStorage:
         self,
         run_id: str,
         status: str,
+        finished_at: str | None = None,
         total_cost_usd: float | None = None,
     ) -> None:
-        """Update the run status; populate ``finished_at`` on terminal states."""
-        await self._run_write(self._update_run_status_sync, run_id, status, total_cost_usd)
+        """Update the run status; auto-populate ``finished_at`` on terminal states.
+
+        If ``finished_at`` is passed explicitly it overrides the
+        auto-stamp. Non-terminal statuses without an explicit
+        ``finished_at`` leave the column untouched.
+        """
+        await self._run_write(
+            self._update_run_status_sync,
+            run_id,
+            status,
+            finished_at,
+            total_cost_usd,
+        )
 
     def _update_run_status_sync(
         self,
         run_id: str,
         status: str,
+        finished_at: str | None,
         total_cost_usd: float | None,
     ) -> None:
-        finished_at = _utcnow() if status in {"completed", "failed"} else None
+        stamped_finished = finished_at
+        if stamped_finished is None and status in {"completed", "failed"}:
+            stamped_finished = _utcnow()
         with self._connect() as conn:
-            if total_cost_usd is not None and finished_at is not None:
+            if total_cost_usd is not None and stamped_finished is not None:
                 conn.execute(
                     "UPDATE runs SET status = ?, total_cost_usd = ?, finished_at = ? "
                     "WHERE run_id = ?",
-                    (status, total_cost_usd, finished_at, run_id),
+                    (status, total_cost_usd, stamped_finished, run_id),
                 )
             elif total_cost_usd is not None:
                 conn.execute(
                     "UPDATE runs SET status = ?, total_cost_usd = ? WHERE run_id = ?",
                     (status, total_cost_usd, run_id),
                 )
-            elif finished_at is not None:
+            elif stamped_finished is not None:
                 conn.execute(
                     "UPDATE runs SET status = ?, finished_at = ? WHERE run_id = ?",
-                    (status, finished_at, run_id),
+                    (status, stamped_finished, run_id),
                 )
             else:
                 conn.execute(
@@ -356,294 +322,124 @@ class SQLiteStorage:
                 return None
             return _row_to_dict(cursor, row)
 
-    async def list_runs(self, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_runs(
+        self,
+        limit: int = 50,
+        status_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Return the most recent runs, newest first (ordered by ``started_at``)."""
-        return await asyncio.to_thread(self._list_runs_sync, limit)
+        return await asyncio.to_thread(self._list_runs_sync, limit, status_filter)
 
-    def _list_runs_sync(self, limit: int) -> list[dict[str, Any]]:
+    def _list_runs_sync(
+        self,
+        limit: int,
+        status_filter: str | None,
+    ) -> list[dict[str, Any]]:
         with self._connect() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM runs ORDER BY started_at DESC LIMIT ?",
-                (limit,),
-            )
+            if status_filter is not None:
+                cursor = conn.execute(
+                    "SELECT * FROM runs WHERE status = ? "
+                    "ORDER BY started_at DESC LIMIT ?",
+                    (status_filter, limit),
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT * FROM runs ORDER BY started_at DESC LIMIT ?",
+                    (limit,),
+                )
             return [_row_to_dict(cursor, row) for row in cursor.fetchall()]
 
     # ------------------------------------------------------------------
-    # Tasks
+    # Gates
     # ------------------------------------------------------------------
 
-    async def upsert_task(
+    async def record_gate(
         self,
         run_id: str,
-        task_id: str,
-        component: str,
-        status: str,
-        **kwargs: Any,
+        gate_id: str,
+        prompt: str,
+        strict_review: bool,
     ) -> None:
-        """Insert or update a ``(task_id, run_id)`` row.
-
-        Accepted kwargs: ``started_at``, ``finished_at``, ``failure_reason``.
-        Unknown kwargs raise :class:`TypeError` rather than silently being
-        dropped — a typo in a caller should fail loudly.
-        """
-        allowed = {"started_at", "finished_at", "failure_reason"}
-        unknown = set(kwargs) - allowed
-        if unknown:
-            raise TypeError(f"upsert_task got unexpected kwargs: {sorted(unknown)}")
+        """Insert a pending ``gate_responses`` row (response + responded_at null)."""
         await self._run_write(
-            self._upsert_task_sync,
+            self._record_gate_sync,
             run_id,
-            task_id,
-            component,
-            status,
-            kwargs,
+            gate_id,
+            prompt,
+            strict_review,
         )
 
-    def _upsert_task_sync(
+    def _record_gate_sync(
         self,
         run_id: str,
-        task_id: str,
-        component: str,
-        status: str,
-        extra: dict[str, Any],
+        gate_id: str,
+        prompt: str,
+        strict_review: bool,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO tasks (task_id, run_id, component, status,
-                                   started_at, finished_at, failure_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(task_id, run_id) DO UPDATE SET
-                    component      = excluded.component,
-                    status         = excluded.status,
-                    started_at     = COALESCE(excluded.started_at,     tasks.started_at),
-                    finished_at    = COALESCE(excluded.finished_at,    tasks.finished_at),
-                    failure_reason = COALESCE(excluded.failure_reason, tasks.failure_reason)
+                INSERT INTO gate_responses (
+                    run_id, gate_id, prompt, response, responded_at, strict_review
+                ) VALUES (?, ?, ?, NULL, NULL, ?)
+                ON CONFLICT(run_id, gate_id) DO UPDATE SET
+                    prompt        = excluded.prompt,
+                    strict_review = excluded.strict_review
                 """,
-                (
-                    task_id,
-                    run_id,
-                    component,
-                    status,
-                    extra.get("started_at"),
-                    extra.get("finished_at"),
-                    extra.get("failure_reason"),
-                ),
+                (run_id, gate_id, prompt, int(bool(strict_review))),
             )
             conn.commit()
 
-    async def get_tasks(self, run_id: str) -> list[dict[str, Any]]:
-        """Return every task row for a run, ordered by insertion."""
-        return await asyncio.to_thread(self._get_tasks_sync, run_id)
-
-    def _get_tasks_sync(self, run_id: str) -> list[dict[str, Any]]:
-        with self._connect() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM tasks WHERE run_id = ? ORDER BY rowid",
-                (run_id,),
-            )
-            return [_row_to_dict(cursor, row) for row in cursor.fetchall()]
-
-    # ------------------------------------------------------------------
-    # LLM calls
-    # ------------------------------------------------------------------
-
-    _LLM_COLUMNS = (
-        "task_id",
-        "workflow_id",
-        "component",
-        "tier",
-        "model",
-        "input_tokens",
-        "output_tokens",
-        "cache_read_tokens",
-        "cache_write_tokens",
-        "cost_usd",
-        "is_local",
-        "is_escalation",
-        "stop_reason",
-        "called_at",
-    )
-
-    async def log_llm_call(self, run_id: str, **fields: Any) -> None:
-        """Append one ``llm_calls`` row.
-
-        Accepts any subset of the documented columns as kwargs; unknown
-        kwargs raise :class:`TypeError`. ``called_at`` defaults to now;
-        ``is_local`` and ``is_escalation`` coerce ``bool`` → 0/1 so callers
-        can pass Python booleans without thinking about SQLite's TEXT-vs-INT
-        quirks.
-        """
-        unknown = set(fields) - set(self._LLM_COLUMNS)
-        if unknown:
-            raise TypeError(f"log_llm_call got unexpected kwargs: {sorted(unknown)}")
-        fields.setdefault("called_at", _utcnow())
-        if "is_local" in fields:
-            fields["is_local"] = int(bool(fields["is_local"]))
-        if "is_escalation" in fields:
-            fields["is_escalation"] = int(bool(fields["is_escalation"]))
-        await self._run_write(self._log_llm_call_sync, run_id, fields)
-
-    def _log_llm_call_sync(self, run_id: str, fields: dict[str, Any]) -> None:
-        columns = ["run_id", *self._LLM_COLUMNS]
-        values = [run_id, *[fields.get(col) for col in self._LLM_COLUMNS]]
-        placeholders = ",".join("?" * len(columns))
-        with self._connect() as conn:
-            conn.execute(
-                f"INSERT INTO llm_calls ({','.join(columns)}) VALUES ({placeholders})",
-                values,
-            )
-            conn.commit()
-
-    async def get_cost_breakdown(self, run_id: str) -> dict[str, float]:
-        """Return ``{component: sum(cost_usd)}`` excluding local rows.
-
-        Used by the Task 09 CostTracker for budget-cap enforcement and by
-        Task 12 ``aiw inspect`` for the per-component breakdown.
-        """
-        return await asyncio.to_thread(self._get_cost_breakdown_sync, run_id)
-
-    def _get_cost_breakdown_sync(self, run_id: str) -> dict[str, float]:
-        with self._connect() as conn:
-            cursor = conn.execute(
-                "SELECT component, COALESCE(SUM(cost_usd), 0.0) AS total "
-                "FROM llm_calls WHERE run_id = ? AND is_local = 0 "
-                "GROUP BY component",
-                (run_id,),
-            )
-            return {row["component"]: float(row["total"]) for row in cursor.fetchall()}
-
-    async def get_total_cost(self, run_id: str) -> float:
-        """Return the sum of ``cost_usd`` for this run, excluding local calls.
-
-        CRIT-03: paired with ``runs.budget_cap_usd``, Task 09 uses this to
-        short-circuit before making a call that would cross the cap.
-        """
-        return await asyncio.to_thread(self._get_total_cost_sync, run_id)
-
-    def _get_total_cost_sync(self, run_id: str) -> float:
-        with self._connect() as conn:
-            cursor = conn.execute(
-                "SELECT COALESCE(SUM(cost_usd), 0.0) FROM llm_calls "
-                "WHERE run_id = ? AND is_local = 0",
-                (run_id,),
-            )
-            (total,) = cursor.fetchone()
-            return float(total)
-
-    async def list_llm_calls(self, run_id: str) -> list[dict[str, Any]]:
-        """Return every ``llm_calls`` row for a run, oldest-first.
-
-        Used by Task 12 ``aiw inspect`` to render the per-call usage table
-        (including ``cache_read_tokens`` / ``cache_write_tokens`` — see
-        carry-over ``M1-T04-ISS-01``) and the total call count.
-        """
-        return await asyncio.to_thread(self._list_llm_calls_sync, run_id)
-
-    def _list_llm_calls_sync(self, run_id: str) -> list[dict[str, Any]]:
-        with self._connect() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM llm_calls WHERE run_id = ? ORDER BY id",
-                (run_id,),
-            )
-            return [_row_to_dict(cursor, row) for row in cursor.fetchall()]
-
-    # ------------------------------------------------------------------
-    # Artifacts
-    # ------------------------------------------------------------------
-
-    async def log_artifact(
+    async def record_gate_response(
         self,
         run_id: str,
-        artifact_type: str,
-        file_path: str,
-        task_id: str | None = None,
+        gate_id: str,
+        response: str,
     ) -> None:
-        """Append one row to ``artifacts``."""
+        """Stamp an already-recorded gate with its response and ``responded_at``."""
         await self._run_write(
-            self._log_artifact_sync, run_id, artifact_type, file_path, task_id
+            self._record_gate_response_sync,
+            run_id,
+            gate_id,
+            response,
         )
 
-    def _log_artifact_sync(
+    def _record_gate_response_sync(
         self,
         run_id: str,
-        artifact_type: str,
-        file_path: str,
-        task_id: str | None,
+        gate_id: str,
+        response: str,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO artifacts (run_id, task_id, artifact_type, file_path, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (run_id, task_id, artifact_type, file_path, _utcnow()),
+                "UPDATE gate_responses SET response = ?, responded_at = ? "
+                "WHERE run_id = ? AND gate_id = ?",
+                (response, _utcnow(), run_id, gate_id),
             )
             conn.commit()
 
-    # ------------------------------------------------------------------
-    # Human gates
-    # ------------------------------------------------------------------
-
-    async def get_gate_state(
-        self, run_id: str, gate_id: str
+    async def get_gate(
+        self,
+        run_id: str,
+        gate_id: str,
     ) -> dict[str, Any] | None:
-        """Return the ``human_gate_states`` row, or ``None`` when unseen."""
-        return await asyncio.to_thread(self._get_gate_state_sync, run_id, gate_id)
+        """Return the ``gate_responses`` row, or ``None`` when unseen."""
+        return await asyncio.to_thread(self._get_gate_sync, run_id, gate_id)
 
-    def _get_gate_state_sync(
-        self, run_id: str, gate_id: str
+    def _get_gate_sync(
+        self,
+        run_id: str,
+        gate_id: str,
     ) -> dict[str, Any] | None:
         with self._connect() as conn:
             cursor = conn.execute(
-                "SELECT * FROM human_gate_states WHERE run_id = ? AND gate_id = ?",
+                "SELECT * FROM gate_responses WHERE run_id = ? AND gate_id = ?",
                 (run_id, gate_id),
             )
             row = cursor.fetchone()
             if row is None:
                 return None
             return _row_to_dict(cursor, row)
-
-    async def update_gate_state(
-        self,
-        run_id: str,
-        gate_id: str,
-        status: str,
-        decision: str | None = None,
-    ) -> None:
-        """Upsert a ``human_gate_states`` row.
-
-        ``rendered_at`` is set the first time the gate is written;
-        ``resolved_at`` is set whenever ``status`` reaches a terminal state
-        (``approved``, ``rejected``). Existing timestamps are preserved by
-        ``COALESCE`` so a second write doesn't overwrite the first rendering.
-        """
-        await self._run_write(
-            self._update_gate_state_sync, run_id, gate_id, status, decision
-        )
-
-    def _update_gate_state_sync(
-        self,
-        run_id: str,
-        gate_id: str,
-        status: str,
-        decision: str | None,
-    ) -> None:
-        now = _utcnow()
-        resolved_at = now if status in {"approved", "rejected"} else None
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO human_gate_states (
-                    run_id, gate_id, status, rendered_at, resolved_at, decision
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(run_id, gate_id) DO UPDATE SET
-                    status      = excluded.status,
-                    rendered_at = COALESCE(human_gate_states.rendered_at, excluded.rendered_at),
-                    resolved_at = COALESCE(excluded.resolved_at, human_gate_states.resolved_at),
-                    decision    = COALESCE(excluded.decision,    human_gate_states.decision)
-                """,
-                (run_id, gate_id, status, now, resolved_at, decision),
-            )
-            conn.commit()
 
     # ------------------------------------------------------------------
     # Write-path lock helper
