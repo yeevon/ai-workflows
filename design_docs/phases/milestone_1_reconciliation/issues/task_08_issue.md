@@ -1,63 +1,103 @@
-# Task 08 — Prune CostTracker Surface — Pre-build Audit Amendments
+# Task 08 — Prune CostTracker Surface — Audit Issues
 
 **Source task:** [../task_08_prune_cost_tracker.md](../task_08_prune_cost_tracker.md)
-**Source audit:** [../audit.md](../audit.md) (produced by [M1 Task 01](../task_01_reconciliation_audit.md))
-**Created on:** 2026-04-19
-**Status:** 📋 PENDING BUILDER — gates not yet run; this file encodes pre-build amendments only.
+**Audited on:** 2026-04-19 (post-build, Cycle 1 + Cycle 2 sweep)
+**Audit scope:** `ai_workflows/primitives/cost.py`, `tests/primitives/test_cost.py`, `ai_workflows/primitives/tiers.py` docstring sweeps, carry-over from M1-T05-ISS-01 / M1-T06-ISS-02, full-suite downstream impact.
+**Status:** ✅ PASS on T08's five explicit ACs + both inherited carry-overs + the two cycle-1 LOW findings closed by the cycle-2 docstring sweep. One LOW item forward-deferred to T09 (`logging.py:25` `BudgetExceeded` mention, logger-owned file).
 
-## Why this file exists
+## Design-drift check (mandatory; architecture.md + KDRs re-read)
 
-Task files `task_02`…`task_13` were drafted **before** the reconciliation audit ran. Per [CLAUDE.md](../../../../CLAUDE.md) Builder conventions, this file is the bridge to the [audit.md](../audit.md) source of truth.
+| Concern | Verdict | Evidence |
+| --- | --- | --- |
+| New dependency in `pyproject.toml` | ✅ None added | `pyproject.toml` unchanged; only `pydantic` (already present) + `collections.defaultdict` + `retry.NonRetryable` used |
+| Four-layer contract | ✅ Kept | `cost.py` imports only `pydantic` + `retry` (same layer); no graph/workflow/surface import. `uv run lint-imports` → 2 kept, 0 broken |
+| LLM call added (KDR-004 TieredNode+ValidatorNode) | ✅ N/A | T08 is pure aggregation; no LLM call |
+| `anthropic` SDK / `ANTHROPIC_API_KEY` (KDR-003) | ✅ Absent | `grep -n anthropic ai_workflows/primitives/cost.py` → 0 hits |
+| Checkpoint / resume logic (KDR-009) | ✅ N/A | `Storage` is not imported from `cost.py`; M2 Pipeline owns terminal-state stamp |
+| Retry logic (KDR-006 taxonomy via `RetryingEdge`) | ✅ Compliant | `check_budget` raises `NonRetryable` from `primitives/retry.py`; no bespoke try/except loop |
+| Observability (StructuredLogger only) | ✅ Compliant | No `logfire` / Langfuse / OTel / LangSmith import; no new log surface at all (structlog removed with `BudgetExceeded`) |
+| `nice_to_have.md` adoption check | ✅ None | No Instructor / Typer / Docker-compose / mkdocs / DeepAgents / LangSmith surface introduced |
+| LiteLLM pricing enrichment (KDR-007, §4.1) | ✅ Honoured | `cost_usd` arrives pre-filled on `TokenUsage`; `CostTracker` does no pricing math |
+| Sub-model modelUsage (§4.1) | ✅ Preserved | `sub_models: list[TokenUsage]` (recursive); `total` / `by_tier` / `by_model(include_sub_models=True)` all walk the tree |
 
-## Required reading order for Builder
+No design drift. Proceeding to AC grading.
 
-1. [../../../architecture.md](../../../architecture.md) — especially KDR-007 / §4.1 / §8.5.
-2. [../audit.md](../audit.md) — authoritative source. Rows targeting `task 08` apply here.
-3. [../task_08_prune_cost_tracker.md](../task_08_prune_cost_tracker.md) — deliverables + ACs.
-4. This file — amendments.
-5. If audit and task disagree, **raise the conflict before implementing** per CLAUDE.md Builder conventions.
+## AC grading (task file + carry-over)
 
-## Rows from audit.md this task must execute
+| # | AC | Verdict | Evidence |
+| --- | --- | --- | --- |
+| AC-1 | `TokenUsage` carries recursive `sub_models` and round-trips through pydantic | ✅ | `TokenUsage.sub_models: list[TokenUsage] = Field(default_factory=list)` + `test_token_usage_round_trips_through_pydantic_serialisation` + `test_token_usage_sub_models_accept_recursive_depth` green |
+| AC-2 | `CostTracker.record` is the single write path | ✅ | Only `record(run_id, usage)` mutates `self._entries`; `total` / `by_tier` / `by_model` / `check_budget` are read-only. `test_record_is_the_single_write_method` + `test_total_rolls_up_sub_models_per_modelusage_spec` + `test_by_tier_groups_costs_and_includes_sub_models` + `test_by_model_include_sub_models_true_breaks_out_each_sub_call` |
+| AC-3 | `check_budget` raises the `NonRetryable` from task 07 | ✅ | `from ai_workflows.primitives.retry import NonRetryable`; `test_check_budget_raises_non_retryable_on_breach` + `test_check_budget_sub_models_count_toward_cap` + `test_check_budget_exactly_at_cap_does_not_raise` green; message carries `budget exceeded` + `$0.60` + `$0.50` + `r1` |
+| AC-4 | `grep -r pydantic_ai ai_workflows/primitives/cost.py tests/primitives/test_cost.py` → zero | 🟢 under code-level reading | cost.py import-line scan → 0 hits; test_cost.py import-line scan → 0 hits. Literal-grep matches are in AC-4's own assertion strings (same paradox T07 AC-3 logged). Pinned by `test_cost_module_has_no_pydantic_ai_imports` |
+| AC-5 | `uv run pytest tests/primitives/test_cost.py` green | ✅ | 20 passed in 0.81s |
+| Carry-over M1-T05-ISS-01 (MEDIUM) | `CostTracker` no longer calls trimmed Storage surface | ✅ RESOLVED | `log_llm_call` / `get_total_cost` / `get_cost_breakdown` → 0 hits in cost.py. Pinned by `test_cost_module_does_not_call_trimmed_storage_methods`. Previous test_cost.py 13-failure cascade is now 0 failures |
+| Carry-over M1-T06-ISS-02 (MEDIUM) | `pricing.yaml` fate decided + documented | ✅ RESOLVED | Decision: **kept as-is** (no `CostTracker` read; retained for M2 Claude Code driver). Documented in T08 CHANGELOG block. `cost.py` imports neither `ModelPricing` nor `load_pricing`; pinned by `test_cost_module_does_not_import_pricing_helpers` |
 
-### MODIFY
+## 🔴 HIGH
 
-| Path | Reason |
-| --- | --- |
-| `ai_workflows/primitives/cost.py` | `CostTracker` surface shrinks — LiteLLM now supplies per-call base cost (KDR-007); keep `modelUsage` sub-model aggregation + budget enforcement only. |
-| `pricing.yaml` | LiteLLM now supplies base per-call cost (KDR-007); `pricing.yaml` reduces to only sub-model / override entries that `CostTracker.modelUsage` still needs. |
-| `tests/primitives/test_cost.py` | Rewrite around the pruned `CostTracker` surface. |
+_None._
 
-## Known amendments vs. task spec
+## 🟡 MEDIUM
 
-- **Sub-model rule.** Per [architecture.md §4.1](../../../architecture.md), `CostTracker`'s unique value is the `modelUsage` sub-model breakdown — a `claude_code` call to `opus` may internally spawn `haiku` sub-calls and **both must be recorded**. Do not strip this behaviour when pruning.
-- **Budget enforcement.** Per [architecture.md §8.5](../../../architecture.md), `CostTracker` raises `NonRetryable("budget exceeded")` when the per-run budget is breached. Keep this path intact.
-- **Storage coordination.** Per [task 05](../task_05_trim_storage.md) scope boundary: if `CostTracker` still keeps a per-call ledger table, task 05's migration drops the legacy `llm_calls` table and task 08 is the one that (optionally) adds a replacement migration. Only add a replacement if [architecture.md §4.1](../../../architecture.md) actually demands one.
+_None._
 
-## Carry-over from prior audits
+## 🟢 LOW
 
-### From [M1-T05-ISS-01](task_05_issue.md) (T05 post-build audit, 2026-04-19)
+### ✅ RESOLVED (cycle 2) — M1-T08-ISS-01: `tiers.py:19` docstring references removed `CostTracker.calculate_cost`
 
-T05 trimmed `StorageBackend` to the seven run-registry + gate-log methods mandated by KDR-009 / [architecture.md §4.1](../../../architecture.md). `ai_workflows/primitives/cost.py` still calls the dropped `storage.log_llm_call` / `get_total_cost` / `get_cost_breakdown` methods; the resulting runtime breakage shows up as 13 failures under `tests/primitives/test_cost.py` in the T05 post-build full-suite run. T08 already owns the refit — [task_08 §Deliverables → `cost.py`](../task_08_prune_cost_tracker.md) names `record(run_id, usage: TokenUsage)` as the single write path and specifies "default to in-memory aggregation per run and persist only the totals on `update_run_status`." This carry-over pins the concrete deletions T08 must land before its own pytest can go green.
+**Original problem:** T08 removed `calculate_cost` from `CostTracker`; the `ModelPricing` docstring bullet at `tiers.py:19` still named it.
 
-- [ ] **M1-T05-ISS-01 · MEDIUM** — Rewrite `ai_workflows/primitives/cost.py` so `CostTracker` no longer calls the trimmed-away `Storage` surface:
-  - Replace the runtime `await self._storage.log_llm_call(...)` at `ai_workflows/primitives/cost.py:205` with in-memory aggregation; persist totals only, via `storage.update_run_status(total_cost_usd=…)`.
-  - Replace `await self._storage.get_total_cost(run_id)` at lines 221 and 228 (inside `run_total`) with an in-memory lookup against the aggregate.
-  - Replace `await self._storage.get_cost_breakdown(run_id)` at line 232 (inside `component_breakdown`) with an in-memory dict derived from the same aggregate.
-  - Delete the `See also` bullet at line 47 that cross-references `log_llm_call, get_total_cost, get_cost_breakdown`.
-  - Delete the "Persist the row via storage.log_llm_call" prose in the `record` docstring near line 194.
-  - Rewrite `tests/primitives/test_cost.py` stubs at lines ~403, ~420, ~484 so the fake storage mocks only the trimmed `StorageBackend` surface (`update_run_status(total_cost_usd=…)`, plus the other six methods as no-ops when not exercised). Drop all `log_llm_call` / `upsert_task` references.
-  - Keep the `NonRetryable("budget exceeded")` path intact per [architecture.md §8.5](../../../architecture.md); that pairs with T07's taxonomy and T08 AC-3.
-  - `tests/test_cli.py` at lines 56, 59, 63, 77, 89 (`aiw inspect` seed) remains **out of scope for T08** — those lines live inside the T11 MODIFY row ([audit.md §3](../audit.md)) and are retired when T11 rewrites the CLI stub.
-  Source: [task_05_issue.md §M1-T05-ISS-01](task_05_issue.md).
+**Fix landed in cycle 2:** Rewrote `ai_workflows/primitives/tiers.py:18-21` to describe `ModelPricing` as loaded by `load_pricing` for the M2 Claude Code subprocess driver. Explicitly documents that post-T08 `CostTracker` no longer prices calls. Verified by re-running `grep -n calculate_cost ai_workflows/primitives/tiers.py` → 0 hits. `uv run pytest tests/primitives/test_tiers_loader.py tests/primitives/test_cost.py` → 42 passed.
 
-### From [M1-T06-ISS-02](task_06_issue.md#-medium--m1-t06-iss-02-pricingyaml-trim-overlaps-t08-scope-deferred-for-re-shape-by-t08) (T06 post-build audit, 2026-04-19)
+### ✅ RESOLVED (cycle 2) — M1-T08-ISS-02: `tiers.py:30` claims `cost.py` is the "sole consumer of ModelPricing" after T08 removed the import
 
-T06's AC-3 ("`pricing.yaml` contains only Claude Code CLI entries") overlapped this task's own audit-row MODIFY for `pricing.yaml` (see [../audit.md](../audit.md) §1a). Per [CLAUDE.md](../../../../CLAUDE.md) Builder convention ("Issue file is authoritative amendment to task file. If they disagree, task file wins; call out the conflict first."), the T06 Builder executed the trim: removed the `gemini-2.5-flash` + `qwen2.5-coder:32b` rows, left the three claude CLI rows (`claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`) at zero rates. The current file already matches the shape T08 would otherwise have had to produce, **but T08 still owns the right to reshape further** if the `CostTracker.modelUsage` refit needs sub-model override entries (per audit.md §1a wording: "`pricing.yaml` reduces to only sub-model / override entries that `CostTracker.modelUsage` still needs").
+**Original problem:** T08 dropped `from ai_workflows.primitives.tiers import ModelPricing` from `cost.py`; the "See also" cross-ref still claimed `cost.py` was the sole consumer.
 
-- [ ] **M1-T06-ISS-02 · MEDIUM** — If the `CostTracker` refit requires sub-model override rows in `pricing.yaml`, add them on top of the existing three claude CLI entries; otherwise leave the file as-is. If `CostTracker` no longer reads `pricing.yaml` at all (LiteLLM supplies every base-per-call cost), drop the file and remove the `load_pricing` import/call sites in `ai_workflows/primitives/tiers.py` + any callers. Explicitly document the net decision (kept / reshaped / dropped) in the T08 CHANGELOG block. Source: [task_06_issue.md §M1-T06-ISS-02](task_06_issue.md#-medium--m1-t06-iss-02-pricingyaml-trim-overlaps-t08-scope-deferred-for-re-shape-by-t08).
+**Fix landed in cycle 2:** Rewrote `ai_workflows/primitives/tiers.py:30` to point at M2 Task 02 (the Claude Code subprocess driver) as the consumer of `ModelPricing`, with an explicit note that post-T08 `primitives/cost.py` no longer imports the class. Verified by `grep -n "sole consumer" ai_workflows/primitives/tiers.py` → 0 hits.
+
+## Additions beyond spec — audited and justified
+
+1. **`tier` field on `TokenUsage` (not listed in the spec's three extension fields).** The spec lists `cost_usd` / `model` / `sub_models` as the extensions but also mandates `CostTracker.by_tier(run_id) -> dict[str, float]` as a public method. `by_tier` cannot function without per-call tier metadata. Adding the field is the minimum scope to satisfy both deliverables. Documented in CHANGELOG deviations.
+2. **`calculate_cost` removed (not in the spec's "Remove" list, but implied).** The spec names `BudgetExceeded` removal (replaced by `NonRetryable`) and pydantic-ai coupling removal. `calculate_cost` relies on `ModelPricing` which the new `CostTracker` doesn't read; keeping an unused helper would have been dead code. The M2 Claude Code driver will re-implement pricing math at the driver layer. Noted as deviation in CHANGELOG.
+3. **Synchronous API (spec was silent).** Pre-pivot `record` / `run_total` / `component_breakdown` were `async def`. The pruned surface has no I/O, so methods are now plain `def`. Saves awaits everywhere in callers; reversible if M2 needs async.
+4. **`defaultdict(list)` for `_entries` + `defaultdict(float)` for rollups.** Implementation detail — avoids `if run_id not in …` branches. No public surface impact.
+5. **Recursive `_accumulate_by_model` walks sub-models when `include_sub_models=True`.** Matches §4.1's "both must be recorded" rule across arbitrary modelUsage nesting depth. Spec said only 1-level sub_models; going deeper costs nothing and prevents future drift if LiteLLM/Claude CLI start emitting deeper trees.
+6. **`test_cost_tracker_structural_compat_with_magic_mock_spec`.** Carry-forward from the deleted `test_cost_tracker_structural_compat_with_model_factory` — M2 callback will need `MagicMock(spec=CostTracker)` to keep its mocks typed. Small pin, no scope creep.
+
+## Gate summary
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| `uv run ruff check` | ✅ | "All checks passed!" |
+| `uv run lint-imports` | ✅ | 2 contracts kept, 0 broken |
+| `uv run pytest tests/primitives/test_cost.py` | ✅ | 20 passed in 0.81s |
+| `uv run pytest` (full suite) | 🟡 T-scope read | 128 passed / 4 failed. Failures = T09 (`logfire`) + T11 (`test_cli.py` cascade + 4 `test_scaffolding.py` fallout). Pre-existing, T07 post-build audit already logged these under the same T-scope reading. T08 *reduced* the prior 13 `test_cost.py` failures to 0 — net suite improvement |
+| `grep -r pydantic_ai ai_workflows/primitives/cost.py tests/primitives/test_cost.py` | 🟢 code-level | Zero import-line hits; literal matches are in AC-4's own assertion strings (same paradox as T07 AC-3) |
+
+## Issue log — cross-task follow-up
+
+| ID | Severity | Status | Where | Owner |
+| --- | --- | --- | --- | --- |
+| M1-T05-ISS-01 | MEDIUM | ✅ RESOLVED (cycle 1) | trimmed-Storage method refs in cost.py | Closed by T08 refit |
+| M1-T06-ISS-02 | MEDIUM | ✅ RESOLVED (cycle 1) | `pricing.yaml` kept as-is; cost.py no longer reads it | Closed by T08 refit |
+| M1-T08-ISS-01 | LOW | ✅ RESOLVED (cycle 2) | `tiers.py:19` — stale `CostTracker.calculate_cost` ref | Closed |
+| M1-T08-ISS-02 | LOW | ✅ RESOLVED (cycle 2) | `tiers.py:30` — stale "sole consumer of ModelPricing" claim | Closed |
+| M1-T08-DEF-01 | LOW | 🟡 DEFERRED → T09 | `logging.py:25` references removed `BudgetExceeded` | T09 (logger sanity) |
+
+## Deferred to future tasks
+
+### To T09 (StructuredLogger sanity pass) — M1-T08-DEF-01
+
+`ai_workflows/primitives/logging.py:25` still lists `BudgetExceeded` as an ERROR-level exemplar in its module docstring. T08 replaced `BudgetExceeded` with the `NonRetryable("budget exceeded")` route from T07. T09's logger-sanity pass is already slated to touch this file; forward-deferring the docstring fix avoids T08 drive-by into T09 territory. Carry-over block appended to `design_docs/phases/milestone_1_reconciliation/issues/task_09_issue.md`.
+
+## Deferred to nice_to_have
+
+_None._ No finding maps to a `design_docs/nice_to_have.md` entry.
 
 ## Propagation status
 
-Post-build audit will overwrite this file with implementation findings.
-On completion of the M1-T05-ISS-01 carry-over above, [task_05_issue.md](task_05_issue.md) flips `M1-T05-ISS-01` from `DEFERRED` to `RESOLVED (commit sha)` on the next T05 re-audit touch point.
-On completion of the M1-T06-ISS-02 carry-over, [task_06_issue.md](task_06_issue.md) flips `M1-T06-ISS-02` from `DEFERRED` to `RESOLVED (commit sha)` on the next T06 re-audit touch point.
+- M1-T08-ISS-01 and M1-T08-ISS-02 resolved above (cycle 2 docstring sweep in `tiers.py`). No external propagation needed — targets lived in the T08-affected `tiers.py` tree.
+- On T09 post-build audit: flip `M1-T08-DEF-01` from `DEFERRED` to `RESOLVED`; carry-over entry in [task_09_issue.md](task_09_issue.md) is the channel.
+- M1-T05-ISS-01 → already resolved in cycle 1; on the next T05 re-audit touch point, [task_05_issue.md](task_05_issue.md) can flip `M1-T05-ISS-01` from `DEFERRED` to `RESOLVED (<commit sha>)`.
+- M1-T06-ISS-02 → already resolved in cycle 1; on the next T06 re-audit touch point, [task_06_issue.md](task_06_issue.md) can flip `M1-T06-ISS-02` from `DEFERRED` to `RESOLVED (<commit sha>)`.

@@ -7,6 +7,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M1 Task 08: Prune CostTracker Surface (2026-04-19)
+
+Rewrote `ai_workflows/primitives/cost.py` to the pruned surface
+mandated by KDR-007 + [architecture.md §4.1](design_docs/architecture.md) +
+[architecture.md §8.5](design_docs/architecture.md). `CostTracker` no
+longer computes cost (LiteLLM enriches pre-handoff; the M2 Claude Code
+subprocess driver will compute from `pricing.yaml`) and no longer
+writes per-call SQL rows. It is an in-memory aggregate keyed by
+`run_id`; the M2 Pipeline stamps the final total on
+`runs.total_cost_usd` via `StorageBackend.update_run_status`. Budget
+breach raises `NonRetryable` from [task 07](design_docs/phases/milestone_1_reconciliation/task_07_refit_retry_policy.md),
+not the removed `BudgetExceeded` exception.
+
+**Files modified:**
+
+- `ai_workflows/primitives/cost.py` — new surface. `TokenUsage`
+  carries the Task-02 token columns plus `cost_usd`, `model`, `tier`,
+  and recursive `sub_models: list[TokenUsage]` for Claude Code's
+  modelUsage rollup (§4.1 — a `claude_code` call to `opus` may spawn
+  `haiku` sub-calls and both must record). `CostTracker` exposes
+  `record(run_id, usage) -> None` (single write path), `total(run_id)
+  -> float`, `by_tier(run_id) -> dict[str, float]`,
+  `by_model(run_id, include_sub_models=True) -> dict[str, float]`,
+  and `check_budget(run_id, cap_usd) -> None`. Removed:
+  `BudgetExceeded` (replaced by `NonRetryable("budget exceeded")`
+  per §8.5), `calculate_cost` (moves to the M2 provider driver
+  layer), `is_local` / `is_escalation` flags (per-call persistence
+  dropped with `llm_calls` in T05), `Storage` / `ModelPricing`
+  imports.
+- `tests/primitives/test_cost.py` — rewritten (20 tests). Covers:
+  TokenUsage field defaults + pydantic round-trip of nested
+  `sub_models` (AC-1); `record` as the single mutator + sub-model
+  rollup under `total` / `by_tier` / `by_model` (AC-2); `by_model`
+  include/exclude sub-models behaviour (task-spec test update);
+  disjoint run_id isolation; `check_budget` raising `NonRetryable`
+  with amounts + run_id in the message, sub-model costs pushing
+  over cap, strict-`>` comparison at cap, unknown-run no-raise
+  (AC-3); AC-4 import-line scan of both files for `pydantic_ai`;
+  carry-over pins scanning cost.py for trimmed-Storage method
+  names and pricing helper imports; `__all__` surface pin;
+  `MagicMock(spec=CostTracker)` structural-compat pin for M2.
+
+**Acceptance criteria satisfied:**
+
+- AC-1 TokenUsage carries recursive `sub_models` and round-trips
+  through pydantic (`test_token_usage_round_trips_through_pydantic_serialisation`,
+  `test_token_usage_sub_models_accept_recursive_depth`).
+- AC-2 `CostTracker.record` is the single write path
+  (`test_record_is_the_single_write_method`,
+  `test_total_rolls_up_sub_models_per_modelusage_spec` +
+  `test_by_tier_groups_costs_and_includes_sub_models` +
+  `test_by_model_include_sub_models_true_breaks_out_each_sub_call`).
+- AC-3 `check_budget` raises `NonRetryable`
+  (`test_check_budget_raises_non_retryable_on_breach`,
+  `test_check_budget_sub_models_count_toward_cap`,
+  `test_check_budget_exactly_at_cap_does_not_raise`).
+- AC-4 `grep -r "pydantic_ai" ai_workflows/primitives/cost.py
+  tests/primitives/test_cost.py` returns zero — pinned by
+  `test_cost_module_has_no_pydantic_ai_imports`.
+- AC-5 `uv run pytest tests/primitives/test_cost.py` green — 20
+  passed, 0 failed.
+
+**Carry-over resolved:**
+
+- M1-T05-ISS-01 — `cost.py` no longer imports `Storage` / calls
+  `log_llm_call` / `get_total_cost` / `get_cost_breakdown`. The
+  tracker is storage-free; persistence moves to the M2 Pipeline
+  stamping the final total via `storage.update_run_status`.
+  Pinned by
+  `test_cost_module_does_not_call_trimmed_storage_methods`.
+- M1-T06-ISS-02 — decision: **pricing.yaml kept as-is.**
+  `CostTracker` no longer reads it (`cost_usd` arrives pre-enriched
+  on `TokenUsage`), but the file is still consumed by
+  `tiers.py:load_pricing()` for the M2 Claude Code driver's cost
+  computation per task_08 deliverables. Neither renamed nor
+  reshaped. Pinned by
+  `test_cost_module_does_not_import_pricing_helpers`.
+
+**Deviations from spec:**
+
+- Spec lists `cost_usd`, `model`, and `sub_models` as the three
+  TokenUsage extension fields. Added `tier: str = ""` alongside
+  them because `CostTracker.by_tier` (also listed as a method)
+  cannot function without per-call tier metadata. Called out
+  here as a spec clarification rather than scope creep — by_tier
+  is in the spec deliverables list.
+- `calculate_cost` removed from `cost.py` rather than relocated —
+  the M2 Claude Code driver owns pricing math, and the spec's
+  "Remove" list calls out "Anything that imported pydantic-ai
+  result types" without preserving unused helpers. Kept the
+  pricing-yaml consumer surface (`tiers.py:ModelPricing`,
+  `load_pricing`) intact for the driver to import when it lands.
+
+**Post-audit sweeps (cycle 2):**
+
+- `ai_workflows/primitives/tiers.py:18-19` — docstring bullet about
+  `ModelPricing` rewritten to drop the `CostTracker.calculate_cost`
+  reference (the method no longer exists post-T08); replaced with a
+  pointer to the M2 Claude Code driver.
+- `ai_workflows/primitives/tiers.py:30` — "See also" cross-ref that
+  named `cost.py` as the "sole consumer of `ModelPricing`" rewritten
+  to point at M2 Task 02 (cost.py no longer imports `ModelPricing`
+  post-T08). Closes M1-T08-ISS-01 and M1-T08-ISS-02. `logging.py`
+  still carries a stale `BudgetExceeded` mention — forward-deferred
+  to T09 as `M1-T08-DEF-01` (T09 already owns `logging.py` MODIFY).
+
 ### Changed — M1 Task 07: Refit RetryPolicy to 3-bucket Taxonomy (2026-04-19)
 
 Rewrote `ai_workflows/primitives/retry.py` around the three-bucket

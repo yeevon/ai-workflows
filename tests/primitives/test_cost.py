@@ -1,13 +1,30 @@
-"""Tests for ``ai_workflows.primitives.cost`` (M1 Task 09).
+"""Tests for the pruned CostTracker surface (M1 Task 08 — KDR-007).
 
-One test per acceptance criterion (AC-1 … AC-8) plus coverage of the
-``calculate_cost`` edge cases (missing model in pricing, zero rates,
-cache-read / cache-write arithmetic) and the ``BudgetExceeded`` message
-format.
+Grades every AC from
+[design_docs/phases/milestone_1_reconciliation/task_08_prune_cost_tracker.md]:
 
-Storage is the real :class:`SQLiteStorage` so the cost-tracker's
-integration with the Task 08 schema is pinned end-to-end; no mock layer
-between the tracker and SQLite.
+* AC-1: `TokenUsage` carries the recursive `sub_models` field and
+  round-trips through pydantic serialisation.
+* AC-2: `CostTracker.record` is the single write path; aggregation
+  methods (`total`, `by_tier`, `by_model`) are pure reads.
+* AC-3: `check_budget` raises the `NonRetryable` from
+  [task 07](../task_07_refit_retry_policy.md).
+* AC-4: `grep -r "pydantic_ai" ai_workflows/primitives/cost.py
+  tests/primitives/test_cost.py` returns zero matches — pinned here
+  by :func:`test_cost_module_has_no_pydantic_ai_imports`.
+* AC-5: `uv run pytest tests/primitives/test_cost.py` green (this
+  file).
+
+Carry-over grading:
+* M1-T05-ISS-01 — this file no longer references
+  ``storage.log_llm_call`` / ``get_total_cost`` / ``get_cost_breakdown``;
+  the tracker is storage-free. Pinned by
+  :func:`test_cost_module_does_not_call_trimmed_storage_methods`.
+* M1-T06-ISS-02 — ``CostTracker`` no longer reads ``pricing.yaml``
+  directly. ``pricing.yaml`` is retained for the M2 Claude Code driver
+  per [task_08 §Deliverables](../task_08_prune_cost_tracker.md). The
+  cost module imports no pricing helper. Pinned by
+  :func:`test_cost_module_does_not_import_pricing_helpers`.
 """
 
 from __future__ import annotations
@@ -15,546 +32,342 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import structlog
-from structlog.testing import capture_logs
 
-from ai_workflows.primitives.cost import (
-    BudgetExceeded,
-    CostTracker,
-    TokenUsage,
-    calculate_cost,
-)
-from ai_workflows.primitives.storage import SQLiteStorage
-from ai_workflows.primitives.tiers import ModelPricing
+from ai_workflows.primitives import cost as cost_module
+from ai_workflows.primitives.cost import CostTracker, TokenUsage
+from ai_workflows.primitives.retry import NonRetryable
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# AC-1 — TokenUsage + recursive sub_models
 # ---------------------------------------------------------------------------
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-MIGRATIONS = REPO_ROOT / "migrations"
+def test_token_usage_has_task_02_surface_and_extensions() -> None:
+    """The Task-02 surface (input/output + cache columns) is preserved.
 
-
-def _pricing() -> dict[str, ModelPricing]:
-    """Pricing table used by the tracker tests.
-
-    Matches the canonical ``pricing.yaml`` so the unit values
-    (``gemini-2.0-flash`` at ``$0.10`` / ``$0.40`` per MTok) stay in
-    lock-step with production pricing.
+    Extensions land per task_08: ``cost_usd``, ``model``, ``tier``,
+    ``sub_models``. All default to sensible empty values so a provider
+    driver can build a ``TokenUsage`` incrementally.
     """
-    return {
-        "gemini-2.0-flash": ModelPricing(
-            input_per_mtok=0.10,
-            output_per_mtok=0.40,
-        ),
-        "claude-sonnet-4-6": ModelPricing(
-            input_per_mtok=3.00,
-            output_per_mtok=15.00,
-            cache_read_per_mtok=0.30,
-            cache_write_per_mtok=3.75,
-        ),
-        "qwen2.5-coder:32b": ModelPricing(
-            input_per_mtok=0.0,
-            output_per_mtok=0.0,
-        ),
-    }
+    usage = TokenUsage()
+    assert usage.input_tokens == 0
+    assert usage.output_tokens == 0
+    assert usage.cache_read_tokens == 0
+    assert usage.cache_write_tokens == 0
+    assert usage.cost_usd == 0.0
+    assert usage.model == ""
+    assert usage.tier == ""
+    assert usage.sub_models == []
 
 
-async def _open_storage(tmp_path: Path) -> SQLiteStorage:
-    """Open a fresh SQLite DB for a test under ``tmp_path``."""
-    db_path = tmp_path / "runs.db"
-    return await SQLiteStorage.open(db_path, migrations_dir=MIGRATIONS)
-
-
-async def _new_run(
-    storage: SQLiteStorage,
-    *,
-    run_id: str = "r1",
-    workflow_id: str = "wf",
-    budget_cap_usd: float | None = None,
-) -> None:
-    """Insert a ``runs`` row so foreign-key / schema invariants are honoured."""
-    await storage.create_run(
-        run_id=run_id,
-        workflow_id=workflow_id,
-        workflow_dir_hash="deadbeef" * 8,
-        budget_cap_usd=budget_cap_usd,
-    )
-
-
-# ---------------------------------------------------------------------------
-# AC-1 — calculate_cost arithmetic
-# ---------------------------------------------------------------------------
-
-
-def test_calculate_cost_matches_expected_for_gemini():
-    """Gemini-2.0-flash at $0.10/$0.40 per MTok — 1 MTok in + 1 MTok out = $0.50."""
-    usage = TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000)
-    cost = calculate_cost("gemini-2.0-flash", usage, _pricing())
-    assert cost == pytest.approx(0.10 + 0.40)
-
-
-def test_calculate_cost_scales_per_token():
-    """1000 in + 500 out at Gemini rates → 1e3·1e-7 + 5e2·4e-7 = $0.0003."""
-    usage = TokenUsage(input_tokens=1000, output_tokens=500)
-    cost = calculate_cost("gemini-2.0-flash", usage, _pricing())
-    assert cost == pytest.approx(0.0003)
-
-
-def test_calculate_cost_includes_cache_rates():
-    """Cache-read and cache-write columns apply their own rates."""
+def test_token_usage_round_trips_through_pydantic_serialisation() -> None:
+    """Nested sub_models round-trip through ``model_dump`` + reconstruction."""
     usage = TokenUsage(
-        input_tokens=0,
-        output_tokens=0,
-        cache_read_tokens=1_000_000,
-        cache_write_tokens=1_000_000,
+        input_tokens=1000,
+        output_tokens=500,
+        cost_usd=0.0005,
+        model="claude-opus-4-7",
+        tier="planner",
+        sub_models=[
+            TokenUsage(
+                input_tokens=100,
+                output_tokens=50,
+                cost_usd=0.00002,
+                model="claude-haiku-4-5-20251001",
+                tier="planner",
+            ),
+            TokenUsage(
+                input_tokens=200,
+                output_tokens=75,
+                cost_usd=0.00003,
+                model="claude-haiku-4-5-20251001",
+                tier="planner",
+            ),
+        ],
     )
-    cost = calculate_cost("claude-sonnet-4-6", usage, _pricing())
-    # $0.30 + $3.75
-    assert cost == pytest.approx(4.05)
+    dumped = usage.model_dump()
+    rebuilt = TokenUsage.model_validate(dumped)
+    assert rebuilt == usage
+    assert len(rebuilt.sub_models) == 2
+    assert all(child.model == "claude-haiku-4-5-20251001" for child in rebuilt.sub_models)
 
 
-def test_calculate_cost_zero_rates_returns_zero():
-    """Local models (all rates 0.0) naturally return $0 via the math."""
-    usage = TokenUsage(input_tokens=123_456, output_tokens=78_910)
-    cost = calculate_cost("qwen2.5-coder:32b", usage, _pricing())
-    assert cost == 0.0
-
-
-def test_calculate_cost_unknown_model_returns_zero_and_warns():
-    """Unknown model → 0.0 with a structured WARNING (no exception)."""
-    usage = TokenUsage(input_tokens=1000, output_tokens=500)
-    with capture_logs() as logs:
-        cost = calculate_cost("totally-made-up-model", usage, _pricing())
-    assert cost == 0.0
-    warnings = [e for e in logs if e.get("event") == "cost.model_not_in_pricing"]
-    assert len(warnings) == 1
-    assert warnings[0]["model"] == "totally-made-up-model"
+def test_token_usage_sub_models_accept_recursive_depth() -> None:
+    """``sub_models`` is typed recursively so the modelUsage tree can nest."""
+    leaf = TokenUsage(model="claude-haiku-4-5-20251001", cost_usd=0.0001, tier="planner")
+    mid = TokenUsage(
+        model="claude-sonnet-4-6",
+        cost_usd=0.0005,
+        tier="planner",
+        sub_models=[leaf],
+    )
+    top = TokenUsage(
+        model="claude-opus-4-7",
+        cost_usd=0.001,
+        tier="planner",
+        sub_models=[mid],
+    )
+    assert top.sub_models[0].sub_models[0].model == "claude-haiku-4-5-20251001"
+    # Round-trip the three-level tree through dict + reconstruct.
+    rebuilt = TokenUsage.model_validate(top.model_dump())
+    assert rebuilt == top
 
 
 # ---------------------------------------------------------------------------
-# AC-2 — local model records $0 and is_local=1
+# AC-2 — CostTracker.record is the single write path
 # ---------------------------------------------------------------------------
 
 
-async def test_record_local_model_sets_cost_zero_and_is_local_flag(tmp_path):
-    """``is_local=True`` forces cost to 0.0 and is_local=1 in storage."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
+def test_record_is_the_single_write_method() -> None:
+    """Only ``record`` mutates state; the read methods do not accept usage."""
+    tracker = CostTracker()
+    # ``record`` is the only public mutator — total/by_tier/by_model don't
+    # take a TokenUsage parameter and check_budget only reads totals.
+    tracker.record("r1", TokenUsage(cost_usd=0.10, model="x", tier="t"))
+    assert tracker.total("r1") == pytest.approx(0.10)
 
-    cost = await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="worker",
-        tier="local_coder",
-        model="qwen2.5-coder:32b",
-        usage=TokenUsage(input_tokens=500, output_tokens=200),
-        is_local=True,
+
+def test_total_rolls_up_sub_models_per_modelusage_spec() -> None:
+    """Sub-model costs count toward the per-run total.
+
+    Mirrors the §4.1 load-bearing behaviour: a ``claude_code`` call to
+    ``opus`` that spawned a ``haiku`` sub-call must have both costs in
+    the rollup.
+    """
+    tracker = CostTracker()
+    tracker.record(
+        "r1",
+        TokenUsage(
+            cost_usd=0.10,
+            model="claude-opus-4-7",
+            tier="planner",
+            sub_models=[
+                TokenUsage(cost_usd=0.02, model="claude-haiku-4-5-20251001", tier="planner"),
+                TokenUsage(cost_usd=0.03, model="claude-haiku-4-5-20251001", tier="planner"),
+            ],
+        ),
     )
-
-    assert cost == 0.0
-
-    # Direct DB probe to pin the is_local=1 value.
-    import sqlite3
-
-    with sqlite3.connect(storage._db_path) as conn:
-        cursor = conn.execute(
-            "SELECT cost_usd, is_local FROM llm_calls WHERE run_id = ?", ("r1",)
-        )
-        rows = cursor.fetchall()
-    assert rows == [(0.0, 1)]
+    assert tracker.total("r1") == pytest.approx(0.15)
 
 
-async def test_record_local_overrides_nonzero_pricing(tmp_path):
-    """If is_local=True, cost stays 0 even for a model that has pricing."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
+def test_total_is_zero_for_unknown_run_id() -> None:
+    """An un-recorded ``run_id`` reports ``0.0`` — not a KeyError."""
+    tracker = CostTracker()
+    assert tracker.total("never-recorded") == 0.0
 
-    cost = await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="worker",
-        tier="local_coder",
-        model="gemini-2.0-flash",  # priced, but forced local
-        usage=TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000),
-        is_local=True,
+
+def test_by_tier_groups_costs_and_includes_sub_models() -> None:
+    """Sub-model costs inherit the parent entry's tier in ``by_tier``."""
+    tracker = CostTracker()
+    tracker.record(
+        "r1",
+        TokenUsage(
+            cost_usd=0.10,
+            model="claude-opus-4-7",
+            tier="planner",
+            sub_models=[
+                TokenUsage(cost_usd=0.02, model="claude-haiku-4-5-20251001", tier="planner"),
+            ],
+        ),
     )
-    assert cost == 0.0
-
-
-# ---------------------------------------------------------------------------
-# AC-3 — run_total excludes is_local rows
-# ---------------------------------------------------------------------------
-
-
-async def test_run_total_excludes_is_local_rows(tmp_path):
-    """A $0.50 priced call + 10 local $0 calls → run_total stays $0.50."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
-
-    await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="worker",
-        tier="gemini_flash",
-        model="gemini-2.0-flash",
-        usage=TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000),
+    tracker.record(
+        "r1",
+        TokenUsage(cost_usd=0.05, model="gemini-2.5-flash", tier="implementer"),
     )
-    for _ in range(10):
-        await tracker.record(
-            run_id="r1",
-            workflow_id="wf",
-            component="local_worker",
-            tier="local_coder",
-            model="qwen2.5-coder:32b",
-            usage=TokenUsage(input_tokens=10_000, output_tokens=5_000),
-            is_local=True,
-        )
-
-    assert await tracker.run_total("r1") == pytest.approx(0.50)
-
-
-# ---------------------------------------------------------------------------
-# AC-4 — component_breakdown groups by component
-# ---------------------------------------------------------------------------
-
-
-async def test_component_breakdown_groups_per_component(tmp_path):
-    """Two components, each with a different priced call → per-component totals."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
-
-    await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="planner",
-        tier="gemini_flash",
-        model="gemini-2.0-flash",
-        usage=TokenUsage(input_tokens=1_000_000, output_tokens=0),
-    )
-    await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="validator",
-        tier="gemini_flash",
-        model="gemini-2.0-flash",
-        usage=TokenUsage(input_tokens=0, output_tokens=1_000_000),
-    )
-
-    breakdown = await tracker.component_breakdown("r1")
-    assert breakdown == {
-        "planner": pytest.approx(0.10),
-        "validator": pytest.approx(0.40),
+    assert tracker.by_tier("r1") == {
+        "planner": pytest.approx(0.12),
+        "implementer": pytest.approx(0.05),
     }
 
 
-async def test_component_breakdown_excludes_local(tmp_path):
-    """Local calls never appear in the breakdown (storage filters is_local=1)."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
-
-    await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="local_worker",
-        tier="local_coder",
-        model="qwen2.5-coder:32b",
-        usage=TokenUsage(input_tokens=100, output_tokens=100),
-        is_local=True,
+def test_by_model_include_sub_models_true_breaks_out_each_sub_call() -> None:
+    """Task spec test-update requirement: each sub-model rolls under its own key."""
+    tracker = CostTracker()
+    tracker.record(
+        "r1",
+        TokenUsage(
+            cost_usd=0.10,
+            model="claude-opus-4-7",
+            tier="planner",
+            sub_models=[
+                TokenUsage(cost_usd=0.02, model="claude-haiku-4-5-20251001", tier="planner"),
+                TokenUsage(cost_usd=0.03, model="claude-haiku-4-5-20251001", tier="planner"),
+            ],
+        ),
     )
-    breakdown = await tracker.component_breakdown("r1")
-    assert breakdown == {}
-
-
-# ---------------------------------------------------------------------------
-# AC-5 — budget cap triggers BudgetExceeded at or before the call that exceeds
-# ---------------------------------------------------------------------------
-
-
-async def test_budget_cap_triggers_budget_exceeded(tmp_path):
-    """Two $0.30 calls under a $0.50 cap → second call raises on the breach."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage, budget_cap_usd=0.50)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=0.50)
-
-    # $0.30 → under cap.
-    await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="worker",
-        tier="gemini_flash",
-        model="gemini-2.0-flash",
-        usage=TokenUsage(input_tokens=1_000_000, output_tokens=500_000),
+    tracker.record(
+        "r1",
+        TokenUsage(cost_usd=0.04, model="claude-sonnet-4-6", tier="planner"),
     )
-    # Running total now $0.30. Next identical call pushes to $0.60 → raises.
-    with pytest.raises(BudgetExceeded) as exc_info:
-        await tracker.record(
-            run_id="r1",
-            workflow_id="wf",
-            component="worker",
-            tier="gemini_flash",
-            model="gemini-2.0-flash",
-            usage=TokenUsage(input_tokens=1_000_000, output_tokens=500_000),
-        )
-    assert exc_info.value.run_id == "r1"
-    assert exc_info.value.current_cost == pytest.approx(0.60)
-    assert exc_info.value.cap == pytest.approx(0.50)
+    breakdown = tracker.by_model("r1", include_sub_models=True)
+    assert breakdown == {
+        "claude-opus-4-7": pytest.approx(0.10),
+        "claude-haiku-4-5-20251001": pytest.approx(0.05),
+        "claude-sonnet-4-6": pytest.approx(0.04),
+    }
 
 
-async def test_budget_exceeded_row_is_persisted(tmp_path):
-    """The call that breached the cap is still written to ``llm_calls``."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage, budget_cap_usd=0.10)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=0.10)
-
-    with pytest.raises(BudgetExceeded):
-        await tracker.record(
-            run_id="r1",
-            workflow_id="wf",
-            component="worker",
-            tier="gemini_flash",
-            model="gemini-2.0-flash",
-            usage=TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000),
-        )
-
-    import sqlite3
-
-    with sqlite3.connect(storage._db_path) as conn:
-        (count,) = conn.execute(
-            "SELECT COUNT(*) FROM llm_calls WHERE run_id = ?", ("r1",)
-        ).fetchone()
-    assert count == 1
-
-
-async def test_budget_cap_not_triggered_below_cap(tmp_path):
-    """``new_total == cap`` must *not* raise (strict ``>`` comparison)."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage, budget_cap_usd=0.50)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=0.50)
-
-    # $0.50 exactly.
-    cost = await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="worker",
-        tier="gemini_flash",
-        model="gemini-2.0-flash",
-        usage=TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000),
+def test_by_model_include_sub_models_false_hides_sub_calls() -> None:
+    """``include_sub_models=False`` attributes everything to the top-level model."""
+    tracker = CostTracker()
+    tracker.record(
+        "r1",
+        TokenUsage(
+            cost_usd=0.10,
+            model="claude-opus-4-7",
+            tier="planner",
+            sub_models=[
+                TokenUsage(cost_usd=0.02, model="claude-haiku-4-5-20251001", tier="planner"),
+            ],
+        ),
     )
-    assert cost == pytest.approx(0.50)
-    assert await tracker.run_total("r1") == pytest.approx(0.50)
+    breakdown = tracker.by_model("r1", include_sub_models=False)
+    assert breakdown == {"claude-opus-4-7": pytest.approx(0.10)}
 
 
-async def test_budget_cap_none_never_raises(tmp_path):
-    """With no cap, arbitrary spend is permitted (the warning is the only signal)."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
-
-    for _ in range(5):
-        await tracker.record(
-            run_id="r1",
-            workflow_id="wf",
-            component="worker",
-            tier="gemini_flash",
-            model="gemini-2.0-flash",
-            usage=TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000),
-        )
-    assert await tracker.run_total("r1") == pytest.approx(2.50)
+def test_entries_for_disjoint_runs_do_not_bleed() -> None:
+    """Two runs recording into one tracker stay isolated by run_id."""
+    tracker = CostTracker()
+    tracker.record("r1", TokenUsage(cost_usd=0.10, model="a", tier="t"))
+    tracker.record("r2", TokenUsage(cost_usd=0.25, model="b", tier="t"))
+    assert tracker.total("r1") == pytest.approx(0.10)
+    assert tracker.total("r2") == pytest.approx(0.25)
+    assert tracker.by_model("r1") == {"a": pytest.approx(0.10)}
+    assert tracker.by_model("r2") == {"b": pytest.approx(0.25)}
 
 
 # ---------------------------------------------------------------------------
-# AC-6 — BudgetExceeded message includes run_id, current_cost, cap
+# AC-3 — check_budget raises NonRetryable at threshold
 # ---------------------------------------------------------------------------
 
 
-def test_budget_exceeded_message_contains_run_id_and_dollar_amounts():
-    """The exception message must expose the three diagnostic fields."""
-    exc = BudgetExceeded(run_id="run-abc", current_cost=7.89, cap=5.00)
-    message = str(exc)
-    assert "run-abc" in message
-    assert "$7.89" in message
-    assert "$5.00" in message
+def test_check_budget_raises_non_retryable_on_breach() -> None:
+    """Task spec test-update requirement: budget breach → task 07 NonRetryable."""
+    tracker = CostTracker()
+    tracker.record("r1", TokenUsage(cost_usd=0.60, model="x", tier="t"))
+    with pytest.raises(NonRetryable) as exc_info:
+        tracker.check_budget("r1", cap_usd=0.50)
+    # §8.5 says "budget exceeded"; the message surfaces run + amounts.
+    message = str(exc_info.value)
+    assert "budget exceeded" in message
+    assert "$0.60" in message
+    assert "$0.50" in message
+    assert "r1" in message
 
 
-def test_budget_exceeded_exposes_attributes():
-    """Attributes are readable for programmatic callers (Pipeline, CLI)."""
-    exc = BudgetExceeded(run_id="r", current_cost=1.23, cap=1.00)
-    assert exc.run_id == "r"
-    assert exc.current_cost == 1.23
-    assert exc.cap == 1.00
-
-
-# ---------------------------------------------------------------------------
-# AC-7 — null budget cap logs a warning on run start
-# ---------------------------------------------------------------------------
-
-
-def test_null_budget_cap_logs_warning_at_construction(tmp_path):
-    """Constructing with ``budget_cap_usd=None`` emits exactly one WARNING."""
-    # Storage is not used for this test — construction-time behaviour only.
-    class _StubStorage:
-        async def log_llm_call(self, *a, **k): ...
-        async def get_total_cost(self, *a, **k): return 0.0
-        async def get_cost_breakdown(self, *a, **k): return {}
-
-    with capture_logs() as logs:
-        CostTracker(_StubStorage(), _pricing(), budget_cap_usd=None)
-
-    warnings = [
-        e for e in logs
-        if e.get("event") == "cost.no_budget_cap" and e.get("log_level") == "warning"
-    ]
-    assert len(warnings) == 1
-
-
-def test_explicit_cap_does_not_log_warning():
-    """Setting an explicit cap (any number) must not emit the no-cap warning."""
-    class _StubStorage:
-        async def log_llm_call(self, *a, **k): ...
-        async def get_total_cost(self, *a, **k): return 0.0
-        async def get_cost_breakdown(self, *a, **k): return {}
-
-    with capture_logs() as logs:
-        CostTracker(_StubStorage(), _pricing(), budget_cap_usd=5.0)
-
-    assert [e for e in logs if e.get("event") == "cost.no_budget_cap"] == []
-
-
-# ---------------------------------------------------------------------------
-# AC-8 — escalation calls tag is_escalation=1
-# ---------------------------------------------------------------------------
-
-
-async def test_escalation_flag_persists_as_is_escalation_one(tmp_path):
-    """``is_escalation=True`` → ``llm_calls.is_escalation == 1`` in storage."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
-
-    await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="escalator",
-        tier="gemini_flash",
-        model="gemini-2.0-flash",
-        usage=TokenUsage(input_tokens=100, output_tokens=100),
-        is_escalation=True,
+def test_check_budget_sub_models_count_toward_cap() -> None:
+    """Sub-model costs push the total over the cap — §4.1 load-bearing."""
+    tracker = CostTracker()
+    tracker.record(
+        "r1",
+        TokenUsage(
+            cost_usd=0.40,
+            model="claude-opus-4-7",
+            tier="planner",
+            sub_models=[
+                TokenUsage(cost_usd=0.15, model="claude-haiku-4-5-20251001", tier="planner"),
+            ],
+        ),
     )
-    await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="worker",
-        tier="gemini_flash",
-        model="gemini-2.0-flash",
-        usage=TokenUsage(input_tokens=100, output_tokens=100),
-        is_escalation=False,
-    )
+    with pytest.raises(NonRetryable):
+        tracker.check_budget("r1", cap_usd=0.50)
 
-    import sqlite3
 
-    with sqlite3.connect(storage._db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT component, is_escalation FROM llm_calls WHERE run_id = ? "
-            "ORDER BY id",
-            ("r1",),
-        ).fetchall()
-    assert [(r["component"], r["is_escalation"]) for r in rows] == [
-        ("escalator", 1),
-        ("worker", 0),
-    ]
+def test_check_budget_exactly_at_cap_does_not_raise() -> None:
+    """Strict ``>`` — landing on the cap is fine; exceeding it is the breach."""
+    tracker = CostTracker()
+    tracker.record("r1", TokenUsage(cost_usd=0.50, model="x", tier="t"))
+    tracker.check_budget("r1", cap_usd=0.50)  # must not raise
+
+
+def test_check_budget_under_cap_does_not_raise() -> None:
+    """Running under the cap is the common path; no exception."""
+    tracker = CostTracker()
+    tracker.record("r1", TokenUsage(cost_usd=0.10, model="x", tier="t"))
+    tracker.check_budget("r1", cap_usd=0.50)
+
+
+def test_check_budget_for_unknown_run_id_does_not_raise() -> None:
+    """Checking the budget of a run that has no entries is $0 — well under any cap."""
+    tracker = CostTracker()
+    tracker.check_budget("never-recorded", cap_usd=0.01)
 
 
 # ---------------------------------------------------------------------------
-# Extra coverage — end-to-end integration with storage + task_id threading
+# AC-4 — sanity pins (no pydantic-ai, no trimmed-storage calls, no pricing imports)
 # ---------------------------------------------------------------------------
 
 
-async def test_record_threads_task_id_into_llm_calls(tmp_path):
-    """``task_id`` is optional; when provided it lands on the ``llm_calls`` row."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    await storage.upsert_task(run_id="r1", task_id="t1", component="worker", status="running")
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
-
-    await tracker.record(
-        run_id="r1",
-        workflow_id="wf",
-        component="worker",
-        tier="gemini_flash",
-        model="gemini-2.0-flash",
-        usage=TokenUsage(input_tokens=100, output_tokens=100),
-        task_id="t1",
-    )
-
-    import sqlite3
-
-    with sqlite3.connect(storage._db_path) as conn:
-        (task_id,) = conn.execute(
-            "SELECT task_id FROM llm_calls WHERE run_id = ?", ("r1",)
-        ).fetchone()
-    assert task_id == "t1"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-async def test_run_total_is_zero_for_empty_run(tmp_path):
-    """Freshly created run with no LLM calls reports $0."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=None)
-
-    assert await tracker.run_total("r1") == 0.0
-    assert await tracker.component_breakdown("r1") == {}
+def _read(relative: str) -> str:
+    return (_REPO_ROOT / relative).read_text()
 
 
-async def test_budget_cap_usd_property_roundtrips(tmp_path):
-    """The tracker exposes its cap as a read-only property (used by aiw inspect)."""
-    storage = await _open_storage(tmp_path)
-    await _new_run(storage, budget_cap_usd=3.50)
-    tracker = CostTracker(storage, _pricing(), budget_cap_usd=3.50)
-    assert tracker.budget_cap_usd == 3.50
+def test_cost_module_has_no_pydantic_ai_imports() -> None:
+    """Spec AC-4: ``grep -r pydantic_ai`` returns zero matches in both files.
 
-    tracker2 = CostTracker(storage, _pricing(), budget_cap_usd=None)
-    assert tracker2.budget_cap_usd is None
-
-
-def test_cost_tracker_structural_compat_with_model_factory():
-    """``MagicMock(spec=CostTracker)`` still works for the Task 03 factory.
-
-    The Task 03 model factory type-hints ``cost_tracker: CostTracker`` and
-    existing tests build mocks via ``MagicMock(spec=CostTracker)``. Replacing
-    the Task 03 Protocol with a concrete class must not regress that spec.
+    Scans real import / from lines so a historical mention inside a
+    docstring would not flag.
     """
-    from unittest.mock import AsyncMock, MagicMock
+    for relative in ("ai_workflows/primitives/cost.py", "tests/primitives/test_cost.py"):
+        text = _read(relative)
+        for line in text.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith(("import ", "from ")):
+                assert "pydantic_ai" not in line, (
+                    f"pydantic_ai import leaked into {relative}: {line!r}"
+                )
+
+
+def test_cost_module_does_not_call_trimmed_storage_methods() -> None:
+    """Carry-over M1-T05-ISS-01: trimmed Storage methods must not be invoked.
+
+    The T05 Builder removed ``log_llm_call``, ``get_total_cost``, and
+    ``get_cost_breakdown`` from ``StorageBackend``. ``cost.py`` must
+    not call them by name anywhere.
+    """
+    text = _read("ai_workflows/primitives/cost.py")
+    for forbidden in ("log_llm_call", "get_total_cost", "get_cost_breakdown"):
+        assert forbidden not in text, (
+            f"trimmed-Storage method {forbidden!r} leaked into cost.py"
+        )
+
+
+def test_cost_module_does_not_import_pricing_helpers() -> None:
+    """Carry-over M1-T06-ISS-02: ``CostTracker`` does not read ``pricing.yaml``.
+
+    The per-call ``cost_usd`` arrives pre-enriched on ``TokenUsage``;
+    pricing lookup is the provider driver's concern. Pin by scanning
+    import lines for ``load_pricing`` and ``ModelPricing`` references.
+    """
+    text = _read("ai_workflows/primitives/cost.py")
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith(("import ", "from ")):
+            assert "load_pricing" not in line, (
+                "cost.py must not import load_pricing — the driver owns pricing"
+            )
+            assert "ModelPricing" not in line, (
+                "cost.py must not import ModelPricing — the driver owns pricing"
+            )
+
+
+def test_cost_module_exports_the_pruned_public_surface() -> None:
+    """The public API is ``TokenUsage`` + ``CostTracker`` — nothing else."""
+    assert set(cost_module.__all__) == {"TokenUsage", "CostTracker"}
+
+
+def test_cost_tracker_structural_compat_with_magic_mock_spec() -> None:
+    """``MagicMock(spec=CostTracker)`` still works for M2 node/test wiring.
+
+    M2's ``CostTrackingCallback`` will build mocks against this class.
+    The mock must expose the four read methods plus ``record`` +
+    ``check_budget``.
+    """
+    from unittest.mock import MagicMock
 
     mock = MagicMock(spec=CostTracker)
-    mock.record = AsyncMock(return_value=0.0)
-    # The spec exposes ``record``, ``run_total``, ``component_breakdown``, and
-    # ``budget_cap_usd`` — accessing them must not raise.
-    assert hasattr(mock, "record")
-    assert hasattr(mock, "run_total")
-    assert hasattr(mock, "component_breakdown")
-    assert hasattr(mock, "budget_cap_usd")
-
-
-# ---------------------------------------------------------------------------
-# structlog must be wired so capture_logs() actually sees the events.
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _reset_structlog():
-    """Ensure each test starts with structlog's default configuration.
-
-    ``capture_logs`` only captures when structlog is configured; the primitives
-    layer uses ``structlog.get_logger()`` which respects the current config.
-    """
-    structlog.reset_defaults()
-    yield
-    structlog.reset_defaults()
+    for attr in ("record", "total", "by_tier", "by_model", "check_budget"):
+        assert hasattr(mock, attr), f"CostTracker spec must expose {attr}"

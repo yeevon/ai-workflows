@@ -16,7 +16,9 @@ Responsibilities
 * ``Route`` — discriminated union; Pydantic picks the variant from ``kind``.
 * ``TierConfig`` — name + route + concurrency cap + per-call timeout.
 * ``ModelPricing`` — per-million-token rates loaded from ``pricing.yaml``.
-  Consumed by ``CostTracker.calculate_cost`` (M1 Task 08).
+  Loaded by :func:`load_pricing` for the M2 Claude Code subprocess driver
+  to compute per-call cost (LiteLLM enriches its own responses;
+  ``CostTracker`` after M1 Task 08 no longer prices calls).
 * ``TierRegistry.load(root, profile=None)`` — primary loader surface per
   the M1 Task 06 spec; reads ``tiers.yaml``, optionally overlays
   ``tiers.<profile>.yaml``, expands ``${ENV:-default}`` placeholders, and
@@ -27,7 +29,9 @@ Responsibilities
 
 See also
 --------
-* ``primitives/cost.py`` — the sole consumer of ``ModelPricing``.
+* M2 Task 02 — the Claude Code subprocess driver is the consumer of
+  ``ModelPricing`` (post-T08 refit; ``primitives/cost.py`` no longer
+  imports the class).
 * M2 Task 01 / Task 02 — LiteLLM adapter and ``ClaudeCodeSubprocess``
   driver that consume ``LiteLLMRoute`` / ``ClaudeCodeRoute``.
 """

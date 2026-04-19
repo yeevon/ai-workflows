@@ -1,232 +1,171 @@
-"""Cost tracking, budget enforcement, and the CostTracker implementation.
+"""In-memory per-run cost ledger + budget enforcement (M1 Task 08 — KDR-007,
+[architecture.md §4.1](../../design_docs/architecture.md),
+[architecture.md §8.5](../../design_docs/architecture.md)).
 
-Hosts :class:`TokenUsage` as the canonical token-count record (relocated
-here by M1 Task 03 when the pre-pivot ``primitives.llm.types`` module was
-deleted; :class:`TokenUsage` is a plain pydantic v2 model with no
-pydantic-ai coupling, and ``cost`` is its only remaining consumer per
-[architecture.md §4.1](../../design_docs/architecture.md)). Field shape
-and tracker API will be pruned in M1 Task 08 per KDR-007.
+Post-pivot the base per-call cost is supplied *before* a
+``TokenUsage`` reaches this module — LiteLLM enriches its own response
+objects and the (M2) Claude Code subprocess driver computes cost from
+``pricing.yaml``. :class:`CostTracker` therefore does **not** price
+calls; its unique value is the ``modelUsage`` sub-model breakdown
+(``[architecture.md §4.1]`` — a ``claude_code`` call to ``opus`` may
+internally spawn ``haiku`` sub-calls and both must be recorded) plus
+per-run rollup and budget enforcement.
 
 Responsibilities
 ----------------
-* :class:`TokenUsage` — per-call input/output/cache token counts; the
-  shared record every adapter emits and every aggregator consumes.
-* :func:`calculate_cost` — pure function that multiplies a ``TokenUsage``
-  by a ``ModelPricing`` row and divides by 1e6. Returns ``0.0`` for models
-  not in the pricing table (with a structured WARNING) so a missing entry
-  never crashes a workflow.
-* :class:`BudgetExceeded` — the exception the tracker raises when a run's
-  total cost crosses ``budget_cap_usd``. Carries ``run_id``,
-  ``current_cost``, and ``cap`` so the Pipeline / Orchestrator can log the
-  failure and mark the run ``failed`` with reason ``budget_exceeded``. M1
-  Task 08 will replace this with the ``NonRetryable`` bucket from
-  [task 07](../../design_docs/phases/milestone_1_reconciliation/task_07_refit_retry_policy.md).
-* :class:`CostTracker` — concrete implementation. Wraps a
-  :class:`~ai_workflows.primitives.storage.StorageBackend`, a pricing
-  mapping, and an optional ``budget_cap_usd``. Every ``record()`` call
-  persists one ``llm_calls`` row and re-runs the ``get_total_cost`` SUM
-  aggregate; if the new total crosses the cap, :class:`BudgetExceeded`
-  fires **after** the row is written so the run log preserves the exact
-  state at the moment of the budget breach.
+* :class:`TokenUsage` — per-call ledger record. Carries input/output
+  plus cache token counts (the Task-02 surface) and the post-pivot
+  extensions: ``cost_usd`` (enriched by the provider driver), ``model``
+  (for ``by_model`` rollup), ``tier`` (for ``by_tier`` rollup), and an
+  optional recursive ``sub_models`` list for Claude Code's modelUsage
+  breakdown.
+* :class:`CostTracker` — in-memory aggregate keyed by ``run_id``. The
+  whole surface is synchronous — record / total / by_tier / by_model /
+  check_budget. No direct Storage coupling; the Pipeline / orchestrator
+  (M2) stamps the final total onto ``runs.total_cost_usd`` via
+  ``StorageBackend.update_run_status(total_cost_usd=...)`` when a run
+  reaches a terminal state.
+* :func:`check_budget` raises ``NonRetryable("budget exceeded")`` from
+  [task 07](../../design_docs/phases/milestone_1_reconciliation/task_07_refit_retry_policy.md)
+  per §8.5. The graph-level policy (M2) decides whether the breach
+  aborts the run or lets independent siblings finish.
 
-Design notes
-------------
-* Running total is never cached in the tracker — we always ask the storage
-  backend via ``get_total_cost``, so a second ``CostTracker`` that mounts
-  the same DB reads the true aggregate.
-* ``runs.total_cost_usd`` is intentionally **not** stamped from within
-  ``record()``. The Pipeline / Orchestrator stamps it once on terminal
-  state via ``storage.update_run_status("completed", total_cost_usd=...)``.
-  The tracker's source of truth is the ``llm_calls`` SUM aggregate; the
-  column is a denormalised cache filled at run end.
+Relationship to sibling modules
+-------------------------------
+* ``primitives/retry.py`` — ``NonRetryable`` is the exception
+  ``check_budget`` raises on breach; no other taxonomy bucket applies.
+* ``primitives/tiers.py`` — still ships ``ModelPricing`` and
+  ``load_pricing()`` for the M2 Claude Code driver. This module no
+  longer reads ``pricing.yaml`` — that concern moves to whichever
+  driver enriches ``TokenUsage.cost_usd`` before handing it back.
+* ``primitives/storage.py`` — interaction is via the trimmed
+  ``StorageBackend.update_run_status`` path only, called by the
+  caller (M2 Pipeline) after ``tracker.total(run_id)``. No per-call
+  SQL row is written from this module anymore.
 
-See also
---------
-* ``primitives/tiers.py`` — :class:`ModelPricing` and ``load_pricing()``.
-* ``primitives/storage.py`` — :class:`StorageBackend` methods the tracker
-  relies on (``log_llm_call``, ``get_total_cost``, ``get_cost_breakdown``).
+The pre-pivot ``BudgetExceeded`` exception and the ``calculate_cost``
+helper are removed — cost math moves to the provider-driver layer,
+budget breach re-uses the three-bucket taxonomy's
+``NonRetryable``.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections import defaultdict
 
-import structlog
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from ai_workflows.primitives.tiers import ModelPricing
+from ai_workflows.primitives.retry import NonRetryable
+
+__all__ = [
+    "CostTracker",
+    "TokenUsage",
+]
 
 
 class TokenUsage(BaseModel):
-    """Token counts returned by the provider after each call.
+    """One ledger entry — enough to cost, rollup, and expand sub-models.
 
-    Relocated from ``ai_workflows.primitives.llm.types`` in M1 Task 03 so
-    ``cost`` owns its canonical aggregation record directly. Field shape
-    (``cost_usd``, ``model``, recursive ``sub_models``) is expanded in
-    M1 Task 08 per KDR-007; this stub preserves the Task 02 surface so
-    ``CostTracker.record`` and ``test_cost.py`` keep working across the
-    cut-over.
+    Per-call record produced by the provider driver (LiteLLM-backed or
+    the M2 Claude Code subprocess). Carries the Task-02 token counts
+    plus the post-pivot fields needed for aggregation (``cost_usd``,
+    ``model``, ``tier``) and the recursive ``sub_models`` used by
+    Claude Code's ``modelUsage`` reporting: a top-level call to
+    ``opus`` may spawn ``haiku`` sub-calls and both must roll into the
+    per-run total.
+
+    ``tier`` is the logical tier label ("planner" / "implementer" /
+    "local_coder" / ...). It isn't one of the three fields the task
+    spec names under "extend", but ``CostTracker.by_tier`` cannot
+    function without it — see T08 CHANGELOG deviations.
     """
 
-    input_tokens: int
-    output_tokens: int
+    input_tokens: int = 0
+    output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
-
-if TYPE_CHECKING:
-    from ai_workflows.primitives.storage import StorageBackend
-
-
-logger = structlog.get_logger(__name__)
-
-
-class BudgetExceeded(Exception):
-    """Raised by :class:`CostTracker` when a run crosses ``budget_cap_usd``.
-
-    The Pipeline / Orchestrator catches this, marks the run ``failed``
-    with reason ``budget_exceeded``, and cancels any in-flight sibling
-    tasks (pattern lands with M2 ``Pipeline``). Completed rows stay in
-    the run log — the ``llm_calls`` row that triggered the breach is
-    persisted before the exception fires.
-    """
-
-    def __init__(self, run_id: str, current_cost: float, cap: float) -> None:
-        self.run_id = run_id
-        self.current_cost = current_cost
-        self.cap = cap
-        super().__init__(
-            f"Run {run_id} exceeded budget: ${current_cost:.2f} > ${cap:.2f} cap"
-        )
-
-
-def calculate_cost(
-    model: str,
-    usage: TokenUsage,
-    pricing: dict[str, ModelPricing],
-) -> float:
-    """Return the USD cost of a single LLM call.
-
-    Computes ``(in·in_rate + out·out_rate + cr·cr_rate + cw·cw_rate) / 1e6``
-    where rates come from the ``ModelPricing`` row keyed by ``model``.
-    Models not in the pricing mapping log a structured WARNING and return
-    ``0.0`` — a missing entry is a config gap, not a workflow-halting bug.
-    Claude Max tiers (all rates ``0.0``) naturally return ``0.0`` via the
-    math; the ``is_local`` short-circuit in :class:`CostTracker` is for
-    Ollama-style flows that want the row tagged ``is_local=1`` regardless
-    of whether pricing is declared.
-    """
-    row = pricing.get(model)
-    if row is None:
-        logger.warning("cost.model_not_in_pricing", model=model)
-        return 0.0
-    cost = (
-        usage.input_tokens * row.input_per_mtok
-        + usage.output_tokens * row.output_per_mtok
-        + usage.cache_read_tokens * row.cache_read_per_mtok
-        + usage.cache_write_tokens * row.cache_write_per_mtok
-    ) / 1_000_000
-    return cost
+    cost_usd: float = 0.0
+    model: str = ""
+    tier: str = ""
+    sub_models: list[TokenUsage] = Field(default_factory=list)
 
 
 class CostTracker:
-    """Cost tracker with budget enforcement for a single workflow run.
+    """In-memory per-run cost aggregate — single write path, four read paths.
 
-    One instance per run. ``budget_cap_usd=None`` disables the cap but
-    emits a WARNING at construction (the common case for dev workflows —
-    called out so the user never *accidentally* ends up uncapped).
+    One instance per process is fine; entries are keyed by ``run_id``
+    so multiple concurrent runs stay disjoint. Methods are synchronous
+    because every operation is a dict / list walk — there is no I/O.
 
-    Example
-    -------
-    >>> storage = await SQLiteStorage.open("~/.ai-workflows/runs.db")
-    >>> pricing = load_pricing()
-    >>> tracker = CostTracker(storage, pricing, budget_cap_usd=5.00)
-    >>> await tracker.record(
-    ...     run_id="r1",
-    ...     workflow_id="wf",
-    ...     component="worker",
-    ...     tier="gemini_flash",
-    ...     model="gemini-2.0-flash",
-    ...     usage=TokenUsage(input_tokens=1000, output_tokens=500),
-    ... )
-    0.00030  # ($0.10/MTok in + $0.40/MTok out → 1e3·1e-7 + 5e2·4e-7)
+    Pair with the M2 Pipeline's terminal-state handler, which calls
+    ``storage.update_run_status(run_id, status, total_cost_usd=tracker.total(run_id))``
+    once the graph reaches ``completed`` / ``failed``.
     """
 
-    def __init__(
-        self,
-        storage: StorageBackend,
-        pricing: dict[str, ModelPricing],
-        budget_cap_usd: float | None = None,
-    ) -> None:
-        self._storage = storage
-        self._pricing = pricing
-        self._budget_cap_usd = budget_cap_usd
-        if budget_cap_usd is None:
-            # AC: `null` budget cap logs a warning on run start. Emitted here
-            # because the tracker's construction happens once per run.
-            logger.warning(
-                "cost.no_budget_cap",
-                message="No budget cap set — runs can consume unlimited cost.",
-            )
+    def __init__(self) -> None:
+        self._entries: dict[str, list[TokenUsage]] = defaultdict(list)
 
-    @property
-    def budget_cap_usd(self) -> float | None:
-        """The cap the tracker was constructed with (or ``None`` if disabled)."""
-        return self._budget_cap_usd
+    def record(self, run_id: str, usage: TokenUsage) -> None:
+        """Append ``usage`` to the ``run_id`` ledger. The single write path."""
+        self._entries[run_id].append(usage)
 
-    async def record(
+    def total(self, run_id: str) -> float:
+        """Return the rolled-up USD total for ``run_id`` (includes sub-models)."""
+        return sum(_roll_cost(entry) for entry in self._entries.get(run_id, ()))
+
+    def by_tier(self, run_id: str) -> dict[str, float]:
+        """Return ``{tier: cost_usd}`` for ``run_id``. Sub-model costs roll into
+        the parent entry's tier — sub-calls inherit the orchestrating tier.
+        """
+        totals: dict[str, float] = defaultdict(float)
+        for entry in self._entries.get(run_id, ()):
+            totals[entry.tier] += _roll_cost(entry)
+        return dict(totals)
+
+    def by_model(
         self,
         run_id: str,
-        workflow_id: str,
-        component: str,
-        tier: str,
-        model: str,
-        usage: TokenUsage,
-        task_id: str | None = None,
-        is_local: bool = False,
-        is_escalation: bool = False,
-    ) -> float:
-        """Price the call, persist it, and enforce the budget cap.
+        include_sub_models: bool = True,
+    ) -> dict[str, float]:
+        """Return ``{model: cost_usd}`` for ``run_id``.
 
-        Order of operations matters:
-
-        1. Compute ``cost`` — ``0.0`` if ``is_local`` (Ollama) or if the
-           model isn't in pricing (WARNING logged once).
-        2. Persist the row via ``storage.log_llm_call`` — the run log
-           always reflects the actual call, even if step 3 raises.
-        3. Re-aggregate the run total via ``storage.get_total_cost``.
-        4. If ``budget_cap_usd`` is set and ``new_total > cap``, raise
-           :class:`BudgetExceeded`. The run row is left in whatever
-           status the caller last set; the Pipeline marks it ``failed``.
-
-        Returns the USD cost of *this* call (not the running total).
+        When ``include_sub_models`` is true (the default and the
+        Claude Code modelUsage path), each sub-model entry contributes
+        under its own ``model`` key, so an ``opus`` call that spawns
+        two ``haiku`` sub-calls shows three distinct keys.
         """
-        cost = 0.0 if is_local else calculate_cost(model, usage, self._pricing)
+        totals: dict[str, float] = defaultdict(float)
+        for entry in self._entries.get(run_id, ()):
+            _accumulate_by_model(entry, totals, include_sub_models=include_sub_models)
+        return dict(totals)
 
-        await self._storage.log_llm_call(
-            run_id,
-            task_id=task_id,
-            workflow_id=workflow_id,
-            component=component,
-            tier=tier,
-            model=model,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_write_tokens=usage.cache_write_tokens,
-            cost_usd=cost,
-            is_local=is_local,
-            is_escalation=is_escalation,
-        )
+    def check_budget(self, run_id: str, cap_usd: float) -> None:
+        """Raise ``NonRetryable("budget exceeded")`` if ``total(run_id) > cap``.
 
-        new_total = await self._storage.get_total_cost(run_id)
-        if self._budget_cap_usd is not None and new_total > self._budget_cap_usd:
-            raise BudgetExceeded(run_id, new_total, self._budget_cap_usd)
-        return cost
+        Strict ``>`` — landing exactly on the cap does not raise. The
+        exception carries a human-readable reason so log lines show
+        the current total and cap.
+        """
+        current = self.total(run_id)
+        if current > cap_usd:
+            raise NonRetryable(
+                f"budget exceeded: ${current:.2f} > ${cap_usd:.2f} cap for run {run_id}"
+            )
 
-    async def run_total(self, run_id: str) -> float:
-        """Return the USD total for a run (delegates to storage aggregate)."""
-        return await self._storage.get_total_cost(run_id)
 
-    async def component_breakdown(self, run_id: str) -> dict[str, float]:
-        """Return ``{component: cost_usd}`` for a run (excludes local rows)."""
-        return await self._storage.get_cost_breakdown(run_id)
+def _roll_cost(entry: TokenUsage) -> float:
+    """Sum ``entry.cost_usd`` plus the recursive sub-model costs."""
+    return entry.cost_usd + sum(_roll_cost(child) for child in entry.sub_models)
+
+
+def _accumulate_by_model(
+    entry: TokenUsage,
+    totals: dict[str, float],
+    *,
+    include_sub_models: bool,
+) -> None:
+    """Add ``entry.cost_usd`` to ``totals[entry.model]``; recurse if requested."""
+    totals[entry.model] += entry.cost_usd
+    if include_sub_models:
+        for child in entry.sub_models:
+            _accumulate_by_model(child, totals, include_sub_models=True)

@@ -52,6 +52,12 @@ The `log_suspicious_patterns` primitive was part of the pre-pivot tool-registry 
 
 - [ ] **M1-T04-ISS-01 · MEDIUM** — (a) Drop or rewrite the `Related` paragraph in `ai_workflows/primitives/logging.py:35-40` so it no longer mentions `primitives.tools.forensic_logger` or the `M1-T05-ISS-02` forensic carry-over. (b) Retire or rewrite `tests/primitives/test_logging.py::test_forensic_warning_lands_in_run_json_sink_under_production_config` (lines ~248-280) — the simplest move is to delete the test; if the run-JSON-sink smoke coverage is still worth keeping, rewrite it around a plain `structlog` WARNING and drop the `log_suspicious_patterns` dependency entirely. Source: [task_04_issue.md §M1-T04-ISS-01](task_04_issue.md#-medium--m1-t04-iss-01-stale-forensic_logger-references-in-t09-owned-files).
 
+### From [M1-T08-DEF-01](task_08_issue.md) (T08 post-build audit, 2026-04-19)
+
+T08 removed the `BudgetExceeded` exception from `ai_workflows/primitives/cost.py` (replaced by `NonRetryable("budget exceeded")` from T07 per [architecture.md §8.5](../../../architecture.md)). `ai_workflows/primitives/logging.py:25` still names `BudgetExceeded` as an ERROR-level exemplar in its module docstring. Cosmetic; T09 already owns `logging.py` MODIFY, so the fix lands here as a drive-by with the `logfire` and `forensic_logger` sweeps.
+
+- [ ] **M1-T08-DEF-01 · LOW** — Replace the `BudgetExceeded` reference in `ai_workflows/primitives/logging.py:25` (module docstring, ERROR-level example) with `NonRetryable("budget exceeded")` — that is the post-T08 exception the logger will actually see per [architecture.md §8.5](../../../architecture.md). Docstring-only; no test change. Source: [task_08_issue.md §Deferred to future tasks](task_08_issue.md).
+
 ## Propagation status
 
-Post-build audit will overwrite this file with implementation findings. When the T02 carry-over checkbox ticks, [task_02_issue.md](task_02_issue.md) flips ISS-01 from `DEFERRED` to `RESOLVED` on the next T02 re-audit touch point.
+Post-build audit will overwrite this file with implementation findings. When the T02 carry-over checkbox ticks, [task_02_issue.md](task_02_issue.md) flips ISS-01 from `DEFERRED` to `RESOLVED` on the next T02 re-audit touch point. When the T08 carry-over ticks, [task_08_issue.md](task_08_issue.md) flips `M1-T08-DEF-01` from `DEFERRED` to `RESOLVED` on the next T08 re-audit touch point.
