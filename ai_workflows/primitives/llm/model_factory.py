@@ -11,7 +11,15 @@ build on top of these two entry points.
 
 Provider → pydantic-ai Model mapping
 --------------------------------------
-* ``anthropic``     → ``AnthropicModel`` via ``AnthropicProvider``
+* ``claude_code``   → ``NotImplementedError`` (M4 subprocess launcher). The
+                       Claude Max-subscription tiers (``opus``/``sonnet``/
+                       ``haiku``) are driven via the ``claude`` CLI and land
+                       with the Orchestrator component in M4; the branch is
+                       wired here so a typed, greppable failure fires today.
+* ``anthropic``     → ``AnthropicModel`` via ``AnthropicProvider`` (retained
+                       for third-party Anthropic-API deployments; not used in
+                       this repo's default tiers — see project memory
+                       ``project_provider_strategy``).
 * ``openai_compat`` → ``OpenAIChatModel`` via ``OpenAIProvider`` (DeepSeek,
                        OpenRouter, Gemini via compat endpoint)
 * ``ollama``        → ``OpenAIChatModel`` via ``OpenAIProvider`` (Ollama
@@ -53,8 +61,11 @@ def build_model(
 
     Enforces ``max_retries=0`` on the underlying SDK client. Raises
     ``ConfigurationError`` if the tier is unknown or a required env var is
-    absent. The ``cost_tracker`` parameter is accepted now for API stability;
-    active wiring happens in ``run_with_cost()``.
+    absent. Raises ``NotImplementedError`` when the tier's provider is
+    ``claude_code`` — the Claude Max CLI subprocess launcher lands in M4
+    with the Orchestrator component. The ``cost_tracker`` parameter is
+    accepted now for API stability; active wiring happens in
+    ``run_with_cost()``.
     """
     # cost_tracker is reserved: pydantic-ai 1.x exposes no usage-callback hook,
     # so active cost recording happens in run_with_cost(). Accepting the param
@@ -66,6 +77,12 @@ def build_model(
 
     config = tiers[tier_name]
 
+    if config.provider == "claude_code":
+        raise NotImplementedError(
+            f"claude_code provider (tier {tier_name!r}, model {config.model!r}) "
+            "is not yet implemented. Subprocess launcher lands in M4 with the "
+            "Orchestrator component."
+        )
     if config.provider == "anthropic":
         return _build_anthropic(config)
     if config.provider == "ollama":

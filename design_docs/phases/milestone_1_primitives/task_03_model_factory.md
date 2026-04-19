@@ -105,7 +105,7 @@ async def run_with_cost(
 - [x] Underlying SDK clients have `max_retries=0`
 - [x] Integration test with `GEMINI_API_KEY` confirms cost recording fires after an `agent.run()`; Ollama integration test confirms the local path end-to-end
 - [x] Missing env var raises `ConfigurationError` naming the variable
-- [ ] `build_model` raises `NotImplementedError` for `claude_code` provider (M4 — subprocess launcher not yet implemented)
+- [x] `build_model` raises `NotImplementedError` for `claude_code` provider (M4 — subprocess launcher not yet implemented)
 
 ## Dependencies
 

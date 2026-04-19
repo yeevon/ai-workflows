@@ -5,6 +5,7 @@
 **Re-audited on:** 2026-04-18 (issue-resolution pass)
 **Re-audited on:** 2026-04-18 (post-resolution confirmation audit)
 **Re-audited on:** 2026-04-18 (final confirmation after ISS-09/10/11 fixes + ISS-12 defer)
+**Re-audited on:** 2026-04-18 (SD-03 alignment — ISS-13/14/15 resolved)
 **Audit scope:** full Task 03 surface —
 [ai_workflows/primitives/llm/model_factory.py](../../../../ai_workflows/primitives/llm/model_factory.py),
 [ai_workflows/primitives/tiers.py](../../../../ai_workflows/primitives/tiers.py),
@@ -22,19 +23,24 @@ and [pyproject.toml](../../../../pyproject.toml). All three gates executed local
 `cache_write_tokens` are real fields on pydantic-ai 1.x. `Agent.run` return
 type probed via `inspect.signature` — confirmed `AgentRunResult[Any]`.
 
-**Status:** 🔴 REOPENED (2026-04-18) — spec was amended post-audit to
-adopt the Claude Code CLI design (SD-03). `tiers.py` and
-`model_factory.py` still reflect the pre-amendment provider set. Three
-new issues below (ISS-13, ISS-14, ISS-15). ISS-01 through ISS-12 remain
-resolved / deferred.
+**Status:** ✅ PASS (2026-04-18, SD-03 alignment pass) — ISS-13, ISS-14,
+and ISS-15 resolved as a bundled fix; all six acceptance criteria now
+verified green. No OPEN issues remain. ISS-12 stays DEFERRED to Task 07.
 
 ---
 
 ## 🔴 HIGH
 
-### M1-T03-ISS-13 — `TierConfig.provider` literal missing `"claude_code"` (OPEN)
+### M1-T03-ISS-13 — `TierConfig.provider` literal missing `"claude_code"` (RESOLVED)
 
-**Severity:** HIGH · **Status:** 🔴 OPEN (2026-04-18) — introduced by SD-03
+**Severity:** HIGH · **Status:** ✅ RESOLVED (2026-04-18, SD-03 alignment pass)
+**Resolution:** `ai_workflows/primitives/tiers.py` extended the literal to
+`Literal["claude_code", "anthropic", "ollama", "openai_compat", "google"]`
+(keeping `anthropic` for third-party deployments per
+`project_provider_strategy`). Per-provider inline comments added.
+`tests/primitives/test_model_factory.py::test_tier_config_accepts_claude_code_provider`
+pins the roundtrip. Canonical `tiers.yaml` (Task 07) now loads without
+Pydantic ValidationError on the CLI tiers.
 
 **What's wrong.** Task 07's amended spec
 ([task_07_tiers_loader.md:106](../task_07_tiers_loader.md#L106)) declares
@@ -61,9 +67,17 @@ constructs a `claude_code` tier and asserts `TierConfig(provider="claude_code", 
 validates. Paired with ISS-14 (factory branch) and ISS-15 (module
 docstring) to form one bundled fix.
 
-### M1-T03-ISS-14 — `build_model()` has no `claude_code` branch; AC-6 never checked (OPEN)
+### M1-T03-ISS-14 — `build_model()` has no `claude_code` branch; AC-6 never checked (RESOLVED)
 
-**Severity:** HIGH · **Status:** 🔴 OPEN (2026-04-18) — introduced by SD-03
+**Severity:** HIGH · **Status:** ✅ RESOLVED (2026-04-18, SD-03 alignment pass)
+**Resolution:** `build_model()` now branches on `claude_code` **before**
+the `anthropic` branch and raises `NotImplementedError` with a message
+naming the tier, the model, and the M4 Orchestrator deferral —
+greppable for the M4 subprocess-launcher contract.
+`test_build_model_claude_code_raises_not_implemented` asserts the
+exception type and that the message names `claude_code`, the tier name,
+the model name, and `M4`. AC-6 flipped to ✅ PASS. Task 03 completion
+banner remains ✅ Complete.
 
 **What's wrong.** Task 03 AC-6
 ([task_03_model_factory.md:108](../task_03_model_factory.md#L108)) is
@@ -100,9 +114,23 @@ asserting both the exception type and that the message names the tier
 and model. Then tick AC-6, flip Task 03's completion banner once
 ISS-13, ISS-14, and ISS-15 all land, and update CHANGELOG.
 
-### M1-T03-ISS-15 — tests, fixture names, and module docstring lag the new design (OPEN)
+### M1-T03-ISS-15 — tests, fixture names, and module docstring lag the new design (RESOLVED)
 
-**Severity:** HIGH · **Status:** 🔴 OPEN (2026-04-18) — partially downstream of ISS-13 / ISS-14
+**Severity:** HIGH · **Status:** ✅ RESOLVED (2026-04-18, SD-03 alignment pass)
+**Resolution:**
+
+1. `SONNET_TIER` renamed `ANTHROPIC_THIRD_PARTY_TIER` with an inline
+   docstring citing `project_provider_strategy` and explaining that this
+   deployment drives sonnet via the `claude_code` CLI; the fixture is
+   kept to exercise the third-party AnthropicModel code path.
+2. New `CLAUDE_CODE_SONNET_TIER` fixture added, consumed only by the
+   ISS-14 AC-6 test.
+3. `model_factory.py` module docstring now lists `claude_code` first with
+   the M4 deferral called out; `test_model_factory.py` file docstring
+   rewritten against SD-03 (AC-6 added, AC-1 reframed as third-party
+   regression).
+4. `_tiers()` helper and `test_unsupported_provider_raises_configuration_error`
+   updated to the renamed fixture so the suite lands green in one pass.
 
 **What's wrong.** Several surfaces still describe the pre-CLI world:
 
@@ -336,29 +364,30 @@ types leaked into shared modules.
 
 ---
 
-## Gate summary (final re-audit, 2026-04-18)
+## Gate summary (SD-03 alignment pass, 2026-04-18)
 
 | Gate | Result |
 | --- | --- |
-| `uv run pytest` | ✅ 63 passed, 1 skipped (Anthropic live test — accepted condition) |
+| `uv run pytest` | ✅ 84 passed, 0 skipped (Task 04 caching tests + Task 03 SD-03 additions now in suite; live Anthropic test removed, live Gemini/Ollama tests pass when keys are present) |
 | `uv run lint-imports` | ✅ 2 kept / 0 broken |
 | `uv run ruff check` | ✅ all checks passed |
 | AC-4 Gemini live test | ✅ PASS — `test_integration_gemini_cost_recorded_after_real_agent_run` runs green when `GEMINI_API_KEY` is set |
 | AC-4 Ollama live test | ✅ PASS — `test_integration_ollama_cost_recorded_after_real_agent_run` runs green when `AIWORKFLOWS_OLLAMA_BASE_URL` is set to `/v1` |
 | AC-4 Anthropic live test | ⏸️ PERMANENTLY N/A — no Anthropic API key; this deployment uses Gemini + Qwen. Test removed from suite. |
+| AC-6 claude_code branch | ✅ PASS — `test_build_model_claude_code_raises_not_implemented` asserts type + message (tier / model / `M4` / `claude_code`). |
 
 ---
 
-## Acceptance-criterion grading (re-audit)
+## Acceptance-criterion grading (SD-03 alignment pass)
 
 | AC | Verdict | Evidence |
 | --- | --- | --- |
-| AC-1: `build_model("sonnet", ...)` → `(AnthropicModel, caps)` with `supports_prompt_caching=True` | ⚠️ STALE — see ISS-15 | Test passes, but AC wording describes the pre-CLI design. Under SD-03, `sonnet` is `claude_code` → `NotImplementedError`; AC-1 should be rewritten to target the third-party `AnthropicModel` code path or dropped in favour of AC-6. |
+| AC-1: `build_model` on the third-party `anthropic` code path → `(AnthropicModel, caps)` with `supports_prompt_caching=True` | ✅ PASS | `test_build_anthropic_model_returns_correct_type` + `test_anthropic_capabilities_flags` exercise the renamed `ANTHROPIC_THIRD_PARTY_TIER` fixture; test-file header now cites SD-03 and frames this AC as a third-party regression guard while the deployment drives sonnet via the `claude_code` CLI (AC-6). |
 | AC-2: `build_model("local_coder", ...)` → `(OpenAIChatModel, caps)` with Ollama base_url | ✅ PASS | `test_build_ollama_model_returns_correct_type` + `test_build_ollama_base_url_from_config` + `test_ollama_capabilities_flags` |
 | AC-3: Underlying SDK clients have `max_retries=0` | ✅ PASS | Anthropic / OpenAI-compat / Ollama: explicit. Google: documented default + regression test. |
 | AC-4: Integration test with real provider key confirms cost recording fires after `agent.run()` | ✅ PASS | Gemini `openai_compat` live test green (`test_integration_gemini_cost_recorded_after_real_agent_run`). Anthropic live test removed (no API key — deployment uses Gemini + Qwen). |
 | AC-5: Missing env var raises `ConfigurationError` naming the variable | ✅ PASS | Anthropic + Google + custom-env + unknown-tier + openai_compat-missing-base_url tests |
-| AC-6: `build_model` raises `NotImplementedError` for `claude_code` provider | 🔴 UNMET — see ISS-14 | No branch implemented; a `claude_code` tier would fall through to `ConfigurationError` (wrong type + wrong message). Blocks M4 Orchestrator contract. |
+| AC-6: `build_model` raises `NotImplementedError` for `claude_code` provider | ✅ PASS | `test_build_model_claude_code_raises_not_implemented` asserts the exception type and that the message names `claude_code`, the tier (`sonnet`), the model (`claude-sonnet-4-6`), and `M4`. Branch placed before `anthropic` in `build_model()` so CLI tiers can never silently fall through. |
 
 ---
 
@@ -376,6 +405,6 @@ types leaked into shared modules.
 - **M1-T03-ISS-10** ✅ RESOLVED — `run_with_cost` annotated `-> "AgentRunResult[Any]"`.
 - **M1-T03-ISS-11** ✅ RESOLVED (conservative) — fallthrough branch kept; `test_unsupported_provider_raises_configuration_error` exercises it via `model_construct`.
 - **M1-T03-ISS-12** ⏸️ DEFERRED — `TierConfig.max_retries` ownership transferred to Task 07 (tiers loader).
-- **M1-T03-ISS-13** 🔴 OPEN (2026-04-18) — `TierConfig.provider` literal in `tiers.py` is missing `"claude_code"`; blocks Task 07 tiers.yaml load. Fix: extend literal to `["claude_code", "anthropic", "ollama", "openai_compat", "google"]` + add round-trip test.
-- **M1-T03-ISS-14** 🔴 OPEN (2026-04-18) — `build_model()` has no `claude_code` branch; AC-6 unchecked. Fix: add explicit `NotImplementedError` branch naming the tier/model, add `test_build_model_claude_code_raises_not_implemented`, then tick AC-6.
-- **M1-T03-ISS-15** 🔴 OPEN (2026-04-18) — module docstring, test-file header, and `SONNET_TIER` fixture still describe the pre-CLI world. Fix: rename fixture to `ANTHROPIC_THIRD_PARTY_TIER`, add `CLAUDE_CODE_SONNET_TIER`, update docstrings. Bundle with ISS-13 + ISS-14.
+- **M1-T03-ISS-13** ✅ RESOLVED (2026-04-18) — `TierConfig.provider` literal extended to `["claude_code", "anthropic", "ollama", "openai_compat", "google"]` in `tiers.py`; `test_tier_config_accepts_claude_code_provider` pins the roundtrip.
+- **M1-T03-ISS-14** ✅ RESOLVED (2026-04-18) — `build_model()` now raises `NotImplementedError` for the `claude_code` branch, naming the tier, the model, and the M4 Orchestrator deferral. AC-6 ticked. `test_build_model_claude_code_raises_not_implemented` green.
+- **M1-T03-ISS-15** ✅ RESOLVED (2026-04-18) — `SONNET_TIER` → `ANTHROPIC_THIRD_PARTY_TIER`, `CLAUDE_CODE_SONNET_TIER` added, test-file header and `model_factory.py` module docstring rewritten against SD-03.

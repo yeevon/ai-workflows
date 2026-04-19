@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — M1 Task 03: Model Factory — SD-03 (Claude Code CLI) Alignment (2026-04-18)
+
+Resolves ISS-13, ISS-14, ISS-15 opened after the SD-03 spec amendment
+adopted the Claude Code CLI design. Closes AC-6 (`claude_code` provider
+raises `NotImplementedError`).
+
+**Files modified:**
+
+- `ai_workflows/primitives/tiers.py` — ISS-13: extended `TierConfig.provider`
+  literal to `Literal["claude_code", "anthropic", "ollama", "openai_compat", "google"]`
+  so the canonical `tiers.yaml` (which declares `provider: claude_code` for
+  opus/sonnet/haiku) loads. `anthropic` retained for third-party deployments
+  per project memory. Per-provider inline comments added.
+- `ai_workflows/primitives/llm/model_factory.py` — ISS-14: added the
+  `claude_code` branch at the top of `build_model()`, raising
+  `NotImplementedError` with a message naming the tier and model and
+  pointing at the M4 Orchestrator subprocess launcher. ISS-15: module
+  docstring expanded to list the `claude_code` provider first with the M4
+  deferral called out.
+- `tests/primitives/test_model_factory.py` — ISS-15: file docstring
+  rewritten against the SD-03 design (AC-6 added, AC-1 reframed as a
+  third-party Anthropic regression path). `SONNET_TIER` renamed
+  `ANTHROPIC_THIRD_PARTY_TIER` with a docstring citing
+  `project_provider_strategy`. New `CLAUDE_CODE_SONNET_TIER` fixture paired
+  with `test_build_model_claude_code_raises_not_implemented` (AC-6).
+  `test_tier_config_accepts_claude_code_provider` pins the ISS-13 literal.
+  `_tiers()` and `test_unsupported_provider_raises_configuration_error`
+  updated to the renamed fixture.
+
+**Acceptance criteria re-graded:**
+
+- AC-6: was 🔴 UNMET (no `claude_code` branch); now ✅ PASS via
+  `test_build_model_claude_code_raises_not_implemented` which asserts the
+  exception type and that the message names `claude_code`, the tier name,
+  the model name, and `M4`.
+- AC-1: wording now matches the SD-03 design (third-party `AnthropicModel`
+  code path); existing tests remain green on the renamed fixture.
+
+**Gate result:** 84 passed, 0 skipped, 2 contracts kept, ruff clean.
+
 ### Added — M1 Task 04: Multi-Breakpoint Prompt Caching (2026-04-18)
 
 Implements CRIT-07: Anthropic multi-breakpoint prompt caching replaces the

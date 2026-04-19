@@ -1,11 +1,20 @@
 """Tests for M1 Task 03 — ai_workflows.primitives.llm.model_factory.
 
-Covers all acceptance criteria:
-1. build_model("sonnet", ...) → (AnthropicModel, caps) with supports_prompt_caching=True
-2. build_model("local_coder", ...) → (OpenAIChatModel, caps) with Ollama base_url
-3. Underlying SDK clients have max_retries=0
-4. Integration test: cost recording fires after agent.run() (skipped without ANTHROPIC_API_KEY)
-5. Missing env var raises ConfigurationError naming the variable
+Covers all acceptance criteria under the SD-03 (Claude Code CLI) design:
+1. build_model on the third-party ``anthropic`` code path → (AnthropicModel,
+   caps) with supports_prompt_caching=True. In this deployment, sonnet is
+   driven via the ``claude_code`` CLI tier (see AC-6); the ``anthropic``
+   branch is exercised here against a kept regression fixture
+   (``ANTHROPIC_THIRD_PARTY_TIER``) so third-party Anthropic-API
+   deployments stay working.
+2. build_model("local_coder", ...) → (OpenAIChatModel, caps) with Ollama base_url.
+3. Underlying SDK clients have max_retries=0.
+4. Integration test: cost recording fires after agent.run() — satisfied by
+   the live Gemini + Ollama tests below; no Anthropic live test (this
+   deployment has no Anthropic API key).
+5. Missing env var raises ConfigurationError naming the variable.
+6. build_model raises NotImplementedError for the ``claude_code`` provider —
+   the subprocess launcher lands in M4.
 """
 
 import os
@@ -22,8 +31,21 @@ from ai_workflows.primitives.tiers import TierConfig
 # Fixtures
 # ---------------------------------------------------------------------------
 
-SONNET_TIER = TierConfig(
+# Kept to exercise the third-party ``anthropic`` code path. This deployment
+# drives sonnet via the ``claude_code`` CLI tier (see CLAUDE_CODE_SONNET_TIER
+# below); this fixture stays so downstream deployments that DO have an
+# Anthropic API key continue to have a tested build path.
+ANTHROPIC_THIRD_PARTY_TIER = TierConfig(
     provider="anthropic",
+    model="claude-sonnet-4-6",
+    max_tokens=8192,
+    temperature=0.1,
+)
+
+# Exercises AC-6: the ``claude_code`` provider must raise NotImplementedError
+# until M4 lands the subprocess launcher.
+CLAUDE_CODE_SONNET_TIER = TierConfig(
+    provider="claude_code",
     model="claude-sonnet-4-6",
     max_tokens=8192,
     temperature=0.1,
@@ -63,8 +85,11 @@ def _null_tracker() -> CostTracker:
 
 
 def _tiers(**overrides) -> dict[str, TierConfig]:
+    # "sonnet" here is the third-party Anthropic-API regression fixture (see
+    # ANTHROPIC_THIRD_PARTY_TIER). The canonical ``claude_code`` sonnet tier
+    # is registered separately where AC-6 is exercised.
     base = {
-        "sonnet": SONNET_TIER,
+        "sonnet": ANTHROPIC_THIRD_PARTY_TIER,
         "local_coder": LOCAL_CODER_TIER,
         "gemini": GEMINI_TIER,
         "google_native": GOOGLE_TIER,
@@ -74,7 +99,10 @@ def _tiers(**overrides) -> dict[str, TierConfig]:
 
 
 # ---------------------------------------------------------------------------
-# AC-1: build_model("sonnet") returns AnthropicModel + caching capability
+# AC-1 (amended): build_model on the third-party ``anthropic`` code path
+# returns AnthropicModel + caching capability. This deployment uses the
+# ``claude_code`` CLI tier for sonnet (see AC-6); this test keeps the
+# third-party AnthropicModel path green for downstream deployments.
 # ---------------------------------------------------------------------------
 
 
@@ -300,7 +328,7 @@ def test_openai_compat_capabilities_flags(monkeypatch):
 
 
 def test_unsupported_provider_raises_configuration_error():
-    unsupported_tier = SONNET_TIER.model_construct(
+    unsupported_tier = ANTHROPIC_THIRD_PARTY_TIER.model_construct(
         provider="unsupported",
         model="x",
         max_tokens=1,
@@ -309,6 +337,39 @@ def test_unsupported_provider_raises_configuration_error():
     with pytest.raises(ConfigurationError) as exc_info:
         build_model("x", {"x": unsupported_tier}, _null_tracker())
     assert "unsupported" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# AC-6 (ISS-14): build_model raises NotImplementedError for claude_code
+# ---------------------------------------------------------------------------
+
+
+def test_tier_config_accepts_claude_code_provider():
+    """ISS-13 — the Literal must admit ``claude_code`` so tiers.yaml can load."""
+    tier = TierConfig(
+        provider="claude_code",
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        temperature=0.1,
+    )
+    assert tier.provider == "claude_code"
+
+
+def test_build_model_claude_code_raises_not_implemented():
+    """AC-6: claude_code must raise NotImplementedError naming tier + model.
+
+    The subprocess launcher lands in M4 with the Orchestrator component;
+    until then, the factory must fail with a typed, greppable error so
+    downstream M4 work can key off it.
+    """
+    tiers = {"sonnet": CLAUDE_CODE_SONNET_TIER}
+    with pytest.raises(NotImplementedError) as exc_info:
+        build_model("sonnet", tiers, _null_tracker())
+    message = str(exc_info.value)
+    assert "claude_code" in message
+    assert "sonnet" in message
+    assert "claude-sonnet-4-6" in message
+    assert "M4" in message
 
 
 # ---------------------------------------------------------------------------
