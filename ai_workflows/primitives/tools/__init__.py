@@ -14,6 +14,17 @@ Modules:
   ``ContentBlock`` ``tool_result`` wrapping, the per-component tool
   allowlists enforced by the registry, ``run_command`` CWD restriction, and
   ``HumanGate``.
-* ``fs``, ``shell``, ``http``, ``git`` (Task 06) — the standard library of
-  tools available to every workflow unless explicitly excluded.
+* :mod:`~ai_workflows.primitives.tools.fs` (Task 06) — ``read_file``,
+  ``write_file``, ``list_dir``, ``grep``. UTF-8 with latin-1 fallback,
+  entry caps, and truncation markers.
+* :mod:`~ai_workflows.primitives.tools.shell` (Task 06) — ``run_command``
+  gated by CWD containment, executable allowlist, dry-run, and timeout
+  guards. Never raises to the LLM.
+* :mod:`~ai_workflows.primitives.tools.http` (Task 06) — ``http_fetch``,
+  one tool for every HTTP method.
+* :mod:`~ai_workflows.primitives.tools.git` (Task 06) — ``git_diff``,
+  ``git_log``, ``git_apply``. ``git_apply`` refuses on a dirty tree.
+* :mod:`~ai_workflows.primitives.tools.stdlib` (Task 06) — the
+  :func:`register_stdlib_tools` helper that binds every stdlib callable
+  onto a :class:`ToolRegistry` at workflow load time.
 """

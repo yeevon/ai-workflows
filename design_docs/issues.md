@@ -83,6 +83,7 @@ These break correctness or safety if left unresolved. From post-research analysi
 - [ ] **P-18** — `git_apply` checks clean working tree, refuses if dirty.
 - [ ] **P-19** — Tool errors return structured `ToolError` content block (LLM-reactable), not raised exception.
 - [x] **P-20** — Workflow-scoped tools resolved by injected registry.
+- [ ] **P-20a** — (from M1-T06-ISS-02) `fs.read_file` reads the whole file via `Path.read_bytes()` before applying `max_chars`. On a 1 GB log this pulls the entire file into RAM even if the caller wanted 1 KiB. Fix when a workflow first reports OOM / slow `read_file`: replace with a chunked read of up to `max_chars * 4` bytes (UTF-8 upper bound), then decode. Source: [phases/milestone_1_primitives/issues/task_06_issue.md](phases/milestone_1_primitives/issues/task_06_issue.md) — LOW.
 - [ ] **P-21** — `tiers.yaml` location when installed: bundle as package data via `importlib.resources`.
 - [x] **P-22** — `sonnet` tier missing `temperature` was oversight. Add `temperature: 0.1`.
 - [x] **P-23** — Retired model validation: fail lazily on first call, log clearly.

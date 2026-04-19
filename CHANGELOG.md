@@ -7,6 +7,137 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M1 Task 06: Stdlib Tools — fs + shell + http + git (2026-04-18)
+
+Implements P-13 … P-19 (the language-agnostic standard-library tools
+registered into every workflow's `ToolRegistry`). Lands the carry-over
+items M1-T05-ISS-01 (end-to-end forensic-wrapper test through a real
+`pydantic_ai.Agent.run()` call) and M1-T05-ISS-03 (string-return
+convention for all stdlib tools, pinned by an annotation test).
+
+**Files added or modified:**
+
+- `ai_workflows/primitives/tools/fs.py` — new module. `read_file`,
+  `write_file`, `list_dir`, `grep`. UTF-8 → latin-1 fallback on
+  `read_file`; optional `max_chars` truncation marker; parent-dir
+  creation on `write_file`; 500-entry cap on `list_dir`; 100-match cap
+  on `grep` with regex validation. Every failure path returns a
+  structured `"Error: …"` string, never raises.
+- `ai_workflows/primitives/tools/shell.py` — new module. `run_command`
+  gated by CWD containment, executable allowlist, dry-run short-circuit,
+  and timeout — in that order. Exports `SecurityError`,
+  `ExecutableNotAllowedError`, `CommandTimeoutError`. Internal guard
+  helpers (`_check_cwd_containment`, `_check_executable`) raise; the
+  public `run_command` catches and returns strings so the LLM never
+  sees a traceback.
+- `ai_workflows/primitives/tools/http.py` — new module. Single
+  `http_fetch(ctx, url, method, max_chars, timeout)` tool; 50K-char body
+  truncation; httpx timeout / network errors returned as strings.
+- `ai_workflows/primitives/tools/git.py` — new module. `git_diff`
+  (100K-char cap), `git_log` (oneline format), `git_apply`. Exports
+  `DirtyWorkingTreeError`. `git_apply` runs `git status --porcelain`
+  first and refuses on a dirty tree; `dry_run=True` uses
+  `git apply --check`.
+- `ai_workflows/primitives/tools/stdlib.py` — new module.
+  `register_stdlib_tools(registry)` binds every canonical stdlib tool
+  name onto a `ToolRegistry` at workflow-run start, with non-empty
+  descriptions forwarded to the `pydantic_ai.Tool` schema.
+- `ai_workflows/primitives/tools/__init__.py` — docstring updated to
+  enumerate every new submodule.
+- `tests/primitives/tools/__init__.py`, `.../conftest.py` — new test
+  package + shared `CtxShim` / `ctx_factory` fixture that carries only
+  the `WorkflowDeps` bits the tools read (avoids constructing a real
+  `RunContext` with a live Model and RunUsage).
+- `tests/primitives/tools/test_fs.py` — 18 tests covering read_file
+  UTF-8 + latin-1 fallback + missing-file string errors, write_file
+  parent-dir creation + overwrite flag, list_dir sort + glob + 500-cap +
+  string errors, grep file:line:text format + max_results cap + invalid
+  regex string error + rglob recursion.
+- `tests/primitives/tools/test_shell.py` — 17 tests. Guard helpers
+  tested directly for the raises-on-failure contract; run_command
+  tested for the string-return contract in every failure mode (security,
+  allowlist, dry-run, timeout, missing exec, non-zero exit). Dry-run
+  enforces guards before short-circuiting.
+- `tests/primitives/tools/test_http.py` — 6 tests using
+  `httpx.MockTransport` so no live network traffic is generated. Covers
+  HTTP 200 success, method override, body truncation, timeout +
+  network-error string returns, invalid-URL string return.
+- `tests/primitives/tools/test_git.py` — 12 tests on an isolated repo
+  under `tmp_path`. Diff / log format + caps; git_apply refuses on
+  dirty tree (key AC); dry-run uses `git apply --check` without
+  touching the tree.
+- `tests/primitives/tools/test_stdlib.py` — 21 tests. Registration
+  binds every canonical name; double registration fails; every stdlib
+  tool's first parameter is `ctx` and the return annotation is `str`
+  (pins the M1-T05-ISS-03 decision). The carry-over live Agent.run()
+  test uses `pydantic_ai.models.test.TestModel` to invoke a canary tool
+  whose output trips an `INJECTION_PATTERNS` marker and asserts the
+  `tool_output_suspicious_patterns` WARNING fires.
+- `design_docs/phases/milestone_1_primitives/task_06_stdlib_tools.md` —
+  Status line added, every acceptance-criterion checkbox ticked, both
+  carry-over entries ticked with a resolution pointer to the pinning
+  test.
+- `design_docs/phases/milestone_1_primitives/README.md` — Task 06
+  entry flipped to `✅ Complete (2026-04-18)`.
+
+**Acceptance criteria satisfied:**
+
+- AC-1: `read_file` UTF-8 + latin-1 fallback —
+  `test_read_file_returns_utf8_content` + `test_read_file_falls_back_to_latin1_on_invalid_utf8`.
+- AC-2: `..` in `working_dir` raises `SecurityError` naming the
+  attempted path — `test_check_cwd_containment_rejects_parent_traversal`
+  (guard) + `test_run_command_security_error_returns_string` (end-to-end
+  via the string-return contract).
+- AC-3: Executable not in allowlist raises
+  `ExecutableNotAllowedError` — `test_check_executable_rejects_when_not_in_allowlist`
+  plus `test_run_command_executable_not_allowed_returns_string`.
+- AC-4: `dry_run=True` never invokes subprocess —
+  `test_run_command_dry_run_does_not_invoke_subprocess` uses
+  `unittest.mock.patch` to pin `subprocess.run` was not called.
+- AC-5: `git_apply` refuses on dirty working tree —
+  `test_git_apply_refuses_dirty_tree`.
+- AC-6: All tools return strings on error paths — pinned by a matching
+  `_returns_string_error` test for every public tool (read_file missing,
+  read_file on directory, write_file permission branch via the generic
+  OSError catch, list_dir missing + on-file, grep missing path + invalid
+  regex, run_command × all guards + timeout + missing-exec, http_fetch
+  timeout + network + bad URL, git_diff bad ref, git_log non-repo,
+  git_apply bad diff + non-repo).
+- AC-7: Tools pull `allowed_executables` and `project_root` from
+  `RunContext[WorkflowDeps]` — verified by `test_run_command_success_returns_exit_code_and_output`
+  (reads `project_root` from `ctx.deps`), the allowlist tests (reads
+  `allowed_executables`), and `test_stdlib_tool_first_parameter_is_ctx`
+  (pins the signature convention for all 9 tools).
+
+**Carry-over from M1 Task 05 audit:**
+
+- M1-T05-ISS-01 — end-to-end pydantic-ai `Agent.run()` test now lives at
+  `tests/primitives/tools/test_stdlib.py::test_forensic_wrapper_survives_real_agent_run`.
+  Uses `TestModel(call_tools=["injected_tool"])` so no API key is
+  required; asserts the `tool_output_suspicious_patterns` WARNING
+  fires when the tool's output contains an `INJECTION_PATTERNS`
+  marker.
+- M1-T05-ISS-03 — standardised on Option 2 ("all stdlib tools return
+  `str`"). Every public stdlib tool is annotated `-> str`, pinned by
+  `test_stdlib_tool_is_annotated_to_return_str` (9 parametrised cases).
+  The convention is called out in `fs.py` and `shell.py` module
+  docstrings so future tool authors see the rule before writing a
+  structured-output tool.
+
+**Deviations from spec:**
+
+- `run_command` catches `SecurityError` / `ExecutableNotAllowedError` /
+  `CommandTimeoutError` at the outer frame and returns a structured
+  error string; the guard helpers still raise. Both ACs ("raises X"
+  and "returns strings on error paths") are satisfied — the raises-on-
+  failure contract is pinned at the guard level, the string-return
+  contract at the tool level. This reading is consistent with the
+  spec's "Never raises to the LLM" rider.
+- `_check_cwd_containment` and `_check_executable` are module-level
+  helpers with leading underscores — they are part of the internal
+  contract (tested directly) but not re-exported through
+  `shell.__all__`. Callers always go through `run_command`.
+
 ### Added — M1 Task 05: Tool Registry and Forensic Logger (2026-04-18)
 
 Implements P-11 / P-20 (injected tool registry) and CRIT-04 (rename the

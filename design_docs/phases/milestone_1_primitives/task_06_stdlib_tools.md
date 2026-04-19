@@ -1,5 +1,7 @@
 # Task 06 — Stdlib Tools (fs, shell, http, git)
 
+**Status:** ✅ Complete (2026-04-18) — see [issues/task_06_issue.md](issues/task_06_issue.md).
+
 **Issues:** P-13, P-14, P-15, P-16, P-17, P-18, P-19
 
 ## What to Build
@@ -54,13 +56,13 @@ Called at workflow run start, before `ToolRegistry` is passed to Components.
 
 ## Acceptance Criteria
 
-- [ ] `read_file` handles UTF-8 and latin-1 fallback gracefully
-- [ ] `..` in `working_dir` raises `SecurityError` with the attempted path
-- [ ] Executable not in allowlist raises `ExecutableNotAllowedError`
-- [ ] `dry_run=True` never invokes subprocess
-- [ ] `git_apply` refuses on dirty working tree
-- [ ] All tools return strings on error paths (test each failure mode returns str, not raises)
-- [ ] Tools pull `allowed_executables` and `project_root` from `RunContext[WorkflowDeps]`
+- [x] `read_file` handles UTF-8 and latin-1 fallback gracefully
+- [x] `..` in `working_dir` raises `SecurityError` with the attempted path
+- [x] Executable not in allowlist raises `ExecutableNotAllowedError`
+- [x] `dry_run=True` never invokes subprocess
+- [x] `git_apply` refuses on dirty working tree
+- [x] All tools return strings on error paths (test each failure mode returns str, not raises)
+- [x] Tools pull `allowed_executables` and `project_root` from `RunContext[WorkflowDeps]`
 
 ## Dependencies
 
@@ -73,7 +75,7 @@ Forward-deferred items owned by this task. Treat each entry like an
 additional acceptance criterion and tick it when the corresponding test or
 change lands.
 
-- [ ] **M1-T05-ISS-01** — End-to-end test that a real `pydantic_ai.Agent.run()`
+- [x] **M1-T05-ISS-01** — End-to-end test that a real `pydantic_ai.Agent.run()`
   call routes a registered tool's output through
   `forensic_logger.log_suspicious_patterns()`. Use
   `pydantic_ai.models.test.TestModel` so no API key is needed. Register a
@@ -84,7 +86,8 @@ change lands.
   internal call protocol.
   Source: [issues/task_05_issue.md](issues/task_05_issue.md) — LOW.
   Alternative owner: M2 Task 02 (Worker).
-- [ ] **M1-T05-ISS-03** — Standardise how non-string tool outputs reach the
+  Resolved by `tests/primitives/tools/test_stdlib.py::test_forensic_wrapper_survives_real_agent_run`.
+- [x] **M1-T05-ISS-03** — Standardise how non-string tool outputs reach the
   forensic scanner. The Task 05 wrapper calls `str(result)`, which is a
   no-op for the stdlib tools landing here (`read_file`, `grep`,
   `run_command` all return `str`). Either keep all stdlib tools returning
@@ -95,3 +98,10 @@ change lands.
   Source: [issues/task_05_issue.md](issues/task_05_issue.md) — LOW,
   informational. Alternative owner: M2 Task 02 (Worker), only if Worker
   introduces structured-output tools before this task closes.
+  **Decision:** option 2 (document the `str`-return convention). Every
+  stdlib tool is annotated `-> str`, pinned by
+  `test_stdlib_tool_is_annotated_to_return_str` (9 parametrised cases),
+  and the convention is called out in
+  `ai_workflows/primitives/tools/fs.py` (module docstring) and
+  `ai_workflows/primitives/tools/shell.py` (module docstring,
+  "pinned on M1-T05-ISS-03" line).

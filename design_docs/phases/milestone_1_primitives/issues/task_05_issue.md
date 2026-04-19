@@ -39,7 +39,12 @@ _No MEDIUM issues._
 
 ### M1-T05-ISS-01 — Forensic wrapper is not yet exercised on a real pydantic-ai Agent call
 
-**Severity:** LOW · **Status:** ⏸️ DEFERRED — owner: M1 Task 06 / M2 Worker
+**Severity:** LOW · **Status:** ✅ RESOLVED (2026-04-18) — pinned by
+`tests/primitives/tools/test_stdlib.py::test_forensic_wrapper_survives_real_agent_run`.
+Uses `pydantic_ai.models.test.TestModel(call_tools=["injected_tool"])` to
+invoke a tool whose output trips an `INJECTION_PATTERNS` marker and
+asserts the `tool_output_suspicious_patterns` WARNING fires through the
+real pydantic-ai tool-call protocol.
 
 **What's observed.** The forensic wrapper returned by
 [`ToolRegistry.build_pydantic_ai_tools()`](../../../../ai_workflows/primitives/tools/registry.py)
@@ -107,8 +112,13 @@ No code change required in Task 05 today.
 
 ### M1-T05-ISS-03 — Non-string tool outputs are forensic-scanned via `str(result)` — lossy for dicts / binary
 
-**Severity:** LOW · **Status:** ⏸️ DEFERRED — owner: M2 Worker / stdlib
-tools (Task 06)
+**Severity:** LOW · **Status:** ✅ RESOLVED (2026-04-18) — Option 2
+chosen. Every stdlib tool in M1 Task 06 is annotated `-> str`; the
+convention is documented in the `fs.py` and `shell.py` module docstrings
+and pinned by
+`tests/primitives/tools/test_stdlib.py::test_stdlib_tool_is_annotated_to_return_str`
+(9 parametrised cases). Worker (M2 Task 02) and any future tool author
+who ships a non-string return type will trip the test.
 
 **What's observed.** The wrapper in
 [registry.py::_wrap_with_forensics](../../../../ai_workflows/primitives/tools/registry.py)
@@ -185,17 +195,16 @@ kept, 0 broken`).
 
 ## Issue log — tracked for cross-task follow-up
 
-- **M1-T05-ISS-01** ⏸️ DEFERRED — end-to-end test of the forensic wrapper
-  through a real pydantic-ai `Agent.run()` call. Owner: M1 Task 06
-  stdlib tools (first real tool integration test) or M2 Worker test.
+- **M1-T05-ISS-01** ✅ RESOLVED (2026-04-18) — pinned by
+  `tests/primitives/tools/test_stdlib.py::test_forensic_wrapper_survives_real_agent_run`
+  (M1 Task 06).
 - **M1-T05-ISS-02** ⏸️ DEFERRED — smoke test that the forensic WARNING
   survives the production structlog processor chain. Owner: M1 Task 11
   (global structlog + logfire configuration).
-- **M1-T05-ISS-03** ⏸️ DEFERRED (informational) — forensic scan reads
-  `str(result)` for non-string tools. Owner: Task 06 (if a structured-
-  output tool ships) or M2 Worker (if Worker returns structured
-  artefacts). Decision point: standardise on string returns vs. match
-  pydantic-ai's JSON serialisation.
+- **M1-T05-ISS-03** ✅ RESOLVED (2026-04-18) — Option 2 (string returns)
+  chosen. Pinned by
+  `tests/primitives/tools/test_stdlib.py::test_stdlib_tool_is_annotated_to_return_str`
+  (M1 Task 06).
 
 **Propagation status.** All three deferrals are mirrored as "Carry-over
 from prior audits" entries in the target task spec(s) so the Builder
