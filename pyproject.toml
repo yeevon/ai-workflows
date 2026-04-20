@@ -42,6 +42,9 @@ packages = ["ai_workflows"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+  "e2e: end-to-end test that hits a real API; only runs when AIW_E2E=1",
+]
 
 [tool.ruff]
 line-length = 100

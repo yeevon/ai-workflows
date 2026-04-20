@@ -14,6 +14,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Manual trigger gates the `e2e` job below; the `test` / `secret-scan`
+  # jobs still run on every push + PR.
+  workflow_dispatch:
 
 jobs:
   test:
@@ -46,3 +49,25 @@ jobs:
             echo "::error::API key pattern detected in committed config"
             exit 1
           fi
+
+  # Manual-trigger-only end-to-end smoke test. Hits real Gemini via
+  # LiteLLM (planner workflow) so we gate it behind `workflow_dispatch`
+  # — per-PR runs would burn quota for no benefit. `AIW_E2E=1` flips
+  # the collection hook in `tests/e2e/conftest.py` from skip to run.
+  # See `design_docs/phases/milestone_3_first_workflow/task_07_e2e_smoke.md`.
+  e2e:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      AIW_E2E: "1"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync --all-extras
+      - name: Run e2e suite
+        run: uv run pytest -m e2e -v

@@ -71,3 +71,13 @@ None.
 ## Propagation status
 
 No deferrals from this audit — no carry-over entries written to downstream tasks.
+
+---
+
+## Post-M3 amendment (2026-04-20)
+
+T07a's live e2e run surfaced a second live-path gap touching T02's schema deliverables: the `PlannerStep` / `PlannerPlan` JSON Schema (ship as bound-rich pydantic models with `min_length` / `max_length` / `ge=1` / nested array bounds) exceeds Gemini's structured-output complexity budget, producing `BadRequestError 400 — "schema produces a constraint that has too many states for serving"` once `output_schema=PlannerPlan` is forwarded (which T07a did).
+
+Gap closed by [T07b](../task_07b_planner_schema_simplify.md) — stripped the `Field(...)` constraints from `PlannerStep` and `PlannerPlan` (kept `extra="forbid"`). `PlannerInput` is untouched (caller-side contract, never a `response_format` target). Runtime type validation + closed-world enforcement remain; the dropped bounds are now prompt-enforced via `PlannerInput.max_steps`.
+
+T02's audit status line and gate summary above remain the ground truth for what T02 shipped on its own scope; this amendment is provenance-only. Re-auditing T02 would be incorrect: the original schema design was correct against the pre-T07a validator contract; the live-path convergence gap is a follow-on concern of `output_schema=` being wired, which wasn't in T02's scope.

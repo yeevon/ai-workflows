@@ -41,3 +41,4 @@ Promote accumulated `[Unreleased]` entries from M3 tasks into a dated section `#
 ## Dependencies
 
 - [Task 01](task_01_workflow_registry.md) through [Task 07](task_07_e2e_smoke.md).
+- [Task 07a](task_07a_planner_structured_output.md) — **hard prerequisite**. T07's live e2e run on 2026-04-20 surfaced a requirement gap in T03's `tiered_node` wiring (no `output_schema=` forwarded, so Gemini returns free-form text and the validator's strict JSON parse is probabilistic against live output). T07a closes the gap. M3 cannot close green until T07a lands and a live `green-once` is recorded in the T08 CHANGELOG entry per AC-3. See [issues/task_08_issue.md](issues/task_08_issue.md) M3-T08-ISS-02.

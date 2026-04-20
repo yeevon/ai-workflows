@@ -40,6 +40,7 @@ from ai_workflows.primitives.tiers import LiteLLMRoute, TierConfig
 from ai_workflows.workflows import register
 
 __all__ = [
+    "PLANNER_RETRY_POLICY",
     "PlannerInput",
     "PlannerStep",
     "PlannerPlan",
@@ -48,6 +49,24 @@ __all__ = [
     "build_planner",
     "planner_tier_registry",
 ]
+
+
+PLANNER_RETRY_POLICY = RetryPolicy(
+    max_transient_attempts=5, max_semantic_attempts=3
+)
+"""Retry budget for both planner LLM nodes.
+
+``max_transient_attempts`` is bumped from the KDR-006 default of 3 to 5 by
+M3 Task 07a: Gemini 503 ``ServiceUnavailableError`` is a request-admission
+failure with ``input_tokens=null`` / ``cost_usd=null`` on the ``TokenUsage``
+record, so every 503 retry costs only ~2s of latency, no tokens. Under the
+default budget a single 503 burst during the ``workflow_dispatch`` e2e job
+would exhaust the transient bucket before convergence could be tried.
+``max_semantic_attempts`` stays at 3 — semantic retries *do* burn tokens
+(~1000–1500 output tokens per re-roll) and T07a's ``output_schema=`` wiring
+makes the semantic-failure class near-impossible, so widening that bucket
+is both expensive and unnecessary.
+"""
 
 
 class PlannerInput(BaseModel):
@@ -66,25 +85,46 @@ class PlannerInput(BaseModel):
 
 
 class PlannerStep(BaseModel):
-    """One entry in the plan."""
+    """One entry in the plan.
 
-    index: int = Field(ge=1)
-    title: str = Field(min_length=1, max_length=200)
-    rationale: str = Field(min_length=1, max_length=1000)
-    actions: list[str] = Field(min_length=1, max_length=10)
+    Per-field bounds (``ge=1`` on ``index``; ``min_length``/``max_length``
+    on ``title``, ``rationale``, ``actions``) were stripped by M3 Task 07b
+    — they pushed the ``PlannerPlan`` JSON Schema beyond Gemini's
+    structured-output complexity budget (``BadRequestError 400: schema
+    produces a constraint that has too many states for serving``). Runtime
+    type validation (``int`` / ``str`` / ``list[str]``) is preserved; the
+    dropped bounds are prompt-enforced (``_planner_prompt`` caps step
+    count via ``PlannerInput.max_steps``).
+    """
+
+    index: int
+    title: str
+    rationale: str
+    actions: list[str]
 
 
 class PlannerPlan(BaseModel):
     """The artifact the workflow commits to produce.
 
-    ``extra="forbid"`` is deliberate: a hallucinated ``"notes"`` or
-    ``"disclaimer"`` key from the LLM must surface as a ``ValidationError`` the
-    :class:`RetryingEdge` can route on, not silently extend the contract.
+    ``extra="forbid"`` stays: a hallucinated ``"notes"`` or
+    ``"disclaimer"`` key from the LLM must still surface as a
+    ``ValidationError`` the :class:`RetryingEdge` can route on.
+
+    Per-field bounds (``min_length``/``max_length`` on ``goal``, ``summary``;
+    ``min_length``/``max_length`` on ``steps``) were stripped by M3 Task 07b
+    alongside the ``PlannerStep`` bounds — same reason (Gemini
+    structured-output budget). The floor that remains:
+
+    * Pydantic type validation (``str``, ``list[PlannerStep]``) and
+      closed-world (``extra="forbid"``) enforcement.
+    * The planner system prompt, which instructs "at most ``{max_steps}``
+      steps" and reads ``PlannerInput.max_steps`` (bounded ``[1, 25]``
+      on the caller side, unchanged by T07b).
     """
 
-    goal: str = Field(min_length=1)
-    summary: str = Field(min_length=1, max_length=1000)
-    steps: list[PlannerStep] = Field(min_length=1, max_length=25)
+    goal: str
+    summary: str
+    steps: list[PlannerStep]
 
     model_config = {"extra": "forbid"}
 
@@ -213,12 +253,13 @@ def build_planner() -> StateGraph:
     with self-loop retries off each LLM node and a validator → LLM edge
     on semantic failures.
     """
-    policy = RetryPolicy(max_transient_attempts=3, max_semantic_attempts=3)
+    policy = PLANNER_RETRY_POLICY
 
     explorer = wrap_with_error_handler(
         tiered_node(
             tier="planner-explorer",
             prompt_fn=_explorer_prompt,
+            output_schema=ExplorerReport,
             node_name="explorer",
         ),
         node_name="explorer",
@@ -236,6 +277,7 @@ def build_planner() -> StateGraph:
         tiered_node(
             tier="planner-synth",
             prompt_fn=_planner_prompt,
+            output_schema=PlannerPlan,
             node_name="planner",
         ),
         node_name="planner",

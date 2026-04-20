@@ -35,6 +35,7 @@ from ai_workflows.primitives.cost import CostTracker, TokenUsage
 from ai_workflows.primitives.storage import SQLiteStorage
 from ai_workflows.primitives.tiers import LiteLLMRoute, TierConfig
 from ai_workflows.workflows.planner import (
+    PLANNER_RETRY_POLICY,
     ExplorerReport,
     PlannerInput,
     PlannerPlan,
@@ -47,10 +48,16 @@ from ai_workflows.workflows.planner import (
 
 
 class _StubLiteLLMAdapter:
-    """Scripted LiteLLM-adapter stub shared with the M2 smoke graph test."""
+    """Scripted LiteLLM-adapter stub shared with the M2 smoke graph test.
+
+    ``response_format_log`` captures the ``response_format`` kwarg forwarded
+    on every call so T07a tests can assert native structured-output wiring
+    reaches the adapter boundary.
+    """
 
     script: list[Any] = []
     call_count: int = 0
+    response_format_log: list[Any] = []
 
     def __init__(self, *, route: LiteLLMRoute, per_call_timeout_s: int) -> None:
         self.route = route
@@ -63,6 +70,7 @@ class _StubLiteLLMAdapter:
         response_format: Any = None,
     ) -> tuple[str, TokenUsage]:
         _StubLiteLLMAdapter.call_count += 1
+        _StubLiteLLMAdapter.response_format_log.append(response_format)
         if not _StubLiteLLMAdapter.script:
             raise AssertionError("stub script exhausted")
         head = _StubLiteLLMAdapter.script.pop(0)
@@ -80,6 +88,7 @@ class _StubLiteLLMAdapter:
     def reset(cls) -> None:
         cls.script = []
         cls.call_count = 0
+        cls.response_format_log = []
 
 
 @pytest.fixture(autouse=True)
@@ -298,9 +307,32 @@ async def test_happy_path_pauses_at_gate_then_persists_artifact(
         # Sanity: both stubbed LLM calls fired exactly once.
         assert _StubLiteLLMAdapter.call_count == 2
         assert tracker.total("run-happy") == pytest.approx(0.0033)
+
+        # M3 T07a: ``response_format`` must reach the adapter boundary on
+        # both tiers so LiteLLM drives Gemini's native structured-output
+        # path. Pre-T07a the kwarg was ``None`` on both calls; post-T07a
+        # the explorer tier forwards ``ExplorerReport`` and the planner
+        # tier forwards ``PlannerPlan``.
+        assert _StubLiteLLMAdapter.response_format_log == [
+            ExplorerReport,
+            PlannerPlan,
+        ]
     finally:
         await checkpointer.conn.close()
         del storage
+
+
+def test_planner_retry_policy_bumps_transient_attempts_to_five() -> None:
+    """M3 T07a: ``max_transient_attempts`` is bumped 3 → 5.
+
+    Gemini 503 ``ServiceUnavailableError`` is a request-admission failure
+    (``input_tokens=null`` / ``cost_usd=null`` on ``TokenUsage``), so 503
+    retries cost only latency. Bumping the transient bucket to 5 buys the
+    e2e job resilience against 503 bursts without widening the semantic
+    bucket (which would burn real tokens per re-roll).
+    """
+    assert PLANNER_RETRY_POLICY.max_transient_attempts == 5
+    assert PLANNER_RETRY_POLICY.max_semantic_attempts == 3
 
 
 # ---------------------------------------------------------------------------

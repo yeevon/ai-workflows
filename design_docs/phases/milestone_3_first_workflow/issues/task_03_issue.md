@@ -93,3 +93,11 @@ No MEDIUM / LOW findings to propagate.
 ## Propagation status
 
 No deferrals from this audit — no carry-over entries written to downstream tasks.
+
+---
+
+## Post-M3 amendment (2026-04-20)
+
+The T07 e2e smoke test's live run on 2026-04-20 surfaced a requirement gap in T03's `tiered_node` wiring: neither the explorer nor the planner tier forwarded `output_schema=` to LiteLLM, so Gemini returned free-form / markdown-fenced JSON and `validator_node`'s strict `model_validate_json` parse rejected probabilistically. T03's hermetic tests stubbed the adapter with pre-canned clean JSON, masking the live-path divergence.
+
+Gap closed by [T07a](../task_07a_planner_structured_output.md) — a dedicated, scope-bounded follow-up (two `output_schema=` kwarg additions, test-assertion bumps, `max_transient_attempts` bump 3→5). **Not** a re-open of this audit. T03's audit status line and gate summary above remain the ground truth for what T03 shipped on its own scope; the amendment is documentation of the live-path discovery and its resolution path, for reviewers reading the M3 trail end-to-end. Re-auditing T03 would be incorrect: the live-path convergence gap was a spec-level omission, not a T03 implementation defect.
