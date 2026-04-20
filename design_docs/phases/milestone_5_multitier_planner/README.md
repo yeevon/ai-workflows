@@ -33,15 +33,13 @@ Upgrade the `planner` workflow from single-tier to a two-phase sub-graph: **Qwen
 
 | # | Task |
 | --- | --- |
-| 01 | Explorer node (Qwen, `local_coder` tier) + output schema |
-| 02 | Planner node refit for Claude Code (`opus` tier) |
-| 03 | Sub-graph composition wiring (explorer → planner → validator → gate) |
-| 04 | Tier-override plumbing in CLI (`--tier-override tier=override`) |
-| 05 | Tier-override plumbing in MCP `run_workflow` |
-| 06 | End-to-end test (mocked providers) + manual smoke test (real providers) |
-| 07 | Milestone close-out |
-
-Per-task files generated once M4 closes.
+| 01 | [Qwen explorer tier refit](task_01_qwen_explorer.md) |
+| 02 | [Claude Code planner tier refit](task_02_claude_code_planner.md) |
+| 03 | [Sub-graph composition validation (integration)](task_03_subgraph_composition.md) |
+| 04 | [Tier-override CLI plumbing (`--tier-override logical=replacement`)](task_04_tier_override_cli.md) |
+| 05 | [Tier-override MCP plumbing (`RunWorkflowInput.tier_overrides`)](task_05_tier_override_mcp.md) |
+| 06 | [End-to-end smoke (hermetic + `AIW_E2E=1` live)](task_06_e2e_smoke.md) |
+| 07 | [Milestone close-out](task_07_milestone_closeout.md) |
 
 ## Issues
 
