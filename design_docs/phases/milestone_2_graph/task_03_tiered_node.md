@@ -54,3 +54,7 @@ def tiered_node(
 
 - [Task 01](task_01_litellm_adapter.md), [Task 02](task_02_claude_code_driver.md).
 - M1 [task 06](../milestone_1_reconciliation/task_06_refit_tier_config.md), [task 07](../milestone_1_reconciliation/task_07_refit_retry_policy.md), [task 09](../milestone_1_reconciliation/task_09_logger_sanity.md).
+
+## Carry-over from prior audits
+
+- [ ] **M2-T07-ISS-01 (observational, primary owner)** — T07's `RetryingEdge` reads `state['last_exception']`, `state['_retry_counts'][node_name]`, and `state['_non_retryable_failures']` as a pure `(state) -> str` router. The T03 spec's current wording ("does not swallow exceptions — the typed exception propagates so `RetryingEdge` can route") is architecturally incomplete: a pure conditional edge cannot observe a raised exception that was never stored. **What to implement:** on exception, this node must either (a) catch the classified bucket and return it in the node's result dict as `{"last_exception": exc, "_retry_counts": {**prev, node_name: prev.get(node_name, 0) + 1}, "_non_retryable_failures": prev + 1 if isinstance(exc, NonRetryable) else prev}`, or (b) be wrapped by a small LangGraph-native error handler that performs the same state update. On success, the node should clear `last_exception` so the edge doesn't re-fire on stale data. Source: [issues/task_07_issue.md](issues/task_07_issue.md).

@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M2 Task 07: RetryingEdge (2026-04-19)
+
+Fourth `ai_workflows.graph.*` adapter — the conditional-edge factory
+that routes by the three-bucket retry taxonomy from
+[architecture.md §8.2](design_docs/architecture.md) and KDR-006.
+Pure `(state) -> str` routing function: reads
+`state['last_exception']`, the durable per-node attempt counters at
+`state['_retry_counts']`, and the run-scoped
+`state['_non_retryable_failures']` — returns the next node name. No
+state mutation, so the edge round-trips cleanly under LangGraph's
+`SqliteSaver` (KDR-009). Exponential backoff is deliberately pushed
+to the self-loop target per spec, keeping the edge trivially
+unit-testable without time fixtures.
+
+**Files added:**
+
+- `ai_workflows/graph/retrying_edge.py` — `retrying_edge(*, on_transient,
+  on_semantic, on_terminal, policy)` factory. Double-failure hard-stop
+  (`state['_non_retryable_failures'] >= 2`) precedes bucket dispatch so
+  a second `NonRetryable` forces terminal regardless of the current
+  bucket. `RetryableTransient` / `RetryableSemantic` attempt counters
+  are read from `state['_retry_counts']` keyed by the destination
+  node name; on exhaustion (counter ≥ cap) the edge escalates to
+  `on_terminal`. `NonRetryable`, any unknown exception type, and a
+  missing `last_exception` all route defensively to `on_terminal` —
+  there is no silent self-loop.
+- `tests/graph/test_retrying_edge.py` — 9 tests: transient routes to
+  `on_transient` until cap then terminal; semantic routes to LLM node
+  with `revision_hint` preserved; semantic exhaustion routes to
+  terminal; non-retryable routes to terminal; double-failure hard-stop
+  forces terminal even for a transient exception; counters survive a
+  simulated resume (fresh closure, same state → same decision); missing
+  `last_exception` defaults to terminal; unknown exception types route
+  to terminal; distinct `on_transient` / `on_semantic` destinations
+  are respected.
+
+**ACs satisfied:** all three buckets routed correctly; attempt
+counters live in state (durable across checkpoint resume); double-
+failure hard-stop covered by a dedicated test;
+`uv run pytest tests/graph/test_retrying_edge.py` green.
+
+**Deviations from spec:** none. Spec signature reproduced verbatim.
+Counters are read-only from the edge's perspective — the spec
+phrases this as "Track attempt counts in state" and leaves the
+increment site to the raising node; the edge's enforcement is the
+cap check. No backoff logic lives here (spec explicitly scopes it to
+the self-loop target).
+
 ### Added — M2 Task 06: CostTrackingCallback (2026-04-19)
 
 Third `ai_workflows.graph.*` adapter — the explicit per-node boundary

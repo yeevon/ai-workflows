@@ -50,3 +50,7 @@ Additional smaller unit tests in `tests/graph/test_checkpointer.py`:
 ## Dependencies
 
 - [Task 03](task_03_tiered_node.md) through [Task 07](task_07_retrying_edge.md).
+
+## Carry-over from prior audits
+
+- [ ] **M2-T07-ISS-01 (integration responsibility)** — wire T03 + T04 + T07 together in the smoke graph so the retry loop is exercised end-to-end. Specifically: verify that a raised bucket exception from T03 / T04 lands in `state['last_exception']` with `state['_retry_counts'][node_name]` incremented (and `state['_non_retryable_failures']` on `NonRetryable`), that `RetryingEdge` routes correctly, and that on a successful next pass `state['last_exception']` is cleared so the edge doesn't re-fire on stale data. If T03's builder picked option (b) (wrapper error handler) the wrapper belongs here; if option (a) the smoke graph just pins the flow. M3 workflow authors will copy this template. Source: [issues/task_07_issue.md](issues/task_07_issue.md).
