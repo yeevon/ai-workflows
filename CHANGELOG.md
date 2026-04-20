@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M3 Task 02: Planner Pydantic I/O Schemas (2026-04-20)
+
+Pins the pydantic v2 public contract for the ``planner`` workflow:
+``PlannerInput`` (caller-supplied goal + optional context + max-steps
+cap) and ``PlannerPlan`` / ``PlannerStep`` (the artifact the workflow
+commits to produce). These are the schemas ``ValidatorNode`` will
+parse LLM output against in T03, and the MCP tool schemas in M4.
+
+**Files touched:**
+
+- `ai_workflows/workflows/planner.py` — new module; schema half
+  (``PlannerInput``, ``PlannerStep``, ``PlannerPlan``). The graph
+  builder and the ``register("planner", …)`` call land in T03.
+- `tests/workflows/test_planner_schemas.py` — 18 tests covering
+  defaults, min/max-length, step ``index`` lower bound, ``actions``
+  non-empty + upper bound, steps-list bounds, round-trip via
+  ``model_validate`` / ``model_dump``, ``extra="forbid"`` rejection
+  of a rogue top-level field, and required-field emptiness.
+
+**Acceptance criteria satisfied:**
+
+- `PlannerInput`, `PlannerStep`, `PlannerPlan` exported from
+  `ai_workflows.workflows.planner`.
+- Minimal valid payload round-trips through `.model_validate(...)` +
+  `.model_dump()`.
+- `extra="forbid"` on `PlannerPlan` rejects unknown top-level fields
+  (`test_extra_top_level_field_rejected`).
+- `PlannerInput.max_steps` bounded `[1, 25]`; `PlannerPlan.steps`
+  bounded `[1, 25]`.
+- `uv run pytest tests/workflows/test_planner_schemas.py` green (18
+  passed).
+- `uv run lint-imports` 3 / 3 kept, 0 broken.
+
+**Gates:** `uv run pytest` 263 passed; `uv run lint-imports` 3 kept /
+0 broken; `uv run ruff check` clean. No deviations from spec.
+
+### Added — M3 Task 01: Workflow Registry (2026-04-20)
+
+Wires the name-to-builder registry inside the workflows layer so
+surfaces (`aiw` CLI in T04–T06, MCP server in M4) can resolve
+workflows by string id without importing each module directly. Pure
+Python + stdlib; no LangGraph import crosses the boundary.
+
+**Files touched:**
+
+- `ai_workflows/workflows/__init__.py` — adds `WorkflowBuilder`,
+  `_REGISTRY`, `register`, `get`, `list_workflows`,
+  `_reset_for_tests`; docstring updated to describe the registry.
+- `tests/workflows/test_registry.py` — nine tests covering round-trip,
+  idempotent re-registration, conflict `ValueError`, missing-name
+  `KeyError` (populated + empty), sorted listing, reset, and a
+  `langgraph`-masked reimport probe.
+
+**Acceptance criteria satisfied:**
+
+- `register`, `get`, `list_workflows`, `_reset_for_tests` exported
+  from `ai_workflows.workflows`.
+- Duplicate-name registration with a different builder raises
+  `ValueError`; identical re-registration is a no-op.
+- `get` on unknown name raises `KeyError` listing known names.
+- `ai_workflows.workflows` does not import `langgraph` at module
+  load — verified by `test_workflows_module_does_not_import_langgraph`
+  which masks `langgraph` out of `sys.modules` before reimport.
+- `uv run pytest tests/workflows/test_registry.py` green (9 passed).
+- `uv run lint-imports` 3 / 3 kept, 0 broken.
+
+**Gates:** `uv run pytest` 245 passed; `uv run lint-imports` 3 kept /
+0 broken; `uv run ruff check` clean. No deviations from spec.
+
 ### Changed — Architecture pivot: LangGraph + MCP substrate (2026-04-19)
 
 Design-mode pivot away from the pydantic-ai-centric M1 plan toward a
