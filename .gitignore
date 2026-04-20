@@ -35,3 +35,6 @@ tiers.local.yaml
 .vscode/
 .import_linter_cache/
 .ruff_cache/
+
+# Claude Code runtime
+.claude/scheduled_tasks.lock

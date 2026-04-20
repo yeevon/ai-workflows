@@ -62,6 +62,7 @@ def test_storage_protocol_only_exposes_the_trimmed_surface() -> None:
     expected = {
         "create_run",
         "update_run_status",
+        "cancel_run",
         "get_run",
         "list_runs",
         "record_gate",
@@ -272,6 +273,58 @@ async def test_list_runs_status_filter(tmp_path: Path) -> None:
     assert [row["run_id"] for row in only_completed] == ["r1"]
     only_pending = await storage.list_runs(status_filter="pending")
     assert [row["run_id"] for row in only_pending] == ["r2"]
+
+
+# ---------------------------------------------------------------------------
+# cancel_run (M4 Task 05)
+# ---------------------------------------------------------------------------
+
+
+async def test_cancel_run_flips_pending_row_to_cancelled(tmp_path: Path) -> None:
+    storage = await _open(tmp_path)
+    await storage.create_run("r1", "wf", None)
+
+    result = await storage.cancel_run("r1")
+    assert result == "cancelled"
+
+    row = await storage.get_run("r1")
+    assert row is not None
+    assert row["status"] == "cancelled"
+    assert row["finished_at"] is not None
+
+
+async def test_cancel_run_is_noop_on_terminal_row(tmp_path: Path) -> None:
+    """AC: a row already in a terminal state returns ``already_terminal``."""
+    storage = await _open(tmp_path)
+    await storage.create_run("r1", "wf", None)
+    await storage.update_run_status("r1", "completed")
+
+    before = await storage.get_run("r1")
+    assert before is not None
+
+    result = await storage.cancel_run("r1")
+    assert result == "already_terminal"
+
+    after = await storage.get_run("r1")
+    assert after is not None
+    assert after["status"] == "completed"
+    # no side-effect mutation of finished_at / other columns
+    assert after["finished_at"] == before["finished_at"]
+
+
+async def test_cancel_run_idempotent_second_call_is_already_terminal(
+    tmp_path: Path,
+) -> None:
+    storage = await _open(tmp_path)
+    await storage.create_run("r1", "wf", None)
+    assert await storage.cancel_run("r1") == "cancelled"
+    assert await storage.cancel_run("r1") == "already_terminal"
+
+
+async def test_cancel_run_raises_on_unknown_run_id(tmp_path: Path) -> None:
+    storage = await _open(tmp_path)
+    with pytest.raises(ValueError, match="no run found"):
+        await storage.cancel_run("does-not-exist")
 
 
 # ---------------------------------------------------------------------------

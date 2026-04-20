@@ -13,20 +13,21 @@ Composable AI workflow framework for a solo developer using a **Claude** as the 
 | **M1 — Reconciliation & cleanup** | Complete (2026-04-19) |
 | **M2 — Graph-layer adapters + provider drivers** | Complete (2026-04-19) |
 | **M3 — First workflow (`planner`, single tier)** | Complete (2026-04-20) |
-| M4 — MCP server (FastMCP) | Planned |
+| **M4 — MCP server (FastMCP)** | Complete (2026-04-20) |
 | M5–M9 | Planned (see roadmap) |
 
-M1 established the four-layer package skeleton, sanitized the primitives layer for the post-pivot architecture, swapped the dependency set onto LangGraph + LiteLLM + FastMCP, and installed the import-linter contract. M2 filled the `graph/` layer with the LangGraph adapters every future workflow composes over — `TieredNode`, `ValidatorNode`, `HumanGate`, `CostTrackingCallback`, `RetryingEdge` — plus the two provider drivers (LiteLLM for Gemini + Qwen/Ollama, subprocess-OAuth for Claude Code) and the `SqliteSaver`-backed checkpointer. M3 wired the first real workflow: a single-tier `planner` `StateGraph` running end-to-end through the M2 adapters, the `aiw` CLI revived (`run` / `resume` / `list-runs`), and an `AIW_E2E=1`-gated smoke test that drives a real Gemini Flash call. Next up is [M4 — MCP server](design_docs/phases/milestone_4_mcp/README.md).
+M1 established the four-layer package skeleton, sanitized the primitives layer for the post-pivot architecture, swapped the dependency set onto LangGraph + LiteLLM + FastMCP, and installed the import-linter contract. M2 filled the `graph/` layer with the LangGraph adapters every future workflow composes over — `TieredNode`, `ValidatorNode`, `HumanGate`, `CostTrackingCallback`, `RetryingEdge` — plus the two provider drivers (LiteLLM for Gemini + Qwen/Ollama, subprocess-OAuth for Claude Code) and the `SqliteSaver`-backed checkpointer. M3 wired the first real workflow: a single-tier `planner` `StateGraph` running end-to-end through the M2 adapters, the `aiw` CLI revived (`run` / `resume` / `list-runs`), and an `AIW_E2E=1`-gated smoke test that drives a real Gemini Flash call. M4 shipped the portable inside-out MCP surface promised by KDR-002: four FastMCP tools (`run_workflow`, `resume_run`, `list_runs`, `cancel_run`) with schema-first pydantic contracts, a shared dispatch helper so CLI + MCP route through one path, stdio-transport entry point (`aiw-mcp`), `claude mcp add` registration docs, and an always-run hermetic in-process smoke covering every tool. Next up is [M5 — Multi-tier `planner`](design_docs/phases/milestone_5_multitier_planner/README.md).
 
-## What runs today (post-M3)
+## What runs today (post-M4)
 
+- **`aiw-mcp` MCP server** (FastMCP, stdio transport) — four tools exposed per [architecture.md §4.4](design_docs/architecture.md): `run_workflow`, `resume_run`, `list_runs`, `cancel_run`. Schema-first pydantic I/O (auto-derived by FastMCP per KDR-008). CLI and MCP route through one shared dispatch helper [`ai_workflows/workflows/_dispatch.py`](ai_workflows/workflows/_dispatch.py) so both surfaces stay in lockstep. Register with Claude Code via `claude mcp add ai-workflows --scope user -- uv run aiw-mcp` — full walkthrough in [design_docs/phases/milestone_4_mcp/mcp_setup.md](design_docs/phases/milestone_4_mcp/mcp_setup.md). `cancel_run` is storage-level only at M4; in-flight task abort lands at M6 per [architecture.md §8.7](design_docs/architecture.md).
 - **`aiw` CLI** (Typer) with three working commands — `aiw run planner --goal '<goal>' [--run-id …] [--budget-usd …]`, `aiw resume <run_id> [--approve / --reject]`, `aiw list-runs [--workflow / --status / --limit]`. `aiw version` still works; `cost-report` was deferred at M3 T06 reframe (see [architecture.md §4.4](design_docs/architecture.md) and [nice_to_have.md §9](design_docs/nice_to_have.md)). See [ai_workflows/cli.py](ai_workflows/cli.py).
 - **Planner workflow** — [`ai_workflows.workflows.planner`](ai_workflows/workflows/planner.py) exports `build_planner_graph()` wired as explorer → `TieredNode` (Gemini Flash via LiteLLM) → `ValidatorNode` → `HumanGate` → artifact, compiled against LangGraph's `AsyncSqliteSaver`. Schema-first: `PlannerInput` / `PlannerPlan` pydantic models are the single contract the CLI, validator, and prompt all enforce. Response schemas ship bare-typed per [KDR-010 / ADR-0002](design_docs/adr/0002_bare_typed_response_format_schemas.md).
 - **Workflow registry** — [`ai_workflows.workflows.register / get_workflow`](ai_workflows/workflows/__init__.py) — lazy `(name) → builder()` lookup that the CLI and the future MCP surface both resolve against a stable string key.
 - **Primitives layer** — `Storage` (SQLite run registry + gate-response log + `runs.total_cost_usd`), `TokenUsage` + `CostTracker`, `TierRegistry` + `LiteLLMRoute`, three-bucket retry taxonomy (`RetryableTransient` / `RetryableRateLimited` / `NonRetryable`), `StructuredLogger`, and the two LLM drivers — `LiteLLMAdapter` (Gemini + Qwen/Ollama) and `ClaudeCodeSubprocess` (`claude -p --output-format json`, OAuth-only). See [ai_workflows/primitives/](ai_workflows/primitives/).
 - **Graph layer** — LangGraph adapters over primitives: [`TieredNode`](ai_workflows/graph/tiered_node.py), [`ValidatorNode`](ai_workflows/graph/validator_node.py), [`HumanGate`](ai_workflows/graph/human_gate.py), [`CostTrackingCallback`](ai_workflows/graph/cost_callback.py), [`RetryingEdge`](ai_workflows/graph/retrying_edge.py), [`wrap_with_error_handler`](ai_workflows/graph/error_handler.py), and [`build_checkpointer` / `build_async_checkpointer`](ai_workflows/graph/checkpointer.py) (LangGraph `SqliteSaver` / `AsyncSqliteSaver`, default `~/.ai-workflows/checkpoints.sqlite`, `AIW_CHECKPOINT_DB` override).
 - **End-to-end smoke test** — [`tests/e2e/test_planner_smoke.py`](tests/e2e/test_planner_smoke.py) drives the full `aiw run planner` → `aiw resume` path against real Gemini Flash and asserts every M3 invariant the hermetic tests cannot (real provider call completes, budget cap honoured end-to-end, approved plan round-trips from Storage, no Anthropic API leak per KDR-003). Gated by `AIW_E2E=1`; default `uv run pytest` stays hermetic.
-- **Reserved layer marker** — [ai_workflows/mcp/](ai_workflows/mcp/) is a docstring-only package, awaiting content in M4.
+- **MCP surface** — [ai_workflows/mcp/](ai_workflows/mcp/): `build_server()` factory, pydantic I/O models in `schemas.py`, stdio entry point in `__main__.py`, the four tool bodies in `server.py`.
 - **Migrations** — yoyo-managed schema at [migrations/](migrations/) (`001_initial.sql`, `002_reconciliation.sql`).
 - **Import-linter contract** — four-layer discipline enforced by three contracts in [pyproject.toml](pyproject.toml).
 
@@ -89,6 +90,10 @@ uv run aiw resume demo --approve
 uv run aiw list-runs
 ```
 
+## MCP server
+
+Register the `aiw-mcp` stdio server with Claude Code (or any MCP host) to drive the same workflows inside-out. Setup walkthrough: [design_docs/phases/milestone_4_mcp/mcp_setup.md](design_docs/phases/milestone_4_mcp/mcp_setup.md).
+
 ## Development
 
 Three gates guard every change. Every task commit must leave them green:
@@ -99,7 +104,7 @@ uv run lint-imports   # four-layer import contract
 uv run ruff check     # style + basic correctness
 ```
 
-Post-M3 snapshot: 290 passed, 1 skipped (e2e, gated by `AIW_E2E=1`), 3 contracts kept, ruff clean.
+Post-M4 snapshot: 332 passed, 1 skipped (e2e, gated by `AIW_E2E=1`), 3 contracts kept, ruff clean.
 
 ### Workflow conventions
 
@@ -113,4 +118,4 @@ Task specs live under [design_docs/phases/milestone_&lt;N&gt;_&lt;name&gt;/](des
 
 ## Next
 
-M4 — [MCP server (FastMCP)](design_docs/phases/milestone_4_mcp/README.md). Exposes the `planner` workflow (and future ones) as the portable inside-out surface promised by KDR-002: four FastMCP tools (`run_workflow` / `resume_run` / `list_runs` / `cancel_run`), schema-first pydantic contracts auto-derived by FastMCP, stdio transport first. The originally-paired `get_cost_report` tool was dropped at M4 kickoff — `list_runs` already surfaces `total_cost_usd` per `RunSummary`; see [nice_to_have.md §9](design_docs/nice_to_have.md) for the adoption triggers that would promote a dedicated cost tool back in.
+M5 — [Multi-tier `planner`](design_docs/phases/milestone_5_multitier_planner/README.md). Extends the M3 single-tier `planner` to a Qwen explore → Claude Code plan sub-graph, exercising the tier-override path and the subprocess provider under a real workflow.

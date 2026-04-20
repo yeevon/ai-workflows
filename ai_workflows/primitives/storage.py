@@ -55,7 +55,7 @@ import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 #: Env var a caller can set to redirect the default storage path. Mirrors
 #: the ``AIW_CHECKPOINT_DB`` convention in ``graph/checkpointer.py`` so
@@ -121,6 +121,21 @@ class StorageBackend(Protocol):
         total_cost_usd: float | None = None,
     ) -> None:
         """Update the ``runs.status`` column and optional finished_at / total cost."""
+        ...
+
+    async def cancel_run(
+        self, run_id: str
+    ) -> Literal["cancelled", "already_terminal"]:
+        """Flip ``runs.status`` to ``cancelled`` if currently ``pending``.
+
+        Added in M4 Task 05 as the storage-level half of the MCP
+        ``cancel_run`` tool (``architecture.md §8.7``). In-flight
+        LangGraph cancellation lands at M6 T02 when parallel slice
+        workers push wall-clock runtime into the minutes range.
+        Returns ``"cancelled"`` if the flip happened, ``"already_terminal"``
+        if the row was already in a terminal state (no-op). Raises if
+        ``run_id`` does not exist.
+        """
         ...
 
     async def get_run(self, run_id: str) -> dict[str, Any] | None:
@@ -381,6 +396,43 @@ class SQLiteStorage:
                     (status, run_id),
                 )
             conn.commit()
+
+    async def cancel_run(
+        self, run_id: str
+    ) -> Literal["cancelled", "already_terminal"]:
+        """Flip ``runs.status`` to ``cancelled`` if currently ``pending``.
+
+        Single conditional UPDATE: the ``WHERE … AND status='pending'``
+        clause means a terminal row (``completed`` / ``gate_rejected``
+        / ``cancelled`` / ``errored``) is a no-op — ``rowcount == 0``
+        then maps to ``"already_terminal"``. ``rowcount == 1`` →
+        ``"cancelled"``. A pre-check SELECT guards unknown run ids so
+        they raise :class:`ValueError` instead of silently returning
+        ``"already_terminal"``.
+
+        Goes through the same ``asyncio.Lock`` every other write path
+        uses (``_run_write`` returns None, so we inline the lock +
+        ``to_thread`` here to surface the ``Literal`` return).
+        """
+        async with self._write_lock:
+            return await asyncio.to_thread(self._cancel_run_sync, run_id)
+
+    def _cancel_run_sync(
+        self, run_id: str
+    ) -> Literal["cancelled", "already_terminal"]:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "SELECT 1 FROM runs WHERE run_id = ?", (run_id,)
+            )
+            if cursor.fetchone() is None:
+                raise ValueError(f"no run found: {run_id}")
+            cursor = conn.execute(
+                "UPDATE runs SET status = 'cancelled', finished_at = ? "
+                "WHERE run_id = ? AND status = 'pending'",
+                (_utcnow(), run_id),
+            )
+            conn.commit()
+            return "cancelled" if cursor.rowcount == 1 else "already_terminal"
 
     async def get_run(self, run_id: str) -> dict[str, Any] | None:
         """Return the run row as a dict, or ``None`` when absent."""

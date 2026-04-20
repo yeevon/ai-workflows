@@ -46,3 +46,7 @@ Update the status table (M4 → ✅ Complete), the narrative paragraph (append a
 ## Dependencies
 
 - [Task 01](task_01_mcp_scaffold.md) through [Task 07](task_07_mcp_smoke.md).
+
+## Carry-over from prior audits
+
+- [ ] **M4-T06-ISS-01** (DEFERRED) — Manual verification: from a fresh Claude Code session registered against `aiw-mcp` via `claude mcp add ai-workflows --scope user -- uv run aiw-mcp`, invoke `run_workflow` with `workflow_id="planner"`, a short `goal`, and a fresh `run_id`; capture the returned `{run_id, status: "pending", awaiting: "gate", …}` payload. Then invoke `resume_run` with `gate_response="approved"` and capture the `{status: "completed", plan: {…}}` payload. Paste both commands + both responses into the close-out CHANGELOG entry verbatim. Source: [issues/task_06_issue.md](issues/task_06_issue.md).

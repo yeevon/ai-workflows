@@ -219,6 +219,59 @@ Each entry lists: what it replaces, what it adds, and the **trigger** that would
 
 ---
 
+## 11. Prune `CostTracker.by_tier` / `by_model` / `sub_models`
+
+**Role:** Simplification pass on [`ai_workflows/primitives/cost.py`](../ai_workflows/primitives/cost.py) that removes the tier/model breakdown methods and the `TokenUsage.sub_models` recursion along with them.
+
+**Replaces / subsumes:**
+
+- `CostTracker.by_tier(run_id)` — returns `dict[tier, float]` rollup.
+- `CostTracker.by_model(run_id, include_sub_models=True)` — returns `dict[model, float]` rollup.
+- `TokenUsage.sub_models` — nested list that only exists to make `by_model` recurse through Claude Code Opus→Haiku sub-calls.
+
+None of these have a non-test caller today. Every production code path (budget cap, `runs.total_cost_usd` stamp, `aiw list-runs` cost column) reads `CostTracker.total(run_id)` only. `by_tier` / `by_model` / `sub_models` were load-bearing under the pre-pivot per-token-billed provider set and became decorative after the M3 T06 reframe killed `aiw cost-report` (see §9) and M4 kickoff killed `get_cost_report`.
+
+**Adds:**
+
+- Nothing. This is a removal pass.
+
+**Trigger to adopt** — **the same trigger as §9** (`aiw cost-report` / per-run breakdown returns). Specifically:
+
+- **Per-token billing returns** — either Claude Max overages become routine, a second per-token-billed provider gets integrated, or Gemini moves off its free-tier backup role (see §9 triggers in full).
+
+**Why linked to §9:** if §9 fires, `by_tier` / `by_model` become load-bearing again and we'd rebuild them anyway (plus a `provider` field on `TokenUsage`, plus a per-call ledger in Storage). So the right move today is *leave them alone* — deleting them saves ~40 LOC now but costs more than that if they're needed back later. If §9 stays deferred indefinitely (solo dev + subscription billing remains the steady state for another milestone or two), promote this entry to a cleanup task on its own merits.
+
+**Why not now:** zero cost to leave in place; deletion is a separate refactor with its own reasoning and no forcing function. The T06 reframe plan itself flagged this as *"Candidate for a future simplification pass under a new KDR / nice_to_have trigger. Not this task's scope."*
+
+**Related history:** [`design_docs/phases/milestone_3_first_workflow/task_06_cli_list_cost.md`](phases/milestone_3_first_workflow/task_06_cli_list_cost.md) "Design drift and reframe" section.
+
+---
+
+## 12. Promote read-only MCP tools (`list_runs`, `cancel_run`) to `_dispatch`
+
+**Role:** Move the storage-opening boilerplate for [`ai_workflows/mcp/server.py`](../ai_workflows/mcp/server.py)'s `list_runs` + `cancel_run` tools, and [`ai_workflows/cli.py`](../ai_workflows/cli.py)'s matching `list-runs` command, into [`ai_workflows/workflows/_dispatch.py`](../ai_workflows/workflows/_dispatch.py) alongside the existing `run_workflow` / `resume_run` helpers so all four tools share one dispatch path.
+
+**Replaces / subsumes:**
+
+- The four-line `await SQLiteStorage.open(default_storage_path())` + `storage.list_runs(...)` / `storage.cancel_run(...)` + close pattern that is currently duplicated between [cli.py](../ai_workflows/cli.py) (`list-runs` command) and [mcp/server.py](../ai_workflows/mcp/server.py) (`list_runs` + `cancel_run` tool bodies).
+
+**Adds:**
+
+- Two new functions in `_dispatch.py` (`list_runs(...)`, `cancel_run(...)`) plus matching tests.
+- Indirection that isn't strictly necessary today — both surfaces already route through the same primitive (`SQLiteStorage`), so the surface parity KDR-002 promises is already there in spirit.
+
+**Trigger to adopt** — any one of:
+
+- **A third surface lands.** A web UI, a second MCP transport (HTTP, once stdio grows out), or any non-CLI non-MCP entry point would create a third duplicate of the storage-open boilerplate — worth consolidating at that point.
+- **The read/flip tools acquire stateful concerns.** If `list_runs` gains cost recomputation, checkpoint inspection, or artifact hydration — or `cancel_run` grows the M6 in-flight abort path (process-local task registry + `task.cancel()` + `durability="sync"` per [architecture.md §8.7](architecture.md)) — the logic is no longer a one-liner and belongs in `_dispatch`.
+- **CLI/MCP divergence appears.** If a bug surfaces where one surface's behaviour drifts from the other because the boilerplate was updated in only one place, promote immediately.
+
+**Why not now:** both surfaces currently end on one line — `storage.list_runs(...)` / `storage.cancel_run(...)` — with zero orchestration logic to share. Wrapping two four-line call sites in a dispatch helper is strictly more code than leaving them inline, and KDR-002's "one path" promise is already satisfied at the primitive boundary.
+
+**Related history:** surfaced in the 2026-04-20 M4 post-milestone deep drift-check — no audit issue filed, tracked here as a forward-looking cleanup option.
+
+---
+
 ## Revisit cadence
 
 Re-read this file:

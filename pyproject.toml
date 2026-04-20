@@ -35,6 +35,7 @@ dev = [
 
 [project.scripts]
 aiw = "ai_workflows.cli:app"
+aiw-mcp = "ai_workflows.mcp.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ai_workflows"]

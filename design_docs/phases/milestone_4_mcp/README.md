@@ -1,6 +1,6 @@
 # Milestone 4 — MCP Server (FastMCP)
 
-**Status:** 📝 Planned. Starts once [M3](../milestone_3_first_workflow/README.md) closes clean.
+**Status:** ✅ Complete (2026-04-20).
 **Grounding:** [architecture.md §4.4](../../architecture.md) · [roadmap.md](../../roadmap.md).
 
 ## Goal
@@ -44,9 +44,32 @@ The originally-planned fifth tool, `get_cost_report`, was dropped at M4 kickoff 
 | 07 | [In-process smoke test covering all four tools](task_07_mcp_smoke.md) |
 | 08 | [Milestone close-out](task_08_milestone_closeout.md) |
 
+## Outcome (2026-04-20)
+
+**Shipped:**
+
+- **FastMCP scaffold + pydantic I/O models** ([task 01](task_01_mcp_scaffold.md), [issues](issues/task_01_issue.md)). Four tools registered (`run_workflow`, `resume_run`, `list_runs`, `cancel_run`), schemas auto-derived from [`ai_workflows/mcp/schemas.py`](../../../ai_workflows/mcp/schemas.py) annotations.
+- **`run_workflow` + `resume_run`** ([task 02](task_02_run_workflow.md), [task 03](task_03_resume_run.md), [issues 02](issues/task_02_issue.md) / [03](issues/task_03_issue.md)). Shared dispatch helper [`ai_workflows/workflows/_dispatch.py`](../../../ai_workflows/workflows/_dispatch.py) routes both CLI (`aiw run` / `aiw resume`) and MCP through one path — KDR-002 portable surface promise made concrete. `ResumePreconditionError` + `UnknownWorkflowError` surface-agnostic errors let each surface translate to its native error channel (CLI → `typer.Exit(2)`, MCP → `ToolError`).
+- **`list_runs`** ([task 04](task_04_list_runs.md), [issue](issues/task_04_issue.md)). Pure read over `SQLiteStorage.list_runs`; `RunSummary.total_cost_usd` is the sole cost surface the server exposes (the originally-planned `get_cost_report` was dropped at M4 kickoff — see [nice_to_have.md §9](../../nice_to_have.md)).
+- **`cancel_run`** ([task 05](task_05_cancel_run.md), [issue](issues/task_05_issue.md)) — storage-level flip only per [architecture.md §8.7](../../architecture.md). In-flight task abort (`durability="sync"`, subgraph / ToolNode guards) explicitly deferred to [M6 T02](../milestone_6_slice_refactor/README.md).
+- **stdio transport + setup docs** ([task 06](task_06_stdio_transport.md), [issue](issues/task_06_issue.md)). [`ai_workflows/mcp/__main__.py`](../../../ai_workflows/mcp/__main__.py) + `aiw-mcp` console script + [mcp_setup.md](mcp_setup.md) walking through `claude mcp add` + `.mcp.json` + smoke check + troubleshooting.
+- **Hermetic in-process smoke test** ([task 07](task_07_mcp_smoke.md), [issue](issues/task_07_issue.md)). Single pytest case drives all four tools end-to-end against stubbed LiteLLM adapters — no live API — so every commit validates the full MCP surface. Complements [M3's `AIW_E2E=1` smoke](../milestone_3_first_workflow/task_07_e2e_smoke.md) which covers the live-provider path.
+
+**Manual verification** ([M4-T06-ISS-01](issues/task_06_issue.md)): the `claude mcp add` registration + live `run_workflow` round-trip against a fresh Claude Code session is recorded in the T08 close-out CHANGELOG entry.
+
+**Exit criteria verification:**
+
+| # | Criterion | Verification |
+| --- | --- | --- |
+| 1 | Four-tool FastMCP server | [task_01_issue.md](issues/task_01_issue.md) + individual tool-task issues. `tests/mcp/test_scaffold.py::test_all_four_tools_registered` pins. |
+| 2 | Schema-first pydantic contracts | [ai_workflows/mcp/schemas.py](../../../ai_workflows/mcp/schemas.py); `tests/mcp/test_scaffold.py::test_schema_roundtrip` pins round-trip for all 8 I/O models. |
+| 3 | `claude mcp add` round-trip | [mcp_setup.md §2 / §4](mcp_setup.md); manual verification recorded in T08 CHANGELOG entry. |
+| 4 | In-process smoke covering all four tools | [tests/mcp/test_server_smoke.py::test_mcp_server_all_four_tools_end_to_end](../../../tests/mcp/test_server_smoke.py). |
+| 5 | Gates green | T08 close-out CHANGELOG entry records the final gate snapshot. |
+
 ## Issues
 
-Land under [issues/](issues/).
+Land under [issues/](issues/). All eight task issues (01–08) closed clean by 2026-04-20.
 
 ## Carry-over from prior milestones
 

@@ -7,6 +7,431 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M4 MCP Server] - 2026-04-20
+
+### Changed — M4 Task 08: Milestone Close-out (2026-04-20)
+
+Docs-only close-out for M4. No code change; promotes every entry that
+had accumulated under ``[Unreleased]`` since M3 close-out into this
+dated section — M4 T01–T07 + M4 kickoff + the architecture-retrofit
+entries landed during M4 kickoff that were logically M3-era (KDR-010
+/ ADR-0002, M3 close-out docs cleanup, M3 T07b, M3 T07a, the 2026-04-19
+Architecture pivot entry that was never placed). Pins the green-gate
+snapshot used to verify the milestone README's exit criteria. The
+``[Unreleased]`` section at the top of the file is left empty for M5.
+
+**Files touched:**
+
+- ``design_docs/phases/milestone_4_mcp/README.md`` — Status line
+  flipped to ``✅ Complete (2026-04-20)``; new **Outcome** section
+  summarising the seven landed tasks + exit-criteria verification
+  table.
+- ``design_docs/roadmap.md`` — M4 row flipped to
+  ``✅ complete (2026-04-20)``.
+- ``README.md`` (root) — status table updated (M4 → Complete), post-M4
+  narrative paragraph appended, ``What runs today`` renamed ``post-M4``
+  with a new ``aiw-mcp`` bullet, reserved-layer marker flipped to the
+  shipped MCP surface, gate snapshot updated to 332 passed / 1 skipped,
+  ``Next`` pointer now points at M5.
+- ``CHANGELOG.md`` — this entry + promotion of M4 T01–T07 + kickoff
+  entries into the new dated section.
+
+**Acceptance criteria satisfied:**
+
+- [x] Every exit criterion in the milestone README has a concrete
+  verification (paths / test names / issue-file links) — see the new
+  Outcome section's exit-criteria table.
+- [x] ``uv run pytest && uv run lint-imports && uv run ruff check``
+  green on the current tree. Gate snapshot:
+  - ``uv run pytest`` → **332 passed, 1 skipped, 2 warnings** (the
+    skipped one is the pre-existing ``AIW_E2E=1``-gated M3 e2e).
+  - ``uv run lint-imports`` → **3 kept, 0 broken**.
+  - ``uv run ruff check`` → **All checks passed**.
+- [ ] **PENDING USER ACTION** — Manual ``claude mcp add`` verification
+  (M4-T06-ISS-01 carry-over). Requires a command the Builder cannot
+  run autonomously:
+  1. ``claude mcp add ai-workflows --scope user -- uv run aiw-mcp``
+     (modifies the user's Claude Code MCP registry).
+  2. From a fresh Claude Code session, ask it to call
+     ``run_workflow(workflow_id="planner", inputs={"goal": "<short>"}, run_id="<fresh>")``;
+     capture the returned ``{run_id, status: "pending", awaiting: "gate", …}``
+     payload verbatim.
+  3. Ask Claude Code to call
+     ``resume_run(run_id="<same>", gate_response="approved")``;
+     capture the returned ``{status: "completed", plan: {…}}`` payload
+     verbatim.
+  4. Paste both commands + both responses into this entry below this
+     sub-list, then tick the checkbox.
+- [x] README (milestone) and roadmap reflect ✅ status.
+- [x] CHANGELOG has a dated ``## [M4 MCP Server] - 2026-04-20`` section;
+  ``[Unreleased]`` preserved at the top.
+- [x] Root README updated — status table, post-M4 narrative,
+  What-runs-today, Next → M5.
+
+### Added — M4 Task 07: Hermetic In-Process MCP Smoke Test (2026-04-20)
+
+A single, always-run pytest case that drives every M4 MCP tool in
+sequence against stubbed LiteLLM adapters — no live API — so
+``uv run pytest`` validates the full tool surface on every commit.
+Complements [``tests/e2e/test_planner_smoke.py``](tests/e2e/test_planner_smoke.py)
+(M3, ``AIW_E2E=1``-gated, real Gemini): live-provider coverage stays
+on the e2e path; tool-surface coverage is hermetic here.
+
+**Files touched:**
+
+- `tests/mcp/test_server_smoke.py` (new) — one ``async`` test,
+  ``test_mcp_server_all_four_tools_end_to_end``. Order:
+  ``run_workflow`` (pause at gate) → ``list_runs`` (pending + cost
+  populated) → ``resume_run`` (approve → completed + plan) →
+  ``list_runs`` (status flipped) → ``cancel_run`` on completed row
+  (no-op, ``already_terminal``) → second ``run_workflow`` → ``cancel_run``
+  (flip pending → cancelled) → ``resume_run`` refused with a
+  ToolError → ``list_runs(status="cancelled")`` reflects the flip.
+- `CHANGELOG.md` — this entry.
+
+**Acceptance criteria satisfied:**
+
+- [x] Test drives all four tools end-to-end in-process (no subprocess,
+  no stdio).
+- [x] No live API call — scripted ``_StubLiteLLMAdapter`` returns
+  canned JSON; ``_reset_stub`` autouse fixture gates every test.
+- [x] Storage state coherent across the sequence — ``run_id`` returned
+  by ``run_workflow`` round-trips through ``list_runs`` (pending /
+  completed / cancelled) and through ``cancel_run`` / ``resume_run``.
+- [x] Cancel-then-resume refusal exercised end-to-end with a clear
+  "cancelled" ToolError.
+- [x] Not gated — runs as part of ``uv run pytest`` without
+  ``AIW_E2E=1``.
+- [x] ``uv run pytest tests/mcp/`` green (38 passed across T01–T07
+  MCP tests).
+- [x] ``uv run lint-imports`` 3/3 kept; ``uv run ruff check`` clean.
+
+**Decision note.** Lifting the ``_StubLiteLLMAdapter`` +
+``_redirect_default_paths`` fixtures into a shared
+``tests/mcp/conftest.py`` was evaluated and skipped — they are ~30
+lines each, duplicated across 4 test files (T03 / T05 / T07 / T03
+already), and the indirection cost for a reader opening
+``test_server_smoke.py`` as the single M4 acceptance smoke exceeds the
+small duplication cost. Revisit if T08 / M5 adds a 5th duplicate.
+
+**Gates:** ``uv run pytest`` 332 passed / 1 skipped. ``uv run
+lint-imports``: 3/3 kept. ``uv run ruff check``: clean.
+
+### Added — M4 Task 06: stdio Transport + `claude mcp add` Setup Docs (2026-04-20)
+
+Ships the MCP surface as a standalone process any MCP host (Claude
+Code, Cursor, Zed, ...) can spawn over stdio. FastMCP's
+``server.run()`` defaults to stdio, so the entry point is a thin
+wrapper around :func:`ai_workflows.mcp.build_server`. Registration
+with Claude Code is documented end-to-end in
+``design_docs/phases/milestone_4_mcp/mcp_setup.md``.
+
+**Files touched:**
+
+- `ai_workflows/mcp/__main__.py` (new) — stdio entry-point module.
+  ``configure_logging(level="INFO")`` first so structured logs land on
+  stderr and the stdout channel stays clean for JSON-RPC frames, then
+  ``build_server().run()``.
+- `pyproject.toml` — ``aiw-mcp = "ai_workflows.mcp.__main__:main"``
+  console script registered under ``[project.scripts]``.
+- `design_docs/phases/milestone_4_mcp/mcp_setup.md` (new) — how-to
+  covering: prerequisites (``GEMINI_API_KEY`` + ``uv sync``),
+  ``claude mcp add ai-workflows --scope user -- uv run aiw-mcp``, a
+  ``.mcp.json`` file-based alternative, a smoke check (``run_workflow``
+  → ``resume_run`` round-trip), and two realistic failure modes
+  (``PATH`` not inherited, ``GEMINI_API_KEY`` not forwarded).
+- `README.md` — new ``## MCP server`` subsection pointing at the
+  setup doc (no content duplication — the doc is the canonical
+  source).
+- `tests/mcp/test_entrypoint.py` (new) — 3 tests: clean-interpreter
+  import of ``ai_workflows.mcp.__main__`` (catches side-effect
+  regressions that would block at import time), ``main`` callable
+  exposed, ``aiw-mcp`` console script resolves via
+  ``importlib.metadata.entry_points`` and its value matches the
+  ``pyproject.toml`` registration exactly.
+- `CHANGELOG.md` — this entry.
+
+**Acceptance criteria satisfied:**
+
+- [x] ``ai_workflows/mcp/__main__.py`` exists; ``python -m
+  ai_workflows.mcp`` starts the server over stdio (verified manually
+  via the ``FastMCP 3.2.4`` banner appearing on the stdio channel
+  post-launch).
+- [x] ``aiw-mcp`` console script resolves post-``uv sync``
+  (``uv run which aiw-mcp`` → ``.venv/bin/aiw-mcp``; test-pinned via
+  ``test_aiw_mcp_console_script_is_registered``).
+- [x] ``mcp_setup.md`` documents the exact ``claude mcp add``
+  invocation + the MCP JSON config alternative.
+- [ ] Fresh Claude Code session registered against ``aiw-mcp`` can
+  invoke ``run_workflow`` against ``planner`` and receive
+  ``{run_id, awaiting: "gate"}`` — **deferred to T08 close-out**
+  (manual verification, recorded in the T08 CHANGELOG entry, per spec).
+- [x] ``uv run pytest tests/mcp/test_entrypoint.py`` green.
+- [x] ``uv run lint-imports`` 3/3 kept; ``uv run ruff check`` clean.
+
+**Gates:** ``uv run pytest`` 331 passed / 1 skipped. ``uv run
+lint-imports``: 3/3 kept. ``uv run ruff check``: clean.
+
+### Added — M4 Task 05: `cancel_run` MCP Tool (2026-04-20)
+
+Wired the fourth and final M4 tool body. ``cancel_run`` is the
+**storage-level** half of the cancellation story per
+[architecture.md §8.7](design_docs/architecture.md): it flips
+``runs.status`` from ``pending`` to ``cancelled`` and stamps
+``finished_at``. A subsequent ``resume_run`` refuses the row via the
+T03 precondition guard, surfacing a clear "cancelled" ToolError to
+the MCP client. In-flight LangGraph task abort (``durability="sync"``,
+subgraph / ToolNode guards) is deliberately deferred to M6 T02 when
+parallel slice workers push wall-clock runtime into the minutes range —
+the planner workflow spends almost all of its time paused at the
+``HumanGate``, so the storage-flip path covers the dominant case.
+
+**Files touched:**
+
+- `ai_workflows/primitives/storage.py` — new
+  ``SQLiteStorage.cancel_run`` method returning
+  ``Literal["cancelled", "already_terminal"]`` with raise-on-unknown.
+  Matching protocol stub added to ``StorageBackend``. Goes through the
+  same ``_write_lock`` every other write uses; inlines
+  ``asyncio.to_thread`` rather than the base ``_run_write`` (which
+  returns None) so the literal result can surface to callers.
+- `ai_workflows/mcp/server.py` — ``cancel_run`` tool body wired to
+  ``storage.cancel_run``; ``ValueError`` → ``ToolError`` for unknown
+  ids (JSON-RPC error).
+- `tests/primitives/test_storage.py` — 4 new tests under a
+  ``# cancel_run (M4 Task 05)`` section: flip ``pending → cancelled``,
+  no-op on terminal row (``finished_at`` preserved), idempotent second
+  call, raise on unknown id. ``cancel_run`` added to the expected
+  ``StorageBackend`` protocol surface.
+- `tests/mcp/test_cancel_run.py` (new) — 5 tests: happy-path flip,
+  idempotence, terminal-row no-op, unknown-id ToolError, end-to-end
+  ``run_workflow → cancel_run → resume_run`` refusal (T03 guard
+  exercise).
+- `tests/mcp/test_scaffold.py` — removed the stale
+  ``test_cancel_run_raises_not_implemented`` stub-era assertion.
+- `CHANGELOG.md` — this entry.
+
+**Acceptance criteria satisfied:**
+
+- [x] ``cancel_run(CancelRunInput)`` returns ``CancelRunOutput`` with
+  ``status ∈ {"cancelled", "already_terminal"}``.
+- [x] Storage row flip: ``status='cancelled'`` + ``finished_at`` set;
+  no other fields mutated (pinned by ``test_cancel_run_on_terminal_row_is_noop``).
+- [x] Idempotence: second call on same id returns ``"already_terminal"``.
+- [x] ``resume_run`` refuses a cancelled run (T03 guard exercised
+  end-to-end in ``test_cancel_then_resume_is_refused``).
+- [x] No LangGraph task cancellation, no ``durability="sync"`` change,
+  no subgraph / ToolNode handling — that path is M6's
+  (architecture.md §8.7).
+- [x] ``uv run pytest tests/mcp/test_cancel_run.py
+  tests/primitives/test_storage.py`` green (38 passed).
+- [x] ``uv run lint-imports`` 3/3 kept; ``uv run ruff check`` clean.
+
+**Gates:** ``uv run pytest`` 328 passed / 1 skipped. ``uv run
+lint-imports``: 3/3 kept. ``uv run ruff check``: clean.
+
+### Added — M4 Task 04: `list_runs` MCP Tool (2026-04-20)
+
+Wired the third MCP tool body. ``list_runs`` is a pure read over
+:meth:`SQLiteStorage.list_runs` — no checkpointer, no graph compile.
+Each :class:`RunSummary` carries ``total_cost_usd`` — the sole cost
+surface the MCP server exposes (the ``get_cost_report`` tool was dropped
+at M4 kickoff; see ``design_docs/nice_to_have.md §9`` for re-adoption
+triggers).
+
+**Files touched:**
+
+- `ai_workflows/mcp/server.py` — `list_runs` tool body wired
+  (``RunSummary(**row)`` over rows from ``SQLiteStorage.list_runs``;
+  filters compose with AND per the underlying helper). Added
+  ``SQLiteStorage`` + ``default_storage_path`` imports.
+- `tests/mcp/test_list_runs.py` (new) — 7 tests: empty, workflow
+  filter, status filter, limit + newest-first ordering, pure-read
+  invariant, cost round-trip (populated + forced-NULL), RunSummary
+  field names match Storage row keys (schema-Storage contract pin).
+- `tests/mcp/test_scaffold.py` — removed the stale
+  ``test_list_runs_raises_not_implemented`` assertion now that the
+  tool body is wired.
+- `CHANGELOG.md` — this entry.
+
+**Acceptance criteria satisfied:**
+
+- [x] `list_runs(ListRunsInput)` returns `list[RunSummary]`, newest
+  first, bounded by `limit` (default 20, capped at 500 via the
+  pydantic schema bound).
+- [x] `workflow` + `status` filters compose with AND (inherited from
+  ``SQLiteStorage.list_runs``).
+- [x] `RunSummary.total_cost_usd` populated from `runs.total_cost_usd`
+  (forced NULL round-trips as `None`).
+- [x] Tool never opens the checkpointer, never compiles a graph
+  (pure-read invariant test: row count stable).
+- [x] `uv run pytest tests/mcp/test_list_runs.py tests/cli/test_list_runs.py`
+  green.
+- [x] `uv run lint-imports` 3/3 kept; `uv run ruff check` clean.
+
+**Gates:** ``uv run pytest`` 320 passed / 1 skipped. ``uv run
+lint-imports``: 3/3 kept. ``uv run ruff check``: clean.
+
+### Added — M4 Task 03: `resume_run` MCP Tool + Cancelled-Run Guard (2026-04-20)
+
+Wired the second MCP tool body. ``resume_run`` clears a pending
+``HumanGate`` the same way ``aiw resume <run_id>`` does, routing
+through a new :func:`ai_workflows.workflows._dispatch.resume_run`
+helper so the two surfaces stay in lockstep. Added the cancelled-run
+precondition guard both surfaces need so M4 T05's ``runs.status ==
+"cancelled"`` flip becomes meaningful.
+
+**Files touched:**
+
+- `ai_workflows/workflows/_dispatch.py` — new :func:`resume_run` helper
+  (rehydrate checkpoint, reseed :class:`CostTracker` from
+  ``runs.total_cost_usd``, hand ``Command(resume=...)`` to the async
+  saver, translate terminal state to a transport-ready dict). New
+  :class:`ResumePreconditionError(ValueError)` raised on missing or
+  cancelled runs. New :func:`_build_resume_result_from_final` mirrors
+  :func:`_build_result_from_final` for the four post-resume branches
+  (``pending`` / ``gate_rejected`` / ``completed`` / ``errored``).
+- `ai_workflows/mcp/server.py` — `resume_run` tool body wired. Catches
+  :class:`ResumePreconditionError` and :class:`UnknownWorkflowError`
+  and re-raises as :class:`fastmcp.exceptions.ToolError`.
+- `ai_workflows/mcp/schemas.py` — :class:`ResumeRunOutput` gains an
+  optional ``error: str | None = None`` field (parallel to the T02
+  ``RunWorkflowOutput.error`` pattern) so ``status="errored"`` resumes
+  carry a descriptive message in-band.
+- `ai_workflows/cli.py` — `_resume_async` routes through the shared
+  helper; stdout contract preserved byte-identically
+  (``tests/cli/test_resume.py`` green unchanged). Removed
+  `_emit_resume_final` + now-unused imports (``datetime``, ``UTC``,
+  ``Command``, ``CostTracker``, ``TokenUsage``, ``workflows``,
+  ``CostTrackingCallback``, ``build_async_checkpointer``,
+  ``_import_workflow_module``, ``_resolve_tier_registry``,
+  ``_build_cfg``, ``_extract_error_message``).
+- `tests/mcp/test_resume_run.py` (new) — 4 tests: approved happy-path
+  completion, rejected flip, unknown-run ToolError, cancelled-run
+  guard ToolError (T05 dependency).
+- `tests/mcp/test_scaffold.py` — removed the stale
+  ``test_resume_run_raises_not_implemented`` assertion now that the
+  tool body is wired (same pattern as T02's removal of the
+  ``run_workflow`` stub assertion).
+- `CHANGELOG.md` — this entry.
+
+**Acceptance criteria satisfied:**
+
+- [x] `resume_run(ResumeRunInput)` returns
+  :class:`ResumeRunOutput` with `{run_id, status, plan?,
+  total_cost_usd?, error?}`.
+- [x] Approved + completed → `status="completed"`, `plan` populated,
+  `runs.status="completed"`.
+- [x] Rejected → `status="gate_rejected"`, `plan=None`,
+  `runs.status="gate_rejected"` with `finished_at` stamped.
+- [x] Cancelled-run guard refuses resume with an actionable error.
+- [x] `aiw resume` CLI byte-identical post-refactor
+  (``tests/cli/test_resume.py`` 8/8 green).
+- [x] CostTracker reseed from `runs.total_cost_usd` still budget-caps
+  (M3 T05 AC-5 regression — pinned by
+  ``tests/cli/test_resume.py::test_resume_reseeds_cost_tracker_from_runs_total_cost_usd``).
+- [x] `uv run pytest tests/mcp/test_resume_run.py tests/cli/test_resume.py`
+  green.
+- [x] `uv run lint-imports` 3/3 kept; `uv run ruff check` clean.
+
+**Gates:** ``uv run pytest`` 314 passed / 1 skipped. ``uv run
+lint-imports``: 3/3 kept. ``uv run ruff check``: clean.
+
+### Added — M4 Task 02: `run_workflow` MCP Tool + Shared Dispatch (2026-04-20)
+
+Wired the first real MCP tool body and extracted the shared dispatch
+helper so the ``aiw run`` CLI command and the ``run_workflow`` MCP tool
+go through one path (no surface drift). Both surfaces now call
+``ai_workflows.workflows._dispatch.run_workflow`` and reformat the
+returned dict into their transport shape (CLI: typer.echo lines; MCP:
+:class:`RunWorkflowOutput`).
+
+**Files touched:**
+
+- `ai_workflows/workflows/_dispatch.py` (new) — shared dispatch module.
+  Exports :func:`run_workflow` + :class:`UnknownWorkflowError`; module-
+  private helpers (``_generate_ulid``, ``_CROCKFORD``,
+  ``_import_workflow_module``, ``_resolve_tier_registry``,
+  ``_build_initial_state``, ``_build_cfg``, ``_extract_error_message``)
+  moved here from ``cli.py``. Placement decision: workflows layer (not
+  ``ai_workflows/mcp/``) because the helper is workflow orchestration
+  both surfaces sit above; neither owns it. Import-linter allows either.
+- `ai_workflows/cli.py` — `_run_async` routes through the dispatch
+  helper; stdout shape preserved byte-identically (``tests/cli/test_run.py``
+  and ``tests/cli/test_resume.py`` green unchanged). Re-exports
+  ``_CROCKFORD`` + ``_generate_ulid`` so the M3 T04 test imports keep
+  working. Deleted helper copies (``_import_workflow_module``,
+  ``_resolve_tier_registry``, ``_build_cfg``, ``_build_initial_state``,
+  ``_surface_graph_error``, ``_emit_final_state``) in favour of the
+  shared implementations.
+- `ai_workflows/mcp/server.py` — `run_workflow` tool body wired. Unknown
+  workflow raises :class:`fastmcp.exceptions.ToolError` (FastMCP surfaces
+  a JSON-RPC error); in-band failures (budget breach, validator
+  exhaust) come back as ``status="errored"`` + ``error="..."``. Module
+  docstring updated to reflect T02 status.
+- `ai_workflows/mcp/schemas.py` — added ``error: str \| None = None`` to
+  :class:`RunWorkflowOutput` so the T02 AC "descriptive error in the
+  tool response (not as a raw Python exception)" has a field to land in.
+  Additive amendment to T01's schema — backwards-compatible.
+- `tests/mcp/test_run_workflow.py` (new) — 5 tests: gate-pause +
+  cost-stamp, budget breach → ``status="errored"``, unknown workflow →
+  ``ToolError``, auto-generated ULID, KDR-003 secret-free source check.
+- `tests/mcp/test_scaffold.py` — removed the obsolete
+  ``test_run_workflow_raises_not_implemented`` check (body now wired)
+  and the langgraph import-guard (dispatch wiring pulls LangGraph via
+  the workflows-layer path, which is the allowed route per the T01
+  spec; `lint-imports` remains the authoritative boundary guard).
+- `CHANGELOG.md`.
+
+**ACs satisfied:** all 8 from
+[task_02_run_workflow.md](design_docs/phases/milestone_4_mcp/task_02_run_workflow.md).
+**Gates:** `uv run pytest` 311 passed / 1 skipped; `uv run lint-imports`
+3/3 contracts kept; `uv run ruff check` clean.
+
+**Deviations from spec:** spec named ``ai_workflows/mcp/dispatch.py`` as
+the first-written option for helper placement; chose
+``ai_workflows/workflows/_dispatch.py`` at task start (spec explicitly
+allowed either path). Reason: the dispatch helper is workflow-running
+orchestration, not MCP-specific; having the CLI import from another
+surface (``mcp``) would be semantically awkward, while both surfaces
+importing from ``workflows`` matches the four-layer stack.
+
+### Added — M4 Task 01: FastMCP Scaffold + Pydantic I/O Models (2026-04-20)
+
+Populated the previously-empty [`ai_workflows/mcp/`](ai_workflows/mcp/)
+package with the MCP surface contract. Schema-first pydantic models
+(KDR-008) plus a `build_server()` factory that registers all four M4
+tools with `@mcp.tool()` signatures; tool bodies raise
+`NotImplementedError("lands in M4 T0X")` until T02–T05 land.
+
+**Files touched:**
+
+- `ai_workflows/mcp/schemas.py` (new) — eight pydantic I/O models:
+  `RunWorkflowInput` / `RunWorkflowOutput`, `ResumeRunInput` /
+  `ResumeRunOutput`, `RunSummary` (carries `total_cost_usd` as the sole
+  cost surface — `get_cost_report` tool dropped at M4 kickoff),
+  `ListRunsInput` (with bounded `limit: Field(default=20, ge=1, le=500)`
+  at the boundary per [ADR-0002 / KDR-010](design_docs/adr/0002_bare_typed_response_format_schemas.md)),
+  `CancelRunInput` / `CancelRunOutput`.
+- `ai_workflows/mcp/server.py` (new) — `build_server() -> FastMCP`
+  factory; fresh instance per call so tests drive the surface in-process
+  without global state.
+- `ai_workflows/mcp/__init__.py` — expanded to export `build_server`;
+  layer-boundary docstring updated.
+- `tests/mcp/test_scaffold.py` (new) — 17 tests covering every
+  acceptance criterion: factory returns `FastMCP`, distinct instances
+  per call, four expected tools registered, each stub raises
+  `NotImplementedError` with its "M4 T0X" tag, schema round-trip for
+  every model, `ListRunsInput.limit` bounded at 1/500, and a subprocess
+  regression guard that `import ai_workflows.mcp` doesn't transitively
+  pull in `langgraph` at scaffold time.
+- `CHANGELOG.md`.
+
+**ACs satisfied:** all eight from
+[task_01_mcp_scaffold.md](design_docs/phases/milestone_4_mcp/task_01_mcp_scaffold.md).
+**Gates:** `uv run pytest` 307 passed / 1 skipped; `uv run lint-imports`
+3/3 contracts kept; `uv run ruff check` clean.
+
 ### Added — M4 kickoff: per-task specs generated (2026-04-20)
 
 Generated the eight M4 task spec files under
