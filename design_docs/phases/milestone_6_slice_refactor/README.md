@@ -50,3 +50,14 @@ Per-task files generated once M5 closes.
 ## Issues
 
 Land under [issues/](issues/).
+
+## Carry-over from prior milestones
+
+- [ ] **M4 T05 — in-flight `cancel_run` (MEDIUM, owner: M6 — natural fit: task 02 parallel slice-worker, or a dedicated cancellation task if the wiring grows).**
+  M4 ships `cancel_run` as a storage-level flip only ([architecture.md §8.7](../../architecture.md) — covers the "cancel a paused-at-gate run" case, which is the dominant planner use). M6 is the first milestone where a run's in-flight wall-clock time (parallel per-slice workers, minutes-not-seconds) makes mid-run abort a real UX requirement. Scope when M6 opens:
+  - MCP server holds a process-local `dict[run_id, asyncio.Task]` for active runs; `cancel_run` looks the task up and calls `task.cancel()` alongside the existing storage status flip.
+  - Compiled graph runs with `durability="sync"` so the last-completed-step checkpoint is on disk before the `CancelledError` propagates.
+  - Verify subgraph cancellation against [langgraph#5682](https://github.com/langchain-ai/langgraph/issues/5682) — the parent-cancels-but-subgraph-ReAct-keeps-running case; `slice_refactor` composes the `planner` sub-graph so this path is live.
+  - Any `ToolNode`-using worker guards against [langgraph#6726](https://github.com/langchain-ai/langgraph/issues/6726) (mid-tool-call cancel leaves `AIMessage.tool_calls` unpaired with a `ToolMessage`; next LLM call fails `INVALID_CHAT_HISTORY`).
+  - SQLite single-writer race between cancelled-task's final write and an immediate re-run on the same `thread_id` is acceptable (retry on `database is locked`).
+  Source: [architecture.md §8.7](../../architecture.md) · M4 T05 spec (generated at M4 start).

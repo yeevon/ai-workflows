@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M4 kickoff: per-task specs generated (2026-04-20)
+
+Generated the eight M4 task spec files under
+[design_docs/phases/milestone_4_mcp/](design_docs/phases/milestone_4_mcp/),
+matching the M3 task-spec conventions. Updated the milestone README
+task-order table to link each row at its file.
+
+**Task files added:**
+
+- `task_01_mcp_scaffold.md` — FastMCP scaffold + pydantic I/O models.
+- `task_02_run_workflow.md` — `run_workflow` tool; extracts a shared dispatch helper that CLI + MCP both route through.
+- `task_03_resume_run.md` — `resume_run` tool; ships the cancelled-run precondition guard that T05 relies on.
+- `task_04_list_runs.md` — `list_runs` tool; `RunSummary.total_cost_usd` is the sole cost surface.
+- `task_05_cancel_run.md` — `cancel_run` tool as a storage-level status flip (architecture.md §8.7); in-flight cancellation owned by M6.
+- `task_06_stdio_transport.md` — `__main__` entry point, `aiw-mcp` console script, `claude mcp add` setup doc.
+- `task_07_mcp_smoke.md` — hermetic in-process smoke test driving all four tools.
+- `task_08_milestone_closeout.md` — mirrors M3 T08 shape.
+
+**Files touched:** eight new task spec files under
+`design_docs/phases/milestone_4_mcp/`; `design_docs/phases/milestone_4_mcp/README.md`
+(task-order table now links each row); `CHANGELOG.md`.
+
+### Added — Architecture: §8.7 Cancellation + M6 carry-over (2026-04-20)
+
+New [architecture.md §8.7](design_docs/architecture.md) pins the
+cancellation model for the project: M4 `cancel_run` is storage-level
+only (flips `runs.status` → `cancelled`, `resume_run` refuses
+cancelled runs); in-flight task-cancellation is scoped for M6 when
+parallel per-slice workers push wall-clock runtime from seconds to
+minutes. Four concrete constraints the M6 Builder inherits:
+`durability="sync"` on graph compile, subgraph-cancellation verify
+(langgraph#5682), `ToolNode` + `CancelledError` guard
+(langgraph#6726), and the SQLite single-writer re-run race.
+
+A matching Carry-over entry lands in
+[milestone_6_slice_refactor/README.md](design_docs/phases/milestone_6_slice_refactor/README.md)
+so the M6 T02 Builder sees the scope when that milestone opens — per
+the CLAUDE.md propagation rule (forward-deferral with a concrete
+target task belongs as carry-over on that task's spec, not in
+`nice_to_have.md`).
+
+**Files touched:** `design_docs/architecture.md` (new §8.7);
+`design_docs/phases/milestone_6_slice_refactor/README.md`
+(Carry-over section); `CHANGELOG.md`.
+
+### Changed — M4 kickoff: `get_cost_report` MCP tool dropped (2026-04-20)
+
+Resolves the M3 T06 reframe carry-over at M4 kickoff. The reframe left
+two options on the table: (a) ship `get_cost_report(run_id)` as a
+total-only scalar, or (b) fold the signal into `list_runs` and drop
+the standalone tool. Option (b) chosen — `list_runs` already returns
+`total_cost_usd` per `RunSummary`, making a dedicated cost tool pure
+redundancy under the current subscription-billing provider set
+(Claude Max / Gemini free tier / Ollama). M4 ships **four tools**
+(`run_workflow`, `resume_run`, `list_runs`, `cancel_run`), not five.
+
+Re-introducing a dedicated cost-report tool is gated on the three
+triggers in [nice_to_have.md §9](design_docs/nice_to_have.md).
+
+**Files touched:** `design_docs/architecture.md` (§4.4 — dropped
+`get_cost_report` row, annotated `list_runs`'s cost surface, added
+M4-kickoff note); `design_docs/phases/milestone_4_mcp/README.md`
+(Goal / Exit criteria / Task order / Carry-over all updated; carry-over
+marked RESOLVED); `design_docs/phases/milestone_3_first_workflow/task_06_cli_list_cost.md`
+(M4 impact note updated with the locked decision);
+`README.md` (Next section); `CHANGELOG.md`.
+
 ### Added — Architecture: KDR-010 + ADR-0002 (bare-typed `response_format` schemas) (2026-04-20)
 
 Codifies the schema pattern surfaced empirically by M3 T07a / T07b so

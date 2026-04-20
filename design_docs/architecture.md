@@ -96,11 +96,11 @@ Workflows are registered by name; the registry is how surfaces reach them.
 
 - **`aiw` CLI** (`ai_workflows.cli`) — `aiw run <workflow> <inputs>`, `aiw resume <run_id>`, `aiw list-runs`. Primary path for CI, scripting, and non-interactive use. Implemented with **Typer** (landed in M1 Task 01; stubs live in `ai_workflows/cli.py`, full commands ship in M3). The originally-paired `aiw cost-report` command was dropped at M3 T06 reframe (2026-04-20); see [nice_to_have.md §9](nice_to_have.md) for the three adoption triggers that would promote it back in.
 - **MCP server** (`ai_workflows.mcp`) — **built on FastMCP**: `@mcp.tool()` decorators over pydantic-typed functions; FastMCP generates the JSON-RPC schema, handles stdio/HTTP transport, and runs the server. Exposes:
-  - `run_workflow(workflow_id, inputs, tier_overrides?) → {run_id, status, stream_handle?}`
+  - `run_workflow(workflow_id, inputs) → {run_id, status, stream_handle?}` *(the `tier_overrides` argument lands at M5 T05 when the graph layer begins consuming it; shipping it earlier would be a dead field with no test coverage.)*
   - `resume_run(run_id, gate_response?) → {status, ...}`
-  - `list_runs(filter?) → [RunSummary]`
-  - `get_cost_report(run_id) → CostReport` *(scope inherited from M3 T06 reframe; will be re-specced at M4 start — likely as a total-only return or merged into `list_runs` — per [nice_to_have.md §9](nice_to_have.md).)*
+  - `list_runs(filter?) → [RunSummary]` *(each `RunSummary` carries `total_cost_usd`; this is the only cost surface the MCP server exposes.)*
   - `cancel_run(run_id) → {status}`
+  The originally-paired `get_cost_report(run_id) → CostReport` tool was dropped at M4 kickoff (2026-04-20) on the same reasoning as the CLI's `aiw cost-report` (M3 T06 reframe): the by-X breakdowns drive zero decisions under the current subscription-billing provider set, and the total-only scalar is already surfaced by `list_runs`. See [nice_to_have.md §9](nice_to_have.md) for the three adoption triggers that would promote a dedicated cost-report tool back in.
   Schema-first: pydantic models define every input and output. This is the public contract for every host. (KDR-008.)
 - **Claude Code skill** (optional, late addition) — `.claude/skills/ai-workflows/SKILL.md` that shells out to `aiw` or calls the MCP server. Packaging-only; no logic.
 
@@ -180,6 +180,20 @@ A typical run:
 
 - Per-provider semaphore (e.g. Gemini free-tier QPS). Configured in `TierConfig`.
 - LangGraph-level parallelism is bounded by the semaphore at the provider call site, not by the graph shape.
+
+### 8.7 Cancellation
+
+The MCP `cancel_run` tool is **storage-level only** at M4: it flips `runs.status` from `pending` to `cancelled` and stamps `finished_at`; `resume_run` refuses any run whose status is `cancelled`. This covers the dominant cancel case for the planner — a run paused at a `HumanGate` the caller no longer wants to approve — without any LangGraph task-cancellation machinery, and therefore sidesteps every caveat that machinery carries.
+
+**In-flight cancellation lands at M6** (`slice_refactor`), where parallel per-slice workers push wall-clock runtime from ~12s (planner) into minutes and mid-run abort becomes a real UX requirement. The M6 path (spec'd by that milestone's Builder) covers:
+
+- MCP server holds a process-local `dict[run_id, asyncio.Task]` for active runs; `cancel_run` looks the task up and calls `task.cancel()` alongside the existing storage flip.
+- Compiled graph runs with `durability="sync"` so the last-completed-step checkpoint is on disk before the `CancelledError` propagates.
+- Subgraph cancellation is verified explicitly against [langgraph#5682](https://github.com/langchain-ai/langgraph/issues/5682).
+- Any `ToolNode`-using worker in M6 guards against [langgraph#6726](https://github.com/langchain-ai/langgraph/issues/6726) (a mid-tool-call cancel that leaves an `AIMessage.tool_calls` unpaired with a `ToolMessage`, failing the next LLM call with `INVALID_CHAT_HISTORY`).
+- SQLite single-writer race between the cancelled task's final write and an immediate re-run on the same `thread_id` is documented but accepted (retry on `database is locked` is fine).
+
+Until M6 opens, nothing in this codebase needs the in-flight path.
 
 ## 9. Key design decisions
 

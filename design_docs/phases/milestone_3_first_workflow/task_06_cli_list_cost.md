@@ -14,7 +14,7 @@ The original task specced two commands: `aiw list-runs` and `aiw cost-report <ru
 
 **Not touched by this task:** `CostTracker.by_tier` / `by_model` / `sub_models` stay in `primitives/cost.py`. They have no consumers today but are zero-cost to keep and are covered by existing unit tests; removing them is a separate refactor with its own reasoning.
 
-**M4 impact:** the MCP `get_cost_report` tool in milestone 4 inherits this reframe. When M4 opens, re-spec the tool as total-only (or drop it entirely in favour of a `list_runs`-equivalent structured return).
+**M4 impact (resolved at M4 kickoff, 2026-04-20):** the MCP `get_cost_report` tool was **dropped entirely**. `list_runs` already returns `total_cost_usd` per `RunSummary`, making a dedicated cost tool redundant under the current subscription-billing provider set. See [milestone_4_mcp/README.md](../milestone_4_mcp/README.md) §Goal + §Carry-over and [architecture.md §4.4](../../architecture.md). Re-introducing a dedicated cost-report tool is gated on the three triggers in [nice_to_have.md §9](../../nice_to_have.md).
 
 ## What to Build
 
