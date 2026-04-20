@@ -254,9 +254,9 @@ def _extract_ci_secret_scan_regex() -> str:
     """Return the Anthropic key regex from ``.github/workflows/ci.yml``.
 
     Scans for the ``grep -E '<regex>'`` invocation used by the
-    ``secret-scan`` job and returns the quoted pattern. M1-T01-ISS-08:
-    parsing at test time keeps this test and CI in lock-step even if
-    the regex is narrowed.
+    ``secret-scan`` job and returns the quoted pattern. Parsing at
+    test time keeps this test and CI in lock-step even if the regex
+    is narrowed.
     """
     import re as _re
 
@@ -271,8 +271,8 @@ def test_secret_scan_regex_matches_known_key_shapes() -> None:
     """The CI secret-scan grep pattern must match real Anthropic key shapes.
 
     Parses the live regex out of ``.github/workflows/ci.yml`` at test
-    time (M1-T01-ISS-08) so a CI-side narrowing either still passes or
-    visibly breaks here. ISS-05 / ISS-08.
+    time so a CI-side narrowing either still passes or visibly breaks
+    here.
     """
     import re
 
@@ -283,7 +283,7 @@ def test_secret_scan_regex_matches_known_key_shapes() -> None:
 
 
 def test_secret_scan_regex_is_extracted_from_ci_yml() -> None:
-    """M1-T01-ISS-08: ensure the extractor found a non-trivial regex."""
+    """Ensure the extractor found a non-trivial regex."""
     pattern = _extract_ci_secret_scan_regex()
     assert pattern.startswith("sk-ant-"), (
         f"expected an Anthropic-shaped pattern, got: {pattern!r}"

@@ -5,9 +5,9 @@ carry-overs (``M1-T02-ISS-01`` logfire removal, ``M1-T04-ISS-01``
 forensic_logger retirement, ``M1-T08-DEF-01`` ``BudgetExceeded`` →
 ``NonRetryable`` docstring swap).
 
-The `M1-T01-ISS-08` carry-over (secret-scan regex parsing) is pinned
-from `tests/test_scaffolding.py` instead; that file owns the
-`.github/workflows/ci.yml` extraction.
+The secret-scan regex parsing is pinned from
+``tests/test_scaffolding.py`` instead; that file owns the
+``.github/workflows/ci.yml`` extraction.
 """
 
 from __future__ import annotations

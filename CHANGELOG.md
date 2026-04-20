@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M3 close-out: documentation cleanup (2026-04-20)
+
+Two non-code documentation items surfaced by the post-M3 retrospective
+audit, resolved before M3 is truly closed.
+
+1. **M4 `get_cost_report` MCP tool re-spec carry-over.** Original
+   [architecture.md §4.4](design_docs/architecture.md) lists
+   `get_cost_report(run_id) → CostReport` as one of the five MCP
+   tools. M3 T06 reframe (same date) dropped the matching
+   `aiw cost-report` CLI because M1 T05 removed per-call `TokenUsage`
+   rows, `TokenUsage` has no `provider` field, and the by-X
+   breakdowns drive zero decisions under subscription billing. The
+   architecture.md note was already in place; added a **Carry-over
+   from prior milestones** section to
+   [design_docs/phases/milestone_4_mcp/README.md](design_docs/phases/milestone_4_mcp/README.md)
+   so the M4 T04 Builder sees the re-spec requirement at planning
+   time (ship total-only scalar reading `runs.total_cost_usd`, or
+   fold into `list_runs` and drop the standalone tool).
+
+2. **Pre-pivot ID comment sweep.** Rewrote three residual
+   `M1-T01-ISS-08` references that pointed at a closed M1 issue ID
+   the post-pivot reader cannot resolve. Rationale preserved in each
+   docstring; dangling ID dropped.
+   - [`ai_workflows/primitives/logging.py:52`](ai_workflows/primitives/logging.py#L52)
+   - [`tests/primitives/test_logging.py:8`](tests/primitives/test_logging.py#L8)
+   - [`tests/test_scaffolding.py:257,274,286`](tests/test_scaffolding.py#L257)
+
+Remaining `M1-T01-ISS-08` occurrences live in the M1 T09 issue file
+(immutable audit log), this CHANGELOG's M1 history, and
+`design_docs/archive/…/` (reference-only) — all appropriate retention
+sites.
+
+**Files touched:**
+`design_docs/phases/milestone_4_mcp/README.md`,
+`ai_workflows/primitives/logging.py`,
+`tests/primitives/test_logging.py`, `tests/test_scaffolding.py`,
+`CHANGELOG.md`.
+
+**Gates:** `uv run pytest` → 290 passed, 1 skipped, 2 warnings;
+`uv run lint-imports` → 3 kept, 0 broken; `uv run ruff check` →
+all checks passed.
+
 ### Added — M3 Task 07b: PlannerPlan Schema Simplification (2026-04-20)
 
 Closes the live-path admission block surfaced by T07a's e2e retry on

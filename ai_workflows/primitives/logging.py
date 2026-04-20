@@ -49,9 +49,8 @@ Related
   other half of the observability triad (cost ledger alongside the
   structured log).
 * ``.github/workflows/ci.yml`` — the secret-scan grep regex is parsed
-  at test time (``M1-T01-ISS-08`` carry-over in
-  ``tests/test_scaffolding.py``) so the scaffolding test always tracks
-  the live pattern.
+  at test time by ``tests/test_scaffolding.py`` so the scaffolding test
+  always tracks the live pattern.
 """
 
 from __future__ import annotations
