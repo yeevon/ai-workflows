@@ -67,8 +67,8 @@ None.
 
 ## Issue log — cross-task follow-up
 
-**M2-T07-ISS-01 — DEFERRED (owner: M2 Task 03, also touches M2 Task 04 and M2 Task 08)**
-*Severity:* observational / non-blocking for T07.
+**M2-T07-ISS-01 — RESOLVED (2026-04-19 via M2 Task 03 option (b) + M2 Task 08 wrapper + smoke graph)**
+*Severity:* observational / non-blocking for T07. Closed in two halves: T03 chose option (b) (raise verbatim; clear `last_exception` on success — see [task_03_issue.md](task_03_issue.md)); T08 delivered `ai_workflows/graph/error_handler.py::wrap_with_error_handler` and wired it into the smoke graph end-to-end (see [task_08_issue.md](task_08_issue.md)). Both halves are pinned by tests.
 T07 reads three keys from graph state: `last_exception` (instance), `_retry_counts` (dict[str, int] keyed by destination node name), and `_non_retryable_failures` (int). None of these are currently written anywhere in the codebase — T04 (`validator_node`, already implemented) **raises** `RetryableSemantic` directly rather than writing it into state, and T03 (`tiered_node`, still planned) has spec text saying "the typed exception propagates so `RetryingEdge` can route" — which is architecturally incomplete: a pure `(state) -> str` edge cannot observe a raised exception that was never stored. The integration contract needs explicit resolution at the raising sites so the edge actually has data to route on.
 
 *Action / Recommendation:*

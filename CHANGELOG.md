@@ -7,6 +7,207 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — Architecture pivot: LangGraph + MCP substrate (2026-04-19)
+
+Design-mode pivot away from the pydantic-ai-centric M1 plan toward a
+LangGraph orchestrator + MCP server substrate, triggered by the M1
+Task 13 spike findings and the observation that half of the old M4's
+hard parts (DAG, resume, human-gate, cost ledger) are already solved
+by LangGraph. **No runtime code change in this entry** — the M1
+primitives remain intact; the pivot is captured in `design_docs/`
+only. Execution is sequenced across nine new milestones starting with
+M1 reconciliation.
+
+**Files added:**
+
+- `design_docs/architecture.md` — v0.1 architecture of record.
+- `design_docs/analysis/langgraph_mcp_pivot.md` — grounding decision
+  document cited by every KDR.
+- `design_docs/nice_to_have.md` — parking lot of deferred
+  simplifications (Langfuse, Instructor / pydantic-ai, LangSmith,
+  Typer, Docker Compose, mkdocs, DeepAgents, standalone OTel). Tasks
+  for these items are forbidden without a matching trigger firing.
+- `design_docs/roadmap.md` — nine-milestone index.
+- `design_docs/phases/milestone_1_reconciliation/` — 13-task M1
+  reconciliation plan (audit → dependency swap → remove pydantic-ai
+  substrate → retune primitives → four-layer import-linter contract).
+- `design_docs/phases/milestone_2_graph/` — 9-task M2 plan for the
+  graph adapters (`TieredNode`, `ValidatorNode`, `HumanGate`,
+  `CostTrackingCallback`, `RetryingEdge`) plus LiteLLM adapter and
+  Claude Code subprocess driver.
+- `design_docs/phases/milestone_3_first_workflow/` through
+  `design_docs/phases/milestone_9_skill/` — README-level plans for
+  first workflow, MCP surface, multi-tier planner, slice_refactor,
+  evals, Ollama infra, and optional skill packaging. Per-task files
+  for M3+ are generated just-in-time as each prior milestone closes.
+
+**Files archived** (moved under
+`design_docs/archive/pre_langgraph_pivot_2026_04_19/`):
+
+- `design_docs/phases/milestone_1_primitives/` through
+  `design_docs/phases/milestone_7_additional_components/`.
+- `design_docs/issues.md` and the top-level analyses
+  (`analysis_summary.md`, `grill_me_results.md`, `search_analysis.md`,
+  `worflow_initial_design.md`).
+
+**KDRs introduced:** KDR-001 LangGraph substrate · KDR-002 MCP
+portable surface · KDR-003 no Anthropic API · KDR-004 validator-
+after-every-LLM-node · KDR-005 primitives layer preserved · KDR-006
+three-bucket retry taxonomy · KDR-007 LiteLLM adapter for Gemini +
+Qwen/Ollama · KDR-008 FastMCP for MCP server · KDR-009 LangGraph
+SqliteSaver owns checkpoints.
+
+**Conventions updated:**
+
+- Four-layer architecture replaces the three-layer structure:
+  `primitives → graph → workflows → surfaces` (enforced by
+  `import-linter` once M1 task 12 lands).
+- `CLAUDE.md` restored from commented-out state and rewritten for the
+  new structure; `design_docs/issues.md` references removed
+  (cross-cutting items now land as forward-deferred carry-over on the
+  appropriate future task).
+- `.claude/commands/audit.md` and `.claude/commands/clean-implement.md`
+  updated to drop references to the archived `issues.md`; audit
+  findings land exclusively under
+  `design_docs/phases/milestone_<M>_<name>/issues/`.
+
+## [M2 Graph-Layer Adapters] - 2026-04-19
+
+### Changed — M2 Task 09: Milestone Close-out (2026-04-19)
+
+Docs-only close-out for M2. No code change; promotes the accumulated
+M2 task entries (T01–T08) from `[Unreleased]` into this dated
+milestone section and pins the green-gate snapshot used to verify the
+milestone README's exit criteria.
+
+**Files touched:**
+
+- `design_docs/phases/milestone_2_graph/README.md` — `Status` flipped
+  from `📝 Planned` to `✅ Complete (2026-04-19)`; appended an
+  `Outcome (2026-04-19)` section summarising the adapters + providers
+  shipped, the checkpointer + smoke-graph wiring, the green-gate
+  snapshot, and a one-line verification for every exit criterion with
+  a link back to the closing issue file.
+- `design_docs/roadmap.md` — M2 row `Status` flipped from `planned`
+  to `✅ complete (2026-04-19)`.
+- `CHANGELOG.md` — inserted `## [M2 Graph-Layer Adapters] -
+  2026-04-19` heading above the M2 task entries so T01–T08 land in a
+  dated section; added this T09 entry at the top of that section;
+  restored `## [Unreleased]` to the top of the file (holding only the
+  Architecture pivot entry, matching the post-M1-close-out layout).
+
+**ACs satisfied:**
+
+- Every exit criterion in the milestone `README` has a concrete
+  verification (Outcome section table + per-task issue-file links).
+- `uv run pytest && uv run lint-imports && uv run ruff check` green
+  on a fresh clone (236 passed, 3 import-linter contracts kept, ruff
+  clean — snapshot recorded in both `README.md` Outcome and this
+  entry).
+- `README.md` and `roadmap.md` reflect `✅` status.
+- CHANGELOG has this dated entry summarising M2.
+
+**Deviations from spec:** None.
+
+### Added — M2 Task 08: SqliteSaver binding + smoke graph (2026-04-19)
+
+Closes M2 graph-layer scaffolding: a thin factory over LangGraph's
+built-in SQLite checkpointer (KDR-009) plus the end-to-end smoke graph
+that wires every M2 adapter together — `llm → validator → gate → end`
+under an async checkpointer, paused at `interrupt`, resumed with
+`Command(resume=...)`. Also delivers the M2-T07-ISS-01 carry-over: a
+state-writing error-handler wrapper that converts raised bucket
+exceptions into the `state['last_exception']` / `_retry_counts` /
+`_non_retryable_failures` shape `retrying_edge` reads, so a pure
+`(state) -> str` router has something to observe.
+
+**Files added:**
+
+- `ai_workflows/graph/checkpointer.py` — two factories sharing a single
+  path resolver. `build_checkpointer(db_path)` returns a sync
+  `SqliteSaver` (matches the task spec's signature exactly). Path
+  precedence: explicit arg > `AIW_CHECKPOINT_DB` env var >
+  `~/.ai-workflows/checkpoints.sqlite`. Parent dirs created lazily,
+  `check_same_thread=False`, `.setup()` invoked eagerly so tables land
+  on disk before return. `build_async_checkpointer(db_path)` — async
+  variant returning `AsyncSqliteSaver` over `aiosqlite` with identical
+  path resolution; required because every M2 node adapter is `async
+  def` and LangGraph's sync saver raises `NotImplementedError` on
+  `ainvoke` (sibling concrete saver from the same
+  `langgraph-checkpoint-sqlite` package listed in
+  [architecture.md §6](design_docs/architecture.md), not a new
+  backend). `resolve_checkpoint_path(db_path)` + `_prepare_path` share
+  precedence + directory creation.
+- `ai_workflows/graph/error_handler.py` —
+  `wrap_with_error_handler(node, *, node_name)`: catches
+  `RetryableTransient` / `RetryableSemantic` / `NonRetryable` raised
+  by a node and returns the exact T07-issue dict shape
+  (`last_exception` + per-node counter bump +
+  `_non_retryable_failures` bump only on `NonRetryable`). Signature
+  introspection forwards `config` to nodes that accept `(state,
+  config)` and omits it for `(state)`-only nodes; wrapper's own
+  `config` is typed `RunnableConfig | None` so LangGraph binds the
+  config dict (a stringified annotation defeats that binding — noted
+  in the module).
+- `tests/graph/test_checkpointer.py` — 8 unit tests: custom path
+  honoured, `AIW_CHECKPOINT_DB` env override honoured, explicit arg
+  beats env var, default path resolves under `~/.ai-workflows/`,
+  plugged into a plain `StateGraph` it compiles and invokes without
+  error, separate DB file from Storage (KDR-009), `.setup()` is
+  idempotent on re-open, `~` expansion works.
+- `tests/graph/test_error_handler.py` — 10 unit tests pinning the
+  wrapper's input/output contract: success returns node's result; each
+  of the three buckets trapped with the exact state-update shape;
+  other-node counters preserved; `_non_retryable_failures` accumulates
+  across runs; config forwarded to 2-arg nodes and skipped for 1-arg
+  nodes; incoming state never mutated; unclassified exceptions (e.g.
+  `ValueError`) propagate untouched.
+- `tests/graph/test_smoke_graph.py` — 5 end-to-end tests: happy path
+  reaches `interrupt` with a checkpoint row on disk; `Command(resume)`
+  rehydrates and finishes; `CostTracker` totals reflect the successful
+  call; `RetryableTransient` burst routes back to `llm` and clears
+  `last_exception` on the next pass (M2-T07-ISS-01 carry-over proven
+  end-to-end); exhausted transient budget caps LLM calls at
+  `max_transient_attempts` and routes forward through `on_terminal`.
+  Provider is stubbed at `LiteLLMAdapter` so no real API traffic
+  fires.
+
+**ACs satisfied:**
+
+- `build_checkpointer(db_path)` returns a LangGraph `SqliteSaver`
+  bound to the specified path; defaults to
+  `~/.ai-workflows/checkpoints.sqlite`.
+- `AIW_CHECKPOINT_DB` env-var override honoured.
+- Applied to a plain `StateGraph` the checkpointer compiles without
+  error.
+- Separate from the Storage DB (KDR-009) — pinned by a dedicated test
+  that probes the `checkpoints` table on the checkpointer path and
+  confirms the two paths never alias.
+- Smoke graph `llm → validator → gate → end` runs end-to-end under the
+  checkpointer; resumes cleanly via `Command(resume=...)`; cost-tracker
+  totals non-zero.
+- M2-T07-ISS-01 carry-over: wrapper converts raised buckets into
+  state writes; retry loop verified end-to-end in the graph.
+
+**Deviations from spec:**
+
+- Spec named only `build_checkpointer` (sync). I added
+  `build_async_checkpointer` as a sibling because every M2 node
+  adapter (`tiered_node`, `validator_node`, `human_gate`) is `async
+  def` and the sync `SqliteSaver` raises
+  `NotImplementedError: The SqliteSaver does not support async methods`
+  on `.ainvoke`. Both factories target the same on-disk schema and
+  share `resolve_checkpoint_path`, so the sync spec signature is
+  preserved unchanged. The async variant ships via
+  `langgraph-checkpoint-sqlite` + `aiosqlite` which are already
+  transitive dependencies of `langgraph` — no new direct dep added
+  to `pyproject.toml`.
+- `error_handler.py` dropped `from __future__ import annotations`
+  (unlike other graph modules) because `RunnableConfig | None`
+  stringified at import time defeats LangGraph's config-binding
+  auto-detection on the wrapper — the config parameter must be a
+  real type for LangGraph to pass the runtime config through.
+
 ### Added — M2 Task 03: TieredNode adapter (2026-04-19)
 
 Fifth `ai_workflows.graph.*` adapter — the LangGraph node factory for
@@ -392,70 +593,6 @@ site and every exception passes through verbatim.
   Ollama routes zero-price on `usage` but populate hidden params;
   without the fall-back every local-coder call would silently book at
   `$0` and `CostTracker.by_model` would undercount.
-
-### Changed — Architecture pivot: LangGraph + MCP substrate (2026-04-19)
-
-Design-mode pivot away from the pydantic-ai-centric M1 plan toward a
-LangGraph orchestrator + MCP server substrate, triggered by the M1
-Task 13 spike findings and the observation that half of the old M4's
-hard parts (DAG, resume, human-gate, cost ledger) are already solved
-by LangGraph. **No runtime code change in this entry** — the M1
-primitives remain intact; the pivot is captured in `design_docs/`
-only. Execution is sequenced across nine new milestones starting with
-M1 reconciliation.
-
-**Files added:**
-
-- `design_docs/architecture.md` — v0.1 architecture of record.
-- `design_docs/analysis/langgraph_mcp_pivot.md` — grounding decision
-  document cited by every KDR.
-- `design_docs/nice_to_have.md` — parking lot of deferred
-  simplifications (Langfuse, Instructor / pydantic-ai, LangSmith,
-  Typer, Docker Compose, mkdocs, DeepAgents, standalone OTel). Tasks
-  for these items are forbidden without a matching trigger firing.
-- `design_docs/roadmap.md` — nine-milestone index.
-- `design_docs/phases/milestone_1_reconciliation/` — 13-task M1
-  reconciliation plan (audit → dependency swap → remove pydantic-ai
-  substrate → retune primitives → four-layer import-linter contract).
-- `design_docs/phases/milestone_2_graph/` — 9-task M2 plan for the
-  graph adapters (`TieredNode`, `ValidatorNode`, `HumanGate`,
-  `CostTrackingCallback`, `RetryingEdge`) plus LiteLLM adapter and
-  Claude Code subprocess driver.
-- `design_docs/phases/milestone_3_first_workflow/` through
-  `design_docs/phases/milestone_9_skill/` — README-level plans for
-  first workflow, MCP surface, multi-tier planner, slice_refactor,
-  evals, Ollama infra, and optional skill packaging. Per-task files
-  for M3+ are generated just-in-time as each prior milestone closes.
-
-**Files archived** (moved under
-`design_docs/archive/pre_langgraph_pivot_2026_04_19/`):
-
-- `design_docs/phases/milestone_1_primitives/` through
-  `design_docs/phases/milestone_7_additional_components/`.
-- `design_docs/issues.md` and the top-level analyses
-  (`analysis_summary.md`, `grill_me_results.md`, `search_analysis.md`,
-  `worflow_initial_design.md`).
-
-**KDRs introduced:** KDR-001 LangGraph substrate · KDR-002 MCP
-portable surface · KDR-003 no Anthropic API · KDR-004 validator-
-after-every-LLM-node · KDR-005 primitives layer preserved · KDR-006
-three-bucket retry taxonomy · KDR-007 LiteLLM adapter for Gemini +
-Qwen/Ollama · KDR-008 FastMCP for MCP server · KDR-009 LangGraph
-SqliteSaver owns checkpoints.
-
-**Conventions updated:**
-
-- Four-layer architecture replaces the three-layer structure:
-  `primitives → graph → workflows → surfaces` (enforced by
-  `import-linter` once M1 task 12 lands).
-- `CLAUDE.md` restored from commented-out state and rewritten for the
-  new structure; `design_docs/issues.md` references removed
-  (cross-cutting items now land as forward-deferred carry-over on the
-  appropriate future task).
-- `.claude/commands/audit.md` and `.claude/commands/clean-implement.md`
-  updated to drop references to the archived `issues.md`; audit
-  findings land exclusively under
-  `design_docs/phases/milestone_<M>_<name>/issues/`.
 
 ## [M1 Reconciliation] - 2026-04-19
 
