@@ -1,20 +1,22 @@
-"""ai-workflows: a composable framework for building AI workflows.
+"""ai-workflows: composable AI-workflow framework on LangGraph + MCP.
 
-The package is split into three strictly layered sub-packages:
+The package is split into four strictly layered sub-packages per
+[architecture.md §3](../design_docs/architecture.md):
 
-* :mod:`ai_workflows.primitives` — low-level building blocks (LLM client
-  factory, tool registry, storage, cost tracking, retry, logging). Has no
-  dependencies on higher layers.
-* :mod:`ai_workflows.components` — reusable mid-level building blocks
-  (Worker, Validator, Pipeline, AgentLoop, HumanGate, …). Built on top of
-  primitives.
-* :mod:`ai_workflows.workflows` — concrete workflow definitions that wire
-  components together for specific tasks (JVM modernization, doc generation,
-  code review, …).
+* :mod:`ai_workflows.primitives` — storage, cost, tiers, providers,
+  retry, logging. Has no dependencies on higher layers.
+* :mod:`ai_workflows.graph` — LangGraph adapters (``TieredNode``,
+  ``ValidatorNode``, ``HumanGate``, ``CostTrackingCallback``,
+  ``RetryingEdge``) over primitives. Populated in M2.
+* :mod:`ai_workflows.workflows` — concrete LangGraph ``StateGraph``
+  modules. Populated from M3 onward.
+* :mod:`ai_workflows.cli` + :mod:`ai_workflows.mcp` — surfaces. The
+  ``aiw`` CLI and the FastMCP server both consume
+  :mod:`ai_workflows.workflows` and :mod:`ai_workflows.primitives`.
 
-Layer boundaries are enforced at lint time by ``import-linter`` contracts
-declared in ``pyproject.toml``. See ``design_docs/`` for the full
-architecture.
+Layer boundaries are enforced at lint time by ``import-linter``
+contracts declared in ``pyproject.toml`` (M1 Task 12 installs the
+four-layer shape).
 """
 
 __version__ = "0.1.0"

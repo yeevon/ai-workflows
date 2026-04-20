@@ -13,8 +13,11 @@ hashing does not fit the module-based workflow layout declared in
 [architecture.md §4.3](../../design_docs/architecture.md), and a
 drift-detect primitive, if needed, is deferred to M3 resume design.
 
-Architectural rule (enforced by ``import-linter``): nothing in this package
-is allowed to import from :mod:`ai_workflows.components` or
-:mod:`ai_workflows.workflows`. Primitives are the bedrock; higher layers
-depend on them, never the other way around.
+Architectural rule (enforced by ``import-linter``): nothing in this
+package is allowed to import from :mod:`ai_workflows.graph`,
+:mod:`ai_workflows.workflows`, :mod:`ai_workflows.cli`, or
+:mod:`ai_workflows.mcp`. Primitives are the bedrock; higher layers
+depend on them, never the other way around. M1 Task 12 installs the
+four-layer contract (primitives → graph → workflows → surfaces) that
+enforces this rule.
 """

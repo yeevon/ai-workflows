@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M1 Task 12: Import-Linter Contract Rewrite (2026-04-19)
+
+Flipped the import-linter contracts from the pre-pivot three-layer
+shape (`primitives` / `components` / `workflows`) to the four-layer
+shape from [architecture.md §3](design_docs/architecture.md):
+`primitives → graph → workflows → surfaces`. The empty `components/`
+package is collapsed into `graph/`; the `cli` + `mcp` modules are
+the two surfaces.
+
+**Files modified / added / deleted:**
+
+- `pyproject.toml` — replaced the `[tool.importlinter.contracts]`
+  block. Three contracts: primitives cannot import
+  graph / workflows / surfaces; graph cannot import workflows /
+  surfaces; workflows cannot import surfaces. Dev-group comment
+  updated from "3-layer" to "4-layer".
+- `ai_workflows/components/` — **deleted** (was an empty shell from
+  the pre-pivot design).
+- `tests/components/` — **deleted** to mirror the package removal.
+- `ai_workflows/graph/__init__.py` — **added**; one-paragraph
+  docstring citing [architecture.md §3 / §4.2](design_docs/architecture.md);
+  populated in M2.
+- `ai_workflows/mcp/__init__.py` — **added**; docstring citing
+  [architecture.md §4.4](design_docs/architecture.md), KDR-002,
+  KDR-008; populated in M4.
+- `ai_workflows/__init__.py` — docstring rewritten to describe the
+  four-layer tree and cite M1 Task 12.
+- `ai_workflows/primitives/__init__.py` — docstring layer list
+  updated (no longer references `components`).
+- `.github/workflows/ci.yml` — renamed the import-linter step from
+  `Lint imports (3-layer architecture)` to
+  `Lint imports (4-layer architecture)` (AUD-12-01). Command
+  unchanged.
+- `tests/test_scaffolding.py` — parametrized layer-import test now
+  covers `graph` + `mcp` alongside `primitives` / `workflows` /
+  `cli`; contract-shape test updated to the three-contract,
+  four-layer vocabulary.
+- `tests/graph/__init__.py`, `tests/mcp/__init__.py` — **added**
+  empty package markers so M2 / M4 Builders don't have to scaffold
+  them (AUD-12-02).
+
+**ACs satisfied:**
+
+- AC-1 (`ai_workflows/components/` no longer exists) — verified
+  (directory removed; grep returns zero).
+- AC-2 (`ai_workflows/graph/`, `ai_workflows/workflows/`,
+  `ai_workflows/mcp/` exist with package docstrings only) —
+  verified; each `__init__.py` is a docstring-only shell.
+- AC-3 (`uv run lint-imports` reports three contracts passing) —
+  verified: `Contracts: 3 kept, 0 broken.`
+- AC-4 (`grep -r "ai_workflows.components" . --include="*.py"
+  --include="*.toml"` returns zero matches) — verified (no hits).
+- AC-5 (`uv run pytest` green) — 142 passed, 0 failed.
+- AUD-12-01 (CI step renamed to "4-layer architecture") — applied.
+- AUD-12-02 (matching `tests/graph/` + `tests/mcp/` markers) —
+  applied in this task rather than deferred to M2 / M4.
+
+**Deviations from spec:**
+
+- None. The task spec, the issue file, and architecture.md §3 agree
+  on the four-layer shape; the pre-build amendments (AUD-12-01 CI
+  rename; AUD-12-02 optional test markers) are taken in-scope here
+  rather than punted.
+
 ### Changed — M1 Task 11: CLI Stub-Down (2026-04-19)
 
 Reduced `ai_workflows/cli.py` to the minimum that keeps

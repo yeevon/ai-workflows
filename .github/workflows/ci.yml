@@ -28,7 +28,7 @@ jobs:
         run: uv sync --all-extras
       - name: Run pytest
         run: uv run pytest
-      - name: Lint imports (3-layer architecture)
+      - name: Lint imports (4-layer architecture)
         run: uv run lint-imports
       - name: Ruff
         run: uv run ruff check .

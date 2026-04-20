@@ -23,7 +23,7 @@ dependencies = [
 
 [dependency-groups]
 # Dev tooling — installed via `uv sync` by default but not shipped with the
-# wheel. import-linter enforces the 3-layer architecture; ruff is the linter;
+# wheel. import-linter enforces the 4-layer architecture; ruff is the linter;
 # pytest + pytest-asyncio drive the test suite.
 dev = [
   "import-linter>=2.0",
@@ -66,28 +66,36 @@ extend-immutable-calls = ["typer.Option", "typer.Argument"]
 [tool.importlinter]
 root_package = "ai_workflows"
 
-# Contract 1: the primitives layer is the foundation. It owns LLM clients,
-# tools, storage, retry, etc., and must never reach upward into components or
-# workflows. Violating this collapses the layered architecture.
+# Four-layer contract per architecture.md §3:
+#   primitives → graph → workflows → surfaces (cli, mcp).
+# Lower layers must never reach upward. M1 Task 12 replaces the
+# pre-pivot 3-layer contracts (primitives / components / workflows)
+# with this set; the old ``components/`` layer is collapsed into
+# ``graph/``.
+
 [[tool.importlinter.contracts]]
-name = "primitives cannot import components or workflows"
+name = "primitives cannot import graph, workflows, or surfaces"
 type = "forbidden"
 source_modules = ["ai_workflows.primitives"]
-forbidden_modules = ["ai_workflows.components", "ai_workflows.workflows"]
+forbidden_modules = [
+    "ai_workflows.graph",
+    "ai_workflows.workflows",
+    "ai_workflows.cli",
+    "ai_workflows.mcp",
+]
 
-# Contract 2: components compose primitives into reusable building blocks
-# (Worker, Validator, Pipeline, …). Workflows wire components together. A
-# component must never depend on a workflow — that would be circular.
 [[tool.importlinter.contracts]]
-name = "components cannot import workflows"
+name = "graph cannot import workflows or surfaces"
 type = "forbidden"
-source_modules = ["ai_workflows.components"]
-forbidden_modules = ["ai_workflows.workflows"]
+source_modules = ["ai_workflows.graph"]
+forbidden_modules = [
+    "ai_workflows.workflows",
+    "ai_workflows.cli",
+    "ai_workflows.mcp",
+]
 
-# Contract 3 ("components cannot peek at each other's private state") is
-# deferred. import-linter only allows ``*`` to replace a whole module
-# segment, so ``ai_workflows.components.*._*`` is rejected at load time.
-# Expressing this rule requires enumerating each component's private
-# modules, which we cannot do until components exist (M2 Task 01+). The
-# contract is re-added as part of M2 Task 01 when the ``BaseComponent``
-# convention for private modules is settled.
+[[tool.importlinter.contracts]]
+name = "workflows cannot import surfaces"
+type = "forbidden"
+source_modules = ["ai_workflows.workflows"]
+forbidden_modules = ["ai_workflows.cli", "ai_workflows.mcp"]

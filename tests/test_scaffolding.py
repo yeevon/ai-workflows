@@ -2,15 +2,18 @@
 
 These tests validate the structural deliverables of Task 01 only:
 
-* the three top-level layers (`primitives`, `components`, `workflows`)
-  import cleanly
+* the four top-level layers (`primitives`, `graph`, `workflows`, and
+  the surfaces `cli` + `mcp`) import cleanly per the post-pivot
+  [architecture.md §3](../design_docs/architecture.md) four-layer
+  contract installed by M1 Task 12.
 * the `aiw` Typer app exposes `--help`
 * the import-linter contracts in `pyproject.toml` pass
 * the scaffolding files referenced by later tasks exist on disk
 
-Behavioural tests (LLM calls, tool execution, storage round-trips, …) live
-under `tests/primitives/`, `tests/components/`, and `tests/workflows/` and
-are added by the corresponding implementation tasks.
+Behavioural tests (LLM calls, storage round-trips, …) live under
+``tests/primitives/``, ``tests/graph/``, ``tests/workflows/``, and
+``tests/mcp/`` and are added by the corresponding implementation
+tasks (M2 onward).
 """
 
 from __future__ import annotations
@@ -37,16 +40,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
     [
         "ai_workflows",
         "ai_workflows.primitives",
-        "ai_workflows.components",
+        "ai_workflows.graph",
         "ai_workflows.workflows",
         "ai_workflows.cli",
+        "ai_workflows.mcp",
     ],
 )
 def test_layered_packages_import(module_name: str) -> None:
-    """Every layer (and the CLI) must import without side-effect failures.
+    """Every layer (and the CLI + MCP surfaces) must import without side-effect failures.
 
-    Task 01 acceptance criterion: ``import ai_workflows.primitives`` works.
-    We extend that to every package we created so a typo in any
+    M1 Task 12 flipped the package tree to the four-layer
+    primitives → graph → workflows → surfaces shape. Task 01's
+    acceptance criterion ("``import ai_workflows.primitives`` works")
+    is extended to every package on that list so a typo in any
     ``__init__.py`` is caught immediately.
     """
     module = importlib.import_module(module_name)
@@ -188,19 +194,18 @@ def test_pyproject_registers_aiw_script() -> None:
 
 
 def test_pyproject_declares_expected_importlinter_contracts() -> None:
-    """The architectural contracts from Task 01 must be present.
+    """The four-layer architectural contracts from M1 Task 12 must be present.
 
-    Task 01 ships two statically-enforceable contracts:
+    M1 Task 12 replaced the pre-pivot three-contract set (which named
+    ``components``) with the post-pivot four-layer contract per
+    [architecture.md §3](../design_docs/architecture.md):
 
-    1. primitives cannot import components or workflows
-    2. components cannot import workflows
+    1. primitives cannot import graph, workflows, or surfaces
+    2. graph cannot import workflows or surfaces
+    3. workflows cannot import surfaces
 
-    A third contract ("components cannot peek at each other's private
-    state") is documented in the spec but cannot be expressed in
-    ``import-linter`` today — its wildcard syntax only allows ``*`` to
-    replace a whole module segment, so ``components.*._*`` is rejected.
-    It is re-added in M2 Task 01 when components exist and private
-    modules can be enumerated.
+    Substring matching keeps the test resilient to wording tweaks
+    while pinning the layer vocabulary.
     """
     import tomllib
 
@@ -208,10 +213,10 @@ def test_pyproject_declares_expected_importlinter_contracts() -> None:
         pyproject = tomllib.load(fh)
     contracts = pyproject["tool"]["importlinter"]["contracts"]
     names = {c["name"] for c in contracts}
-    assert len(contracts) >= 2
-    # Substring matching keeps the test resilient to minor wording tweaks.
-    assert any("primitives" in n for n in names)
-    assert any("components cannot import workflows" in n for n in names)
+    assert len(contracts) == 3, f"expected exactly 3 contracts, got {len(contracts)}: {names}"
+    assert any("primitives cannot import" in n for n in names)
+    assert any("graph cannot import" in n for n in names)
+    assert any("workflows cannot import surfaces" in n for n in names)
 
 
 # ---------------------------------------------------------------------------
