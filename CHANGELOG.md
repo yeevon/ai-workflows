@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M2 Task 05: HumanGate Adapter (2026-04-19)
+
+Second `ai_workflows.graph.*` adapter — the human-in-the-loop gate
+that pauses a run at a strict- or soft-review checkpoint per
+[architecture.md §8.3](design_docs/architecture.md). Wraps
+`langgraph.types.interrupt()` with `Storage`-backed persistence so
+prompt + response round-trip through the M1 Task 05 trimmed
+gate-responses table, and exposes `strict_review` / `timeout_s` /
+`default_response_on_timeout` as interrupt-payload fields the surface
+layer can act on. No in-house timer — LangGraph's `SqliteSaver`
+(KDR-009) owns the paused state, a higher layer owns timeout policy.
+
+**Files added:**
+
+- `ai_workflows/graph/human_gate.py` — `human_gate(*, gate_id,
+  prompt_fn, strict_review=False, timeout_s=1800,
+  default_response_on_timeout="abort")` factory returning an `async`
+  `(state, config) -> dict` LangGraph node. Reads `run_id` from state
+  and the `StorageBackend` from `config["configurable"]["storage"]`,
+  calls `record_gate` with the rendered prompt, raises `interrupt`
+  with the full payload (timeout fields zeroed out under
+  `strict_review=True`), and on resume stamps
+  `record_gate_response` + writes `{f"gate_{gate_id}_response":
+  response}` into state.
+- `tests/graph/test_human_gate.py` — 7 tests: prompt+response
+  round-trip through a stub storage, `strict_review` flag preservation
+  on `record_gate`, `strict_review=True` zeroing the timeout fields
+  even with `timeout_s=1`, non-strict gates forwarding the timeout
+  fields intact, `interrupt` invoked exactly once per execution,
+  resumption writing the response key into state, and a full
+  `SQLiteStorage` round trip against the live M1 Task 05 schema.
+
+**ACs satisfied:** gate prompt and response round-trip through
+`Storage`; `strict_review=True` disables timeout enforcement (payload
+fields zeroed); node integrates with a LangGraph `StateGraph`
+checkpointed by `MemorySaver` (the `SqliteSaver` smoke test is M2
+Task 08's job); `uv run pytest tests/graph/test_human_gate.py` green.
+
+**Deviations from spec:** none. Spec's signature reproduced verbatim.
+Two dimensions the spec left implicit were resolved as follows, and
+both match the T03 "injected via LangGraph config" pattern:
+
+- `run_id` is read from `state["run_id"]`.
+- `StorageBackend` is read from `config["configurable"]["storage"]`.
+
 ### Added — M2 Task 04: ValidatorNode Adapter (2026-04-19)
 
 First `ai_workflows.graph.*` adapter to land — the validator that
