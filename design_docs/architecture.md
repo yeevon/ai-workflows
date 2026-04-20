@@ -9,7 +9,7 @@
 
 Orchestrate multi-step AI workflows — planning, execution, validation, human gates, resume — with durable state, multi-provider routing, and deterministic cost accounting, for a **solo developer** using a **Claude Max subscription** as the primary interactive tool.
 
-**In scope**
+### **In scope**
 
 - Named workflows (e.g. `planner`, `slice_refactor`) executed as DAGs with checkpointed resume.
 - Tiered provider routing (Gemini, Qwen via Ollama, Claude Code CLI subprocess).
@@ -17,7 +17,7 @@ Orchestrate multi-step AI workflows — planning, execution, validation, human g
 - Cost ledger aggregating per-call and per-sub-model usage.
 - Two consumption surfaces: a local CLI and a portable MCP server.
 
-**Out of scope**
+### **Out of scope**
 
 - Anthropic API usage (explicit non-goal — Claude access is OAuth-only via the CLI).
 - Hosted / multi-tenant deployment.
@@ -38,7 +38,7 @@ Orchestrate multi-step AI workflows — planning, execution, validation, human g
 
 The existing `primitives` / `components` / `workflows` import-linter contract is preserved in spirit and extended:
 
-```
+```bash
 surfaces        (ai_workflows.cli, ai_workflows.mcp)
     ↓
 workflows       (ai_workflows.workflows.*)        — concrete LangGraph StateGraphs

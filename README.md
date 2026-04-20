@@ -1,6 +1,6 @@
 # ai-workflows
 
-Composable AI workflow framework for a solo developer using a **Claude Max subscription** as the primary interactive tool. Orchestrates multi-step workflows — planning, execution, validation, human gates, resume — with durable state, multi-provider routing, and deterministic cost accounting.
+Composable AI workflow framework for a solo developer using a **Claude** as the primary interactive tool. Orchestrates multi-step workflows — planning, execution, validation, human gates, resume — with durable state, multi-provider routing, and deterministic cost accounting.
 
 **Architecture of record:** [design_docs/architecture.md](design_docs/architecture.md).
 **Roadmap:** [design_docs/roadmap.md](design_docs/roadmap.md).
