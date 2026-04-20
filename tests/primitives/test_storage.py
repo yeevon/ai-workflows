@@ -51,10 +51,13 @@ def test_sqlite_storage_pre_open_still_satisfies_protocol(tmp_path: Path) -> Non
 
 
 def test_storage_protocol_only_exposes_the_trimmed_surface() -> None:
-    """AC-3: ``StorageBackend`` contains only the seven methods from task 05.
+    """AC-3: ``StorageBackend`` contains the seven trimmed M1.05 methods.
 
     Guards against accidental re-introduction of the pre-pivot per-call
-    ledger / task / artifact methods as the module evolves.
+    ledger / task / artifact methods as the module evolves. M3 Task 03
+    adds ``write_artifact`` / ``read_artifact`` — a JSON-payload surface
+    for the first workflow's post-gate artifact node, not the pre-pivot
+    per-file artifacts table dropped by 002_reconciliation.
     """
     expected = {
         "create_run",
@@ -64,6 +67,8 @@ def test_storage_protocol_only_exposes_the_trimmed_surface() -> None:
         "record_gate",
         "record_gate_response",
         "get_gate",
+        "write_artifact",
+        "read_artifact",
     }
     actual = {
         name
@@ -78,14 +83,14 @@ def test_storage_protocol_only_exposes_the_trimmed_surface() -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_first_open_applies_001_and_002(tmp_path: Path) -> None:
+async def test_first_open_applies_all_migrations(tmp_path: Path) -> None:
     await _open(tmp_path)
     with _raw_connect(tmp_path / "test.db") as conn:
         rows = conn.execute(
             "SELECT migration_id FROM _yoyo_migration ORDER BY migration_id"
         ).fetchall()
     ids = [row["migration_id"] for row in rows]
-    assert ids == ["001_initial", "002_reconciliation"]
+    assert ids == ["001_initial", "002_reconciliation", "003_artifacts"]
 
 
 async def test_second_open_is_noop(tmp_path: Path) -> None:
@@ -94,10 +99,16 @@ async def test_second_open_is_noop(tmp_path: Path) -> None:
     await _open(tmp_path)
     with _raw_connect(tmp_path / "test.db") as conn:
         (count,) = conn.execute("SELECT COUNT(*) FROM _yoyo_migration").fetchone()
-    assert count == 2
+    assert count == 3
 
 
 async def test_reconciliation_drops_legacy_tables(tmp_path: Path) -> None:
+    """Legacy checkpoint-adjacent tables stay dropped after 002 + 003.
+
+    003 reintroduces a narrower ``artifacts`` table (``(run_id, kind, payload_json)``)
+    for post-gate workflow output, so ``artifacts`` is intentionally absent
+    from the "must stay dropped" list.
+    """
     await _open(tmp_path)
     with _raw_connect(tmp_path / "test.db") as conn:
         tables = {
@@ -106,10 +117,11 @@ async def test_reconciliation_drops_legacy_tables(tmp_path: Path) -> None:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-    for dropped in ("tasks", "artifacts", "llm_calls", "human_gate_states"):
+    for dropped in ("tasks", "llm_calls", "human_gate_states"):
         assert dropped not in tables, f"{dropped} should have been dropped"
     assert "runs" in tables
     assert "gate_responses" in tables
+    assert "artifacts" in tables  # re-added by 003_artifacts.sql (M3 T03)
 
 
 async def test_reconciliation_drops_workflow_dir_hash_and_profile_columns(
@@ -336,6 +348,40 @@ async def test_strict_review_false_persists_as_zero(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Artifacts (M3 Task 03)
+# ---------------------------------------------------------------------------
+
+
+async def test_write_artifact_round_trip(tmp_path: Path) -> None:
+    """M3 T03: ``write_artifact`` persists the JSON payload; ``read_artifact`` returns it."""
+    storage = await _open(tmp_path)
+    await storage.create_run("r1", "planner", None)
+    await storage.write_artifact("r1", "plan", '{"goal": "ship"}')
+    row = await storage.read_artifact("r1", "plan")
+    assert row is not None
+    assert row["run_id"] == "r1"
+    assert row["kind"] == "plan"
+    assert row["payload_json"] == '{"goal": "ship"}'
+    assert row["created_at"] is not None
+
+
+async def test_read_artifact_returns_none_when_absent(tmp_path: Path) -> None:
+    storage = await _open(tmp_path)
+    assert await storage.read_artifact("r1", "plan") is None
+
+
+async def test_write_artifact_upserts_on_repeat(tmp_path: Path) -> None:
+    """Re-writing the same ``(run_id, kind)`` pair overwrites the payload."""
+    storage = await _open(tmp_path)
+    await storage.create_run("r1", "planner", None)
+    await storage.write_artifact("r1", "plan", '{"v": 1}')
+    await storage.write_artifact("r1", "plan", '{"v": 2}')
+    row = await storage.read_artifact("r1", "plan")
+    assert row is not None
+    assert row["payload_json"] == '{"v": 2}'
+
+
+# ---------------------------------------------------------------------------
 # Migration rollback (AC-2)
 # ---------------------------------------------------------------------------
 
@@ -438,4 +484,4 @@ async def test_initialize_is_idempotent(tmp_path: Path) -> None:
     await storage.initialize()
     with _raw_connect(tmp_path / "x.db") as conn:
         (count,) = conn.execute("SELECT COUNT(*) FROM _yoyo_migration").fetchone()
-    assert count == 2
+    assert count == 3

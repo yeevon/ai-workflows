@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M3 Task 03: Planner StateGraph (2026-04-20)
+
+The first concrete LangGraph workflow. Extends the T02 schema module
+with a compiled ``StateGraph`` wiring every M2 adapter together:
+``explorer → explorer_validator → planner → planner_validator → gate →
+artifact``. Two ``TieredNode`` / ``ValidatorNode`` pairs (KDR-004), two
+``retrying_edge``s per pair (KDR-006), a strict-review ``HumanGate``
+(KDR-009 resume), and a terminal artifact node that persists the
+approved plan.
+
+**Files touched:**
+
+- `ai_workflows/workflows/planner.py` — adds ``ExplorerReport``,
+  ``PlannerState``, ``_explorer_prompt``, ``_planner_prompt``,
+  ``_artifact_node``, ``build_planner`` and the module-level
+  ``register("planner", build_planner)`` call.
+- `ai_workflows/primitives/storage.py` — extends ``StorageBackend``
+  protocol and ``SQLiteStorage`` with async ``write_artifact`` /
+  ``read_artifact`` methods (JSON-payload surface keyed on
+  ``(run_id, kind)``). *Cross-layer deviation flagged in the T03
+  audit: task spec explicitly permits landing this inside T03 with a
+  note rather than splitting to a sibling T03a.*
+- `migrations/003_artifacts.sql` + `.rollback.sql` — recreates a
+  narrow ``artifacts`` table (post-gate workflow output only); not a
+  rehydration of the pre-pivot per-file shape dropped by 002.
+- `tests/workflows/test_planner_graph.py` — build/compile, registration,
+  happy path (pause + resume + artifact persisted), retry path
+  (RateLimitError → explorer counter bumps), validator-driven revision,
+  rejected-gate contract (no artifact write), plus a KDR-003
+  no-Anthropic-surface guard.
+- `tests/primitives/test_storage.py` — protocol-surface test extended
+  to the nine-method set; migration count + table-presence tests
+  updated for 003.
+
+**Acceptance criteria satisfied:**
+
+- `build_planner()` returns a builder that compiles against
+  ``AsyncSqliteSaver``.
+- Importing `ai_workflows.workflows.planner` registers ``"planner"``
+  (verified after a registry reset).
+- Two validators present — one after explorer, one after planner
+  (KDR-004).
+- All ``TieredNode``s wrapped by ``wrap_with_error_handler``; all
+  retry decisions flow through ``retrying_edge``.
+- Happy-path test pauses at the gate, resumes, and the resulting
+  ``PlannerPlan`` JSON lands in Storage via ``read_artifact``.
+- Retry-path test proves the T08 retry loop applies at workflow scope
+  (`_retry_counts == {"explorer": 1}`, `_non_retryable_failures == 0`).
+- No ``ANTHROPIC_API_KEY`` / ``anthropic`` reference in the module
+  (KDR-003 guarded by a source-level test).
+
+**Gates:** `uv run pytest`, `uv run lint-imports`, `uv run ruff check`
+(see audit file for raw output).
+
 ### Added — M3 Task 02: Planner Pydantic I/O Schemas (2026-04-20)
 
 Pins the pydantic v2 public contract for the ``planner`` workflow:

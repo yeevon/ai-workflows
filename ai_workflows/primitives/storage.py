@@ -11,12 +11,21 @@ in-memory `CostTracker` aggregate prepared by M1 Task 08, and (for the
 reshape lands in the paired `migrations/002_reconciliation.sql`
 migration + rollback.
 
+M3 Task 03 reintroduces a narrower :class:`artifacts` surface via
+``migrations/003_artifacts.sql``: a ``(run_id, kind)``-keyed JSON payload
+row written by the first workflow's post-gate ``_artifact_node``. This
+is NOT a rehydration of the pre-pivot per-file artifacts table — payloads
+are JSON strings the workflow already produced, so checkpoint state still
+belongs to LangGraph's ``SqliteSaver``.
+
 Responsibilities
 ----------------
 * :class:`StorageBackend` — structural protocol every backend (SQLite
   now; cloud backends later) must satisfy. Reduced to the seven methods
   listed in
-  [task_05_trim_storage.md](../../design_docs/phases/milestone_1_reconciliation/task_05_trim_storage.md).
+  [task_05_trim_storage.md](../../design_docs/phases/milestone_1_reconciliation/task_05_trim_storage.md);
+  M3 Task 03 adds ``write_artifact`` / ``read_artifact`` on top of that
+  trimmed surface.
 * :class:`SQLiteStorage` — default implementation. Opens a SQLite
   database at ``db_path``, applies pending migrations from the
   repo-local ``migrations/`` directory via yoyo-migrations, and flips
@@ -113,6 +122,30 @@ class StorageBackend(Protocol):
         gate_id: str,
     ) -> dict[str, Any] | None:
         """Return the ``gate_responses`` row, or ``None`` when unseen."""
+        ...
+
+    async def write_artifact(
+        self,
+        run_id: str,
+        kind: str,
+        payload_json: str,
+    ) -> None:
+        """Upsert a workflow artifact row keyed by ``(run_id, kind)``.
+
+        Added in M3 Task 03 for the first workflow's post-gate
+        artifact-persistence node. Not a reintroduction of the pre-pivot
+        per-file ``artifacts`` surface — payloads are JSON strings the
+        workflow already produced, and checkpoint state still lives in
+        LangGraph's ``SqliteSaver`` (KDR-009).
+        """
+        ...
+
+    async def read_artifact(
+        self,
+        run_id: str,
+        kind: str,
+    ) -> dict[str, Any] | None:
+        """Return the ``artifacts`` row, or ``None`` when absent."""
         ...
 
 
@@ -435,6 +468,66 @@ class SQLiteStorage:
             cursor = conn.execute(
                 "SELECT * FROM gate_responses WHERE run_id = ? AND gate_id = ?",
                 (run_id, gate_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return _row_to_dict(cursor, row)
+
+    # ------------------------------------------------------------------
+    # Artifacts (M3 Task 03)
+    # ------------------------------------------------------------------
+
+    async def write_artifact(
+        self,
+        run_id: str,
+        kind: str,
+        payload_json: str,
+    ) -> None:
+        """Upsert the ``(run_id, kind)`` artifact row with the JSON payload."""
+        await self._run_write(
+            self._write_artifact_sync,
+            run_id,
+            kind,
+            payload_json,
+        )
+
+    def _write_artifact_sync(
+        self,
+        run_id: str,
+        kind: str,
+        payload_json: str,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO artifacts (run_id, kind, payload_json, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(run_id, kind) DO UPDATE SET
+                    payload_json = excluded.payload_json,
+                    created_at   = excluded.created_at
+                """,
+                (run_id, kind, payload_json, _utcnow()),
+            )
+            conn.commit()
+
+    async def read_artifact(
+        self,
+        run_id: str,
+        kind: str,
+    ) -> dict[str, Any] | None:
+        """Return the ``artifacts`` row, or ``None`` when absent."""
+        return await asyncio.to_thread(self._read_artifact_sync, run_id, kind)
+
+    def _read_artifact_sync(
+        self,
+        run_id: str,
+        kind: str,
+    ) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM artifacts WHERE run_id = ? AND kind = ?",
+                (run_id, kind),
             )
             row = cursor.fetchone()
             if row is None:
