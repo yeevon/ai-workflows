@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M2 Task 03: TieredNode adapter (2026-04-19)
+
+Fifth `ai_workflows.graph.*` adapter — the LangGraph node factory for
+provider-tier LLM calls described in
+[architecture.md §4.2](design_docs/architecture.md). Resolves a logical
+tier via an injected `TierRegistry`, dispatches to `LiteLLMAdapter`
+(KDR-007) or `ClaudeCodeSubprocess` (KDR-003) based on `route.kind`,
+routes usage through `CostTrackingCallback` (KDR-004 pairing), emits
+exactly one structured-log record per invocation in the
+[architecture.md §8.1](design_docs/architecture.md) shape, and
+classifies any raised provider exception via the three-bucket taxonomy
+(KDR-006) so `RetryingEdge` can route. Per-tier `max_concurrency` is
+enforced via an `asyncio.Semaphore` owned by the caller and supplied
+through the LangGraph `configurable` dict — no module-level globals.
+
+**Files added:**
+
+- `ai_workflows/graph/tiered_node.py` — `tiered_node(*, tier, prompt_fn,
+  output_schema, node_name)` factory. Pulls `tier_registry`,
+  `cost_callback`, `run_id`, optional `semaphores`, optional `pricing`,
+  optional `workflow` from `config['configurable']`; missing required
+  keys raise `NonRetryable` so configuration errors fail loudly.
+  Success path writes `{f"{node_name}_output": text,
+  "last_exception": None}` — the explicit `None` clears any stale
+  classified exception from a prior retry turn (T07 carry-over
+  M2-T07-ISS-01). Failure path raises the `classify()`-mapped bucket
+  (`RetryableTransient` / `NonRetryable`); `RetryableSemantic` passes
+  through untouched. One `CostTracker.record` call per *successful*
+  invocation (failed invocations have no `TokenUsage` to record);
+  `TokenUsage.tier` is stamped by this node so `CostTracker.by_tier`
+  groups correctly.
+- `tests/graph/test_tiered_node.py` — 14 tests: LiteLLM dispatch path;
+  Claude Code dispatch path; `max_concurrency=1` semaphore enforcement
+  (two concurrent invocations serialise); missing semaphore entry
+  allows unbounded concurrency; exactly one structured log on success;
+  exactly one structured log on failure (error level, `bucket` extra);
+  exactly one `CostTracker.record` per successful invocation with
+  `tier` annotated; zero records on failure; `litellm.RateLimitError`
+  → `RetryableTransient`; `litellm.BadRequestError` → `NonRetryable`;
+  success clears stale `last_exception`; missing `configurable` →
+  `NonRetryable`; unknown tier → `NonRetryable`; output dict keyed by
+  node_name.
+
+**ACs satisfied:** standard async LangGraph node (takes state +
+config, returns dict); both provider paths covered by tests;
+semaphore respected; exactly one structured log record per
+invocation; exactly one `CostTracker.record` call per successful
+invocation; `uv run pytest tests/graph/test_tiered_node.py` green.
+
+**Carry-over from M2-T07-ISS-01:** addressed via option (b) — the
+node raises the classified bucket (preserving the task spec test
+wording), and the state-update wrapper that `RetryingEdge` reads is
+owned by M2 Task 08 per the deferred issue. On success the node
+clears `state['last_exception']` so a subsequent retry turn does not
+re-fire on stale data.
+
+**Deviations from spec:** the task spec pseudo-code lists only the
+node-internal steps but does not name the state key the raw text
+lands under. This module uses `f"{node_name}_output"` as the output
+key (derived from the required `node_name` parameter), which matches
+the `validator_node`'s `input_key` wiring convention in Task 04.
+`TokenUsage.tier` is populated by this node before the callback
+records the entry — the spec does not name this step but
+`CostTracker.by_tier` cannot function without it (same convention
+already documented in the T06 CHANGELOG entry).
+
 ### Added — M2 Task 07: RetryingEdge (2026-04-19)
 
 Fourth `ai_workflows.graph.*` adapter — the conditional-edge factory
