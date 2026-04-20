@@ -7,6 +7,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M1 Task 09: StructuredLogger Sanity Pass (2026-04-19)
+
+Rewrote `ai_workflows/primitives/logging.py` to match the post-pivot
+observability surface mandated by [architecture.md §8.1](design_docs/architecture.md).
+`StructuredLogger` is now the single observability backend the
+codebase ships — `logfire` is gone (dropped from `pyproject.toml` by
+M1 Task 02), Langfuse / LangSmith / OpenTelemetry remain deferred to
+[nice_to_have.md](design_docs/nice_to_have.md) §1/§3/§8. Added a
+`log_node_event(...)` helper that emits the ten §8.1 fields with
+`None` defaults so callers cannot accidentally drift the record
+schema when a field is unknown at emit time.
+
+**Files modified:**
+
+- `ai_workflows/primitives/logging.py` — dropped `import logfire`,
+  `logfire.configure(...)`, `logfire.instrument_pydantic(...)`;
+  added `NODE_LOG_FIELDS` (the ten field names from §8.1) and
+  `log_node_event(logger, *, run_id, workflow, node, tier, provider,
+  model, duration_ms, input_tokens, output_tokens, cost_usd,
+  level="info", **extra)`; rewrote the module docstring (cites T09
+  instead of the pre-pivot T11; drops the `primitives.tools.forensic_logger`
+  `Related` paragraph; replaces the `BudgetExceeded` ERROR-level
+  example with `NonRetryable`); `configure_logging(...)` signature
+  preserved so `ai_workflows/cli.py:86` keeps working unchanged.
+- `tests/primitives/test_logging.py` — rewritten (23 tests). Dropped
+  the pre-pivot AC-5 logfire assertion pair and the M1-T05-ISS-02
+  forensic carry-over test (its import target
+  `primitives.tools.forensic_logger` was deleted by T04). Kept the
+  AC-1…AC-4 + AC-6 tests that pin level filtering, renderer choice,
+  per-run file sink behaviour, and `get_logger` pick-up from any
+  module. Added §8.1 coverage: `test_node_log_fields_match_architecture_81`,
+  `test_log_node_event_emits_all_fields_for_litellm_route`,
+  `test_log_node_event_emits_all_fields_for_claude_code_route`,
+  `test_log_node_event_emits_none_for_unpopulated_fields`,
+  `test_log_node_event_forwards_extra_kwargs`,
+  `test_log_node_event_level_override_routes_to_warning`. Added
+  import-line scans: `test_logging_module_has_no_logfire_import`,
+  `test_logging_module_has_no_pydantic_ai_imports`,
+  `test_logging_module_structlog_is_only_backend`,
+  `test_logging_module_docstring_no_longer_references_forensic_logger`,
+  `test_logging_module_docstring_uses_nonretryable_not_budgetexceeded`.
+
+**Acceptance criteria satisfied:**
+
+- AC — log record carries every §8.1 field on emit (pinned by the
+  two route-kind tests plus the unpopulated-fields test that proves
+  unknown fields emit `None`, not a placeholder).
+- AC — `grep -r "logfire" ai_workflows/` returns zero (pinned by
+  `test_logging_module_has_no_logfire_import` +
+  `test_logging_module_structlog_is_only_backend`).
+- AC — `grep -r "pydantic_ai" ai_workflows/primitives/logging.py`
+  returns zero (pinned by `test_logging_module_has_no_pydantic_ai_imports`).
+- AC — `uv run pytest tests/primitives/test_logging.py` green — 23
+  passed, 0 failed.
+
+**Carry-over resolved:**
+
+- M1-T02-ISS-01 (MEDIUM) — `import logfire` removed from
+  `primitives/logging.py`. Unblocks `tests/test_scaffolding.py`
+  CLI-path assertions (`test_layered_packages_import[ai_workflows.cli]`,
+  `test_aiw_help_runs`, `test_aiw_version_command`,
+  `test_aiw_console_script_resolves`) — all four pass now.
+- M1-T04-ISS-01 (MEDIUM) — (a) `Related` paragraph in
+  `primitives/logging.py` rewritten; no longer cites
+  `primitives.tools.forensic_logger`. (b) The forensic carry-over
+  test (`test_forensic_warning_survives_production_pipeline`) was
+  retired — the `log_suspicious_patterns` primitive belonged to the
+  pre-pivot tool registry T04 deleted, and [architecture.md §8.1](design_docs/architecture.md)
+  makes `StructuredLogger` the single observability surface. No
+  replacement emit path; retirement is the correct close.
+- M1-T08-DEF-01 (LOW) — `BudgetExceeded` reference replaced with
+  `NonRetryable` in the module docstring ERROR-level example.
+
+**Deviations from spec:**
+
+- Spec says "≤50 LOC of change." Actual net: ~60 LOC added
+  (`log_node_event` helper + `NODE_LOG_FIELDS` constant + docstring
+  rewrite) and ~30 LOC removed (`logfire` import block + two
+  `logfire.*` calls + stale `Related` paragraph). The helper was
+  the minimum way to satisfy AC-1 ("log record carries every field
+  on emit") without deferring the contract to M2 callers.
+- Spec says "One record per route-kind" — the test file adds three
+  route-shape tests (litellm, claude_code, unpopulated-fields). The
+  extra `unpopulated-fields` test is the only way to pin the spec's
+  "Any field unknown at emit time emits None, not a placeholder"
+  behaviour, so it is in scope.
+
+**Post-audit sweeps (cycle 2):**
+
+- Rewrote the module docstring's first paragraph to avoid naming the
+  removed second-backend library by name. Closes `M1-T09-ISS-01`: the
+  spec's AC-2 literal `grep -r "logfire" ai_workflows/` reading now
+  returns zero (it previously matched two docstring narrative lines).
+  The code-level reading was already clean — no imports, no
+  `configure(...)` calls — but the letter-of-the-spec AC needed the
+  whole-file grep to be empty.
+- Added `test_logging_module_source_has_no_logfire_mentions_anywhere`
+  as the whole-file pin (companion to the existing import-line
+  scans).
+
 ### Changed — M1 Task 08: Prune CostTracker Surface (2026-04-19)
 
 Rewrote `ai_workflows/primitives/cost.py` to the pruned surface

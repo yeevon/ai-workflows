@@ -1,9 +1,14 @@
-"""Canonical structlog + logfire configuration.
+"""Canonical ``structlog`` configuration + node-record emission helper.
 
-Produced by M1 Task 11 (P-42, P-43, P-44; resolves carry-overs
-``M1-T05-ISS-02`` and ``M1-T01-ISS-08``). Wires ``structlog`` for
-structured application logging and ``logfire`` for OTel GenAI
-observability.
+Produced by M1 Task 09 (``StructuredLogger sanity pass``). Supersedes
+the pre-pivot M1 Task 11 shape that layered a second observability
+backend alongside ``structlog``: per
+[architecture.md §8.1](../../design_docs/architecture.md) external
+observability backends (Langfuse, LangSmith, OpenTelemetry) are
+deferred to [nice_to_have.md](../../design_docs/nice_to_have.md)
+§1/§3/§8, and the prior second-backend dependency was dropped from
+``pyproject.toml`` by M1 Task 02. ``StructuredLogger`` (this module)
+is now the **single** observability surface the codebase ships.
 
 Two sinks
 ---------
@@ -15,49 +20,77 @@ Two sinks
    object per line. One file per run; no rotation (each run is fresh).
    Created only when ``run_id`` is supplied.
 
-Log-level conventions (P-43)
-----------------------------
-* ``INFO`` — run lifecycle, cost summaries, HumanGate events, retries,
-  forensic hits.
-* ``DEBUG`` — full LLM I/O, tool I/O, token counts per call.
-* ``WARNING`` — forensic pattern hits, missing pricing rows, rate-limit
-  retries, cache misses on static prompts.
-* ``ERROR`` — unrecoverable failures, ``BudgetExceeded``,
-  ``SecurityError``, HumanGate rejections.
+Node record shape (architecture.md §8.1)
+----------------------------------------
+:func:`log_node_event` emits every field named in §8.1 — ``run_id``,
+``workflow``, ``node``, ``tier``, ``provider`` (``"litellm"`` or
+``"claude_code"``), ``model``, ``duration_ms``, ``input_tokens``,
+``output_tokens``, ``cost_usd``. Fields unknown at emit time flow
+through as ``None`` (rendered as ``null`` in JSON) rather than dropped
+or replaced with a placeholder, so downstream consumers (M2 Pipeline
+rollup, M3 cost-report CLI) see a consistent schema for every record.
 
-What is *not* here
-------------------
-``logfire.instrument_anthropic()`` / ``instrument_openai()`` are
-deferred to M3 (task IMP-02). At M1 we only need the configuration hook
-so downstream modules can call :func:`structlog.get_logger` with a
-working processor chain.
+Log-level conventions
+---------------------
+* ``INFO`` — run lifecycle, cost summaries, HumanGate events, retries.
+* ``DEBUG`` — full LLM I/O, tool I/O, token counts per call.
+* ``WARNING`` — missing pricing rows, rate-limit retries, cache misses
+  on static prompts.
+* ``ERROR`` — unrecoverable failures, ``NonRetryable("budget exceeded")``
+  ([architecture.md §8.5](../../design_docs/architecture.md)),
+  ``SecurityError``, HumanGate rejections.
 
 Related
 -------
-* :mod:`ai_workflows.primitives.tools.forensic_logger` — emits
-  ``tool_output_suspicious_patterns`` WARNINGs whose delivery through
-  the production pipeline is pinned by the ``M1-T05-ISS-02`` carry-over
-  test.
-* ``.github/workflows/ci.yml`` — the secret-scan grep regex is now
-  parsed at test time (``M1-T01-ISS-08`` carry-over) so the scaffolding
-  test always tracks the live pattern.
+* :mod:`ai_workflows.primitives.retry` — ``NonRetryable`` is the
+  ERROR-level exemplar above; it is the post-M1-T08 route for budget
+  breaches.
+* :mod:`ai_workflows.primitives.cost` — :class:`CostTracker` is the
+  other half of the observability triad (cost ledger alongside the
+  structured log).
+* ``.github/workflows/ci.yml`` — the secret-scan grep regex is parsed
+  at test time (``M1-T01-ISS-08`` carry-over in
+  ``tests/test_scaffolding.py``) so the scaffolding test always tracks
+  the live pattern.
 """
 
 from __future__ import annotations
 
-import logging
+import logging as _stdlib_logging
 import sys
 from pathlib import Path
 from typing import IO, Any
 
-import logfire
 import structlog
 
-__all__ = ["DEFAULT_RUN_ROOT", "configure_logging"]
+__all__ = [
+    "DEFAULT_RUN_ROOT",
+    "NODE_LOG_FIELDS",
+    "configure_logging",
+    "log_node_event",
+]
 
 
 DEFAULT_RUN_ROOT = Path.home() / ".ai-workflows" / "runs"
 """Default root for per-run log files. Overridable in :func:`configure_logging`."""
+
+
+NODE_LOG_FIELDS: tuple[str, ...] = (
+    "run_id",
+    "workflow",
+    "node",
+    "tier",
+    "provider",
+    "model",
+    "duration_ms",
+    "input_tokens",
+    "output_tokens",
+    "cost_usd",
+)
+"""The ten fields §8.1 mandates per node record.
+
+See [architecture.md §8.1](../../design_docs/architecture.md).
+"""
 
 
 def configure_logging(
@@ -67,7 +100,7 @@ def configure_logging(
     *,
     stream: IO[str] | None = None,
 ) -> None:
-    """Configure ``structlog`` and ``logfire`` once per process.
+    """Configure ``structlog`` once per process.
 
     Intended to be called exactly once at CLI startup (or at the top of
     a test that needs the production pipeline). Calling it again
@@ -93,27 +126,9 @@ def configure_logging(
         Override for the console sink. Defaults to :data:`sys.stderr`.
         Primarily for tests that need deterministic capture without
         fighting pytest's own stream capture — pass a :class:`io.StringIO`.
-
-    Notes
-    -----
-    * ``send_to_logfire="if-token-present"`` honours AC-5: logfire only
-      ships spans to ``logfire.dev`` when the ``LOGFIRE_TOKEN`` env var
-      is set. Without a token, the SDK still configures its OTel
-      provider locally (so ``instrument_*`` calls in M3 work) but never
-      attempts network egress.
-    * ``logfire.instrument_pydantic(record="all")`` replaces the
-      spec's ``pydantic_plugin=PydanticPlugin(record="all")`` — that
-      kwarg was moved to ``DeprecatedKwargs`` in logfire ≥ 3. The
-      observable behaviour is identical.
     """
     level = level.upper()
-    numeric_level = getattr(logging, level, logging.INFO)
-
-    logfire.configure(
-        send_to_logfire="if-token-present",
-        service_name="ai_workflows",
-    )
-    logfire.instrument_pydantic(record="all")
+    numeric_level = getattr(_stdlib_logging, level, _stdlib_logging.INFO)
 
     file_path: Path | None = None
     if run_id:
@@ -140,6 +155,72 @@ def configure_logging(
         wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
         logger_factory=structlog.PrintLoggerFactory(file=console_stream),
         cache_logger_on_first_use=False,
+    )
+
+
+def log_node_event(
+    logger: Any,
+    event: str = "node_completed",
+    *,
+    run_id: str | None = None,
+    workflow: str | None = None,
+    node: str | None = None,
+    tier: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    duration_ms: int | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    cost_usd: float | None = None,
+    level: str = "info",
+    **extra: Any,
+) -> None:
+    """Emit one node record in the [architecture.md §8.1](../../design_docs/architecture.md) shape.
+
+    Every field in :data:`NODE_LOG_FIELDS` is attached to the record —
+    fields unknown at emit time flow through as ``None`` (rendered as
+    ``null`` in the JSON sink) so downstream consumers see a consistent
+    schema across records.
+
+    Parameters
+    ----------
+    logger:
+        A bound ``structlog`` logger (``structlog.get_logger(__name__)``).
+    event:
+        The ``event`` name in the emitted record. Defaults to
+        ``"node_completed"`` because the call-site is typically a
+        TieredNode finishing work; overridable for lifecycle events
+        (``"node_started"``, ``"node_retrying"``, ...).
+    run_id, workflow, node, tier, provider, model:
+        Identity fields. ``provider`` is expected to be either
+        ``"litellm"`` or ``"claude_code"`` per §4.1 / §8.1.
+    duration_ms, input_tokens, output_tokens, cost_usd:
+        Per-call measurements. ``cost_usd`` is typically ``None`` until
+        LiteLLM / the Claude Code driver enriches the ``TokenUsage``.
+    level:
+        The log method to call on ``logger`` (``"info"`` / ``"debug"`` /
+        ``"warning"`` / ``"error"``). Case-insensitive. Defaults to
+        ``"info"`` — DEBUG-level detail belongs in a separate record
+        with full LLM I/O.
+    **extra:
+        Additional keyword arguments forwarded to the logger. Useful
+        for retry counts, validator-revision counts, or workflow-
+        specific fields.
+    """
+    emit = getattr(logger, level.lower(), logger.info)
+    emit(
+        event,
+        run_id=run_id,
+        workflow=workflow,
+        node=node,
+        tier=tier,
+        provider=provider,
+        model=model,
+        duration_ms=duration_ms,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost_usd,
+        **extra,
     )
 
 
