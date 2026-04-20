@@ -131,8 +131,9 @@ class StorageBackend(Protocol):
         self,
         limit: int = 50,
         status_filter: str | None = None,
+        workflow_filter: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Return the most recent runs, newest first. Optional status filter."""
+        """Return the most recent runs, newest first. Optional status / workflow filters."""
         ...
 
     async def record_gate(
@@ -397,27 +398,34 @@ class SQLiteStorage:
         self,
         limit: int = 50,
         status_filter: str | None = None,
+        workflow_filter: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return the most recent runs, newest first (ordered by ``started_at``)."""
-        return await asyncio.to_thread(self._list_runs_sync, limit, status_filter)
+        return await asyncio.to_thread(
+            self._list_runs_sync, limit, status_filter, workflow_filter
+        )
 
     def _list_runs_sync(
         self,
         limit: int,
         status_filter: str | None,
+        workflow_filter: str | None,
     ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status_filter is not None:
+            clauses.append("status = ?")
+            params.append(status_filter)
+        if workflow_filter is not None:
+            clauses.append("workflow_id = ?")
+            params.append(workflow_filter)
+        where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
         with self._connect() as conn:
-            if status_filter is not None:
-                cursor = conn.execute(
-                    "SELECT * FROM runs WHERE status = ? "
-                    "ORDER BY started_at DESC LIMIT ?",
-                    (status_filter, limit),
-                )
-            else:
-                cursor = conn.execute(
-                    "SELECT * FROM runs ORDER BY started_at DESC LIMIT ?",
-                    (limit,),
-                )
+            cursor = conn.execute(
+                f"SELECT * FROM runs{where_sql} ORDER BY started_at DESC LIMIT ?",
+                tuple(params),
+            )
             return [_row_to_dict(cursor, row) for row in cursor.fetchall()]
 
     # ------------------------------------------------------------------

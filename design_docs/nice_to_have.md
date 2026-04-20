@@ -169,7 +169,35 @@ Each entry lists: what it replaces, what it adds, and the **trigger** that would
 
 ---
 
-## 8. OpenTelemetry exporter (without Langfuse)
+## 9. `aiw cost-report <run_id>` — per-run cost breakdown CLI
+
+**Role:** CLI (and later MCP) command that prints a per-run cost breakdown — total, plus buckets by model / tier / provider — from a persistent per-call `TokenUsage` ledger.
+
+**Replaces / subsumes:**
+
+- Nothing today. `aiw list-runs` already surfaces `runs.total_cost_usd` per row, and that scalar is the only cost signal the current budget-cap path consults ([cost.py](ai_workflows/primitives/cost.py) — `check_budget` reads `total()` only). `by_tier()` / `by_model()` on `CostTracker` exist but have zero non-test call sites.
+
+**Adds:**
+
+- A new per-call ledger in Storage (migration 004: `llm_calls` or `token_usages` table).
+- New `SQLiteStorage` methods to write / list per-call rows, and a `CostTrackingCallback` wiring to persist each `TokenUsage` as the graph runs.
+- Likely a new `provider` field on `TokenUsage` so `--by provider` has a data source (today `TokenUsage` carries only `model` + `tier`).
+- A `CostTracker.from_storage(storage, run_id)` replay helper.
+- A CLI command + a mirrored MCP tool (`get_cost_report`) in M4.
+
+**Trigger to adopt** — any one of:
+
+- **Claude Max overages become routine.** Once the subscription's Opus / Sonnet quotas start bounding actual work (the user hits the per-5-hour cap often enough to care), knowing which workflows / models drove the burn is a real decision input. Before that point it's introspection theatre.
+- **A second per-token-billed provider gets integrated.** Today the runtime is Gemini Flash (free tier) + Claude Code CLI (Max subscription) + Ollama (local). If an OpenAI / Mistral / Anthropic-direct route lands as a supported tier, per-provider dollar accounting starts mattering for *that* route — promote at that point.
+- **Gemini moves off its free-tier backup role.** If Gemini becomes a core tier driving substantial paid traffic (not the current "free Flash via `GEMINI_API_KEY`" setup), per-model cost breakdowns start driving tier-override decisions.
+
+**Why not now:** under the current provider mix (Claude Max flat-rate + Gemini free tier + Ollama local) the by-X breakdowns have zero decision value. The `total_cost_usd` scalar on `aiw list-runs` answers the only question a solo developer has. The original T06 spec (M3) carried a `cost-report <run_id> --by model|tier|provider` half; it was dropped on 2026-04-20 per this entry after the reframe below it exposed the mismatch.
+
+**Related history:** originally specced in [design_docs/phases/milestone_3_first_workflow/task_06_cli_list_cost.md](phases/milestone_3_first_workflow/task_06_cli_list_cost.md) — see that file's "Design drift and reframe" section for the full reasoning.
+
+---
+
+## 10. OpenTelemetry exporter (without Langfuse)
 
 **Role:** Neutral structured-tracing export to any OTel backend (Jaeger, Honeycomb, Datadog, Grafana Tempo).
 

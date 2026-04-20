@@ -18,7 +18,7 @@ Append an **Outcome** section summarising:
 
 - Workflow registry ([task 01](task_01_workflow_registry.md)) + planner schemas ([task 02](task_02_planner_schemas.md)).
 - `planner` `StateGraph` shipped ([task 03](task_03_planner_graph.md)) — explorer + validator + planner + validator + gate + artifact.
-- CLI commands revived ([tasks 04](task_04_cli_run.md)–[06](task_06_cli_list_cost.md)): `aiw run`, `aiw resume`, `aiw list-runs`, `aiw cost-report`.
+- CLI commands revived ([tasks 04](task_04_cli_run.md)–[06](task_06_cli_list_cost.md)): `aiw run`, `aiw resume`, `aiw list-runs`. (`aiw cost-report` was dropped at T06 reframe on 2026-04-20 and deferred to [nice_to_have.md §9](../../nice_to_have.md) — see the T06 spec's "Design drift and reframe" section.)
 - End-to-end smoke test gated by `AIW_E2E=1` ([task 07](task_07_e2e_smoke.md)).
 - Green-gate snapshot: `uv run pytest` (unit), `AIW_E2E=1 uv run pytest -m e2e` (one-off), `uv run lint-imports`, `uv run ruff check` all passing.
 

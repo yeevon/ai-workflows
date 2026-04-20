@@ -94,12 +94,12 @@ Workflows are registered by name; the registry is how surfaces reach them.
 
 ### 4.4 Surfaces
 
-- **`aiw` CLI** (`ai_workflows.cli`) — `aiw run <workflow> <inputs>`, `aiw resume <run_id>`, `aiw list-runs`, `aiw cost-report`. Primary path for CI, scripting, and non-interactive use. Implemented with **Typer** (landed in M1 Task 01; stubs live in `ai_workflows/cli.py`, full commands ship in M3).
+- **`aiw` CLI** (`ai_workflows.cli`) — `aiw run <workflow> <inputs>`, `aiw resume <run_id>`, `aiw list-runs`. Primary path for CI, scripting, and non-interactive use. Implemented with **Typer** (landed in M1 Task 01; stubs live in `ai_workflows/cli.py`, full commands ship in M3). The originally-paired `aiw cost-report` command was dropped at M3 T06 reframe (2026-04-20); see [nice_to_have.md §9](nice_to_have.md) for the three adoption triggers that would promote it back in.
 - **MCP server** (`ai_workflows.mcp`) — **built on FastMCP**: `@mcp.tool()` decorators over pydantic-typed functions; FastMCP generates the JSON-RPC schema, handles stdio/HTTP transport, and runs the server. Exposes:
   - `run_workflow(workflow_id, inputs, tier_overrides?) → {run_id, status, stream_handle?}`
   - `resume_run(run_id, gate_response?) → {status, ...}`
   - `list_runs(filter?) → [RunSummary]`
-  - `get_cost_report(run_id) → CostReport`
+  - `get_cost_report(run_id) → CostReport` *(scope inherited from M3 T06 reframe; will be re-specced at M4 start — likely as a total-only return or merged into `list_runs` — per [nice_to_have.md §9](nice_to_have.md).)*
   - `cancel_run(run_id) → {status}`
   Schema-first: pydantic models define every input and output. This is the public contract for every host. (KDR-008.)
 - **Claude Code skill** (optional, late addition) — `.claude/skills/ai-workflows/SKILL.md` that shells out to `aiw` or calls the MCP server. Packaging-only; no logic.

@@ -12,7 +12,7 @@ Ship the first real LangGraph workflow — a single-tier `planner` — running e
 1. `ai_workflows.workflows.planner` exports a built `StateGraph` with explorer → planner-llm → validator → human-gate → artifact.
 2. Running `aiw run planner --input '<goal>'` executes a full run end-to-end on a Gemini tier (via LiteLLM), writing the plan artifact and a cost report.
 3. `aiw resume <run_id>` rehydrates from the `SqliteSaver` checkpoint and clears a pending `HumanGate`.
-4. `aiw list-runs` and `aiw cost-report <run_id>` return the expected structured output.
+4. `aiw list-runs` returns the expected structured output. (The originally-paired `aiw cost-report` command was dropped at T06 reframe (2026-04-20) and deferred to [nice_to_have.md §9](../../nice_to_have.md) — see the T06 spec's "Design drift and reframe" section for the three reasons.)
 5. One end-to-end smoke test (marked `@pytest.mark.e2e`) validates the happy path. Default `pytest` run skips it unless `AIW_E2E=1`.
 6. All gates green (`uv run pytest`, `uv run lint-imports`, `uv run ruff check`).
 
@@ -43,7 +43,7 @@ Critical path: T01 registry → T02 schema → T03 graph → T04–T06 CLI comma
 | 03 | `planner` `StateGraph` (explorer + LLM + validator + gate) | T02 |
 | 04 | CLI `aiw run` command (revives the stub from M1.11) | T03 |
 | 05 | CLI `aiw resume` command | T03 |
-| 06 | CLI `aiw list-runs` + `aiw cost-report` commands | T03 |
+| 06 | CLI `aiw list-runs` command (cost-report deferred — see [T06 reframe](task_06_cli_list_cost.md)) | T03 |
 | 07 | End-to-end smoke test (`@pytest.mark.e2e`) | T04–T06 |
 | 08 | Milestone close-out (README, roadmap, CHANGELOG) | T01–T07 |
 

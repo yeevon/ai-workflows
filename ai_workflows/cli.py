@@ -8,9 +8,13 @@ the run's workflow + budget back from Storage, reseeds the cost tracker
 from ``runs.total_cost_usd`` (stamped by ``aiw run`` on gate pause),
 rebuilds the graph + checkpointer, and hands ``Command(resume=...)`` to
 LangGraph's async saver so the pending ``HumanGate`` clears and the
-workflow completes into its artifact (KDR-009). M3 Task 06 brings
-``aiw list-runs`` / ``aiw cost-report`` back. The M4 MCP surface will
-mirror the same four commands.
+workflow completes into its artifact (KDR-009). M3 Task 06 adds
+``aiw list-runs`` — a pure read over ``Storage.list_runs`` that
+surfaces ``runs.total_cost_usd`` per row. The originally-paired
+``aiw cost-report`` command was dropped at T06 reframe (2026-04-20);
+see ``design_docs/nice_to_have.md §9`` for the triggers that would
+justify promoting it. The M4 MCP surface mirrors ``run`` / ``resume`` /
+``list-runs``.
 
 Relationship to other modules
 -----------------------------
@@ -70,8 +74,10 @@ def _root() -> None:
 
     Kept as an empty callback so Typer treats ``aiw`` as a
     multi-command app. Commands removed by M1 Task 11 are being
-    reintroduced across M3: ``run`` (this task), ``resume`` (T05),
-    ``list-runs`` / ``cost-report`` (T06). ``TODO(M4)`` pointers at the
+    reintroduced across M3: ``run`` (T04), ``resume`` (T05),
+    ``list-runs`` (T06). The T06 spec originally also paired
+    ``cost-report``; that half was dropped at reframe (2026-04-20) and
+    deferred to ``nice_to_have.md §9``. ``TODO(M4)`` pointers at the
     bottom of this module name the MCP mirrors.
     """
 
@@ -574,13 +580,116 @@ async def _emit_resume_final(
     raise typer.Exit(code=1)
 
 
-# TODO(M3): `list-runs` — query Storage.list_runs (architecture.md §4.1,
-#   §4.4).
-# TODO(M3): `cost-report <run_id>` — CostTracker rollup
-#   (architecture.md §4.1, §4.4).
-# TODO(M4): mirror `run` / `resume` / `list-runs` / `cost-report` as
-#   FastMCP tools under ``ai_workflows.mcp`` (architecture.md §4.4,
-#   KDR-002, KDR-008).
+# ---------------------------------------------------------------------------
+# `aiw list-runs`
+# ---------------------------------------------------------------------------
+
+
+@app.command("list-runs")
+def list_runs(
+    workflow: str | None = typer.Option(
+        None,
+        "--workflow",
+        "-w",
+        help="Filter by workflow id (exact match).",
+    ),
+    status: str | None = typer.Option(
+        None,
+        "--status",
+        "-s",
+        help="Filter by run status (exact match).",
+    ),
+    limit: int = typer.Option(
+        20,
+        "--limit",
+        "-n",
+        min=1,
+        max=500,
+        help="Maximum rows to return (newest first).",
+    ),
+) -> None:
+    """List recorded runs (newest first).
+
+    Pure read over :meth:`SQLiteStorage.list_runs` (KDR-009 — the
+    command never opens the checkpointer nor compiles a graph). The
+    ``runs.total_cost_usd`` scalar stamped by ``aiw run`` / ``aiw
+    resume`` is surfaced verbatim; ``NULL`` (pending runs or completed
+    rows pre-dating the cost-stamping path) renders as ``—``. Filters
+    on ``--workflow`` / ``--status`` are exact matches and compose
+    with ``AND``.
+    """
+    configure_logging(level="INFO")
+    asyncio.run(
+        _list_runs_async(workflow=workflow, status=status, limit=limit)
+    )
+
+
+async def _list_runs_async(
+    *,
+    workflow: str | None,
+    status: str | None,
+    limit: int,
+) -> None:
+    """Async body of ``aiw list-runs``.
+
+    Split out so the Typer command stays sync while the Storage API
+    remains async (same pattern as ``_run_async`` / ``_resume_async``).
+    """
+    storage = await SQLiteStorage.open(default_storage_path())
+    rows = await storage.list_runs(
+        limit=limit,
+        status_filter=status,
+        workflow_filter=workflow,
+    )
+    _emit_list_runs_table(rows)
+
+
+def _emit_list_runs_table(rows: list[dict[str, Any]]) -> None:
+    """Print the fixed-width run table defined by the T06 spec.
+
+    Column order: ``run_id | workflow | status | started_at | cost_usd``.
+    ``cost_usd`` renders as ``$0.0033`` (4 dp) when ``total_cost_usd``
+    is populated; ``—`` (em dash) when the column is ``NULL`` — the
+    same dash rendering the spec's AC calls out.
+    """
+    headers = ("run_id", "workflow", "status", "started_at", "cost_usd")
+    if not rows:
+        typer.echo(" | ".join(headers))
+        typer.echo("(no runs)")
+        return
+
+    formatted: list[tuple[str, ...]] = []
+    for row in rows:
+        cost_raw = row.get("total_cost_usd")
+        cost_str = f"${cost_raw:.4f}" if cost_raw is not None else "—"
+        formatted.append(
+            (
+                str(row.get("run_id", "")),
+                str(row.get("workflow_id", "")),
+                str(row.get("status", "")),
+                str(row.get("started_at", "")),
+                cost_str,
+            )
+        )
+
+    widths = [len(h) for h in headers]
+    for tup in formatted:
+        for i, value in enumerate(tup):
+            if len(value) > widths[i]:
+                widths[i] = len(value)
+
+    def _fmt(cols: tuple[str, ...]) -> str:
+        return " | ".join(col.ljust(widths[i]) for i, col in enumerate(cols))
+
+    typer.echo(_fmt(headers))
+    for tup in formatted:
+        typer.echo(_fmt(tup))
+
+
+# TODO(M4): mirror `run` / `resume` / `list-runs` as FastMCP tools
+#   under ``ai_workflows.mcp`` (architecture.md §4.4, KDR-002,
+#   KDR-008). `cost-report` is deferred to ``nice_to_have.md §9`` — see
+#   that entry for the triggers that would justify promoting it.
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation only

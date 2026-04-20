@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M3 Task 06: `aiw list-runs` CLI Command (2026-04-20)
+
+Adds the `aiw list-runs [--workflow … --status … --limit …]` command —
+a pure read over `SQLiteStorage.list_runs` that prints the run
+registry (newest first) with the scalar `runs.total_cost_usd` per row.
+Filters compose with `AND`; an empty Storage prints the header + `(no
+runs)`. The command never opens the checkpointer, never compiles a
+graph, never touches `CostTracker` (KDR-009).
+
+**Scope reframe from spec (2026-04-20, user-approved).** The original
+T06 spec paired `aiw list-runs` with a `cost-report <run_id> --by
+model|tier|provider` command. That half was dropped — the reasoning
+is recorded in the reframe section of the task doc and reproduced
+here for the release log:
+
+- **No per-call rows to replay from.** M1 T05 dropped the
+  `llm_calls` table and M1 T08 made `CostTracker` in-memory only.
+  The spec's `CostTracker.from_storage(run_id)` replay source does
+  not exist.
+- **No `provider` field on `TokenUsage`.** `--by provider` has no
+  data source.
+- **Zero decision value under subscription billing.** Claude Code
+  Max (flat-rate OAuth) + Gemini free tier + Ollama local → no
+  per-model dollar breakdown drives any choice. Budget cap reads
+  `total()` only (`cost.py:149`); `by_tier()` / `by_model()` have
+  no non-test call sites.
+
+Deferred to `design_docs/nice_to_have.md §9` with three explicit
+adoption triggers: Claude Max overages becoming routine, a second
+per-token-billed provider integration, or Gemini moving off its
+free-tier backup role. `CostTracker.by_tier` / `by_model` /
+`sub_models` stay as-is — zero-cost to keep; removal is a separate
+refactor with its own reasoning. The M4 `get_cost_report` MCP tool
+inherits the same reframe and will be re-specced when M4 opens.
+
+**Files touched:**
+
+- `ai_workflows/cli.py` — adds the `list-runs` Typer command, an
+  `_list_runs_async` body (mirrors the `_run_async` / `_resume_async`
+  pattern so the command stays sync while the Storage API remains
+  async), and an `_emit_list_runs_table` helper that renders the
+  fixed-width table with `$0.XXXX` for populated costs and `—` for
+  `NULL`. Module docstring + `_root` callback updated to reflect
+  the cost-report drop; `TODO(M3)` stubs replaced by a single
+  `TODO(M4)` pointing at the MCP mirror.
+- `ai_workflows/primitives/storage.py` — extends
+  `SQLiteStorage.list_runs` + the `StorageBackend` protocol with a
+  `workflow_filter: str | None` kwarg. Pure SELECT extension — the
+  SQL becomes a `WHERE` with up to two AND-ed clauses. No schema
+  change, no migration.
+- `tests/cli/test_list_runs.py` (new) — six tests covering every
+  acceptance criterion: empty Storage header, `--workflow` filter,
+  `--status` filter, `--limit 2` caps to the two newest rows, the
+  pure-read invariant (row count before == after), and the cost
+  column rendering (populated `$0.0033` vs. raw-SQL `NULL` → `—`).
+- `design_docs/phases/milestone_3_first_workflow/task_06_cli_list_cost.md`
+  — reframed in place: title renamed, "Design drift and reframe
+  (2026-04-20)" section added, cost-report deliverables dropped,
+  ACs reduced from 6 to 5 (dropped `--by` and
+  totals-match-`TokenUsage`-rows lines).
+- `design_docs/nice_to_have.md` — new §9 "`aiw cost-report <run_id>`
+  — per-run cost breakdown CLI" with the three adoption triggers;
+  existing OpenTelemetry entry renumbered to §10.
+- `CHANGELOG.md` — this entry.
+
+**Acceptance criteria satisfied:**
+
+- [x] `aiw list-runs` supports `--workflow`, `--status`, `--limit`.
+- [x] Command is a pure read (row count before == after —
+      asserted by `test_list_runs_is_pure_read`).
+- [x] `runs.total_cost_usd` is surfaced; `NULL` renders as `—`.
+- [x] `uv run pytest tests/cli/test_list_runs.py` green (6 passed).
+- [x] `uv run lint-imports` 3 / 3 kept; `uv run ruff check` clean.
+
+**Deviations from spec:** none beyond the reframe above.
+
 ### Added — M3 Task 05: `aiw resume` CLI Command (2026-04-20)
 
 Adds the companion `aiw resume <run_id> [--gate-response …]` command
