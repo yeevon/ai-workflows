@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M1 Task 11: CLI Stub-Down (2026-04-19)
+
+Reduced `ai_workflows/cli.py` to the minimum that keeps
+`aiw --help` and `aiw version` working, per the M1 Task 11 spec.
+Every pre-pivot subcommand (`list-runs`, `inspect`, `resume`, `run`)
+was removed along with its helpers, the root `--log-level` /
+`--db-path` options, and the `SQLiteStorage` + `configure_logging`
+imports. Each removed command has a `TODO(M3)` pointer at the stub
+site naming the milestone that will re-introduce it against the
+LangGraph runtime ([architecture.md §4.4](design_docs/architecture.md),
+KDR-001, KDR-009); `cost-report` and its MCP-tool mirror also carry
+a `TODO(M4)` pointer per the M4 FastMCP surface (KDR-002, KDR-008).
+
+**Files modified:**
+
+- `ai_workflows/cli.py` — rewritten to the stub shape. Dropped
+  `asyncio`, `datetime`, `enum.StrEnum`, `pathlib.Path`, `typing.Any`,
+  `configure_logging`, and `SQLiteStorage` imports along with the
+  commands that used them. Kept the Typer app, a minimal `_root`
+  callback (so `aiw --help` still lists subcommands — without it,
+  Typer would collapse the single-command app and `--help` would
+  render the `version` command's help), and `version`. Module
+  docstring rewritten to point at [architecture.md §4.4](design_docs/architecture.md)
+  and KDR-009 for the M3/M4 shape.
+- `tests/test_cli.py` — reduced to two tests:
+  `test_aiw_help_exits_zero_and_mentions_surface` and
+  `test_aiw_version_prints_package_version`. Every seeded-DB test
+  that exercised a removed command (`list-runs`, `inspect`, `resume`,
+  `run`, `--log-level DEBUG`, the M1-T04-ISS-01 cache-column carry-over,
+  and the M1-T09-ISS-02 budget-line carry-over) was deleted in line
+  with the task spec's "delete any test that exercised a removed
+  command" directive.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+
+- AC-1 (`uv run aiw --help` succeeds) — verified locally; the app
+  help renders the `version` subcommand and exits 0.
+- AC-2 (`uv run aiw version` prints a non-empty version string) —
+  verified locally; prints `0.1.0` from `ai_workflows.__version__`.
+- AC-3 (`grep -r "pydantic_ai\|Agent\[" ai_workflows/cli.py` returns
+  zero matches) — verified (exit 1, no output).
+- AC-4 (every removed command has a `TODO(M3)` or `TODO(M4)` pointer
+  at the stub site) — four `TODO(M3)` pointers at the bottom of
+  `cli.py` (`run`, `resume`, `list-runs`, `cost-report`) plus a
+  `TODO(M4)` pointer for the MCP-tool mirror per
+  [architecture.md §4.4](design_docs/architecture.md).
+- AC-5 (`uv run pytest tests/test_cli.py` green) — 2/2 passing.
+
+**Deviations from spec:**
+
+1. **Empty `_root` Typer callback added beyond the task spec's code
+   sketch.** The spec shows a `typer.Typer(...)` with a single
+   `@app.command()` and no callback. Under Typer's single-command
+   mode, `aiw --help` renders the `version` subcommand's help
+   instead of the app's help — AC-1 fails ("aiw" is not in the
+   rendered output; the app behaves as if the root *is* `version`).
+   Adding an empty `@app.callback()` forces multi-command mode so
+   `aiw --help` shows the application-level help with the command
+   list. The callback has no options or body — it exists only to
+   flip Typer's rendering mode. Documented in the callback's
+   docstring.
+2. **Carry-overs M1-T04-ISS-01 (cache_read / cache_write visible in
+   `aiw inspect`) and M1-T09-ISS-02 (Budget line formatting) were
+   also removed by this task.** Both were tied to `aiw inspect`, a
+   command the spec retires. They were not on T11's AC list but die
+   with the command. When `aiw inspect` re-lands in M3 against the
+   new storage/cost primitives, the cache-column and budget-line
+   behaviours need re-establishing; this is recorded under the M1
+   Task 10 / M1 Task 11 transition notes (no new carry-over because
+   M3 owns the re-introduction from scratch).
+
 ### Removed — M1 Task 10: `workflow_hash` Decision + ADR-0001 (2026-04-19)
 
 Retired the pre-pivot `ai_workflows.primitives.workflow_hash` primitive
