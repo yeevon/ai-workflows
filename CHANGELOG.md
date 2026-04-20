@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M2 Task 06: CostTrackingCallback (2026-04-19)
+
+Third `ai_workflows.graph.*` adapter — the explicit per-node boundary
+that routes `TokenUsage` rows into `CostTracker` and enforces the
+per-run budget cap from [architecture.md §8.5](design_docs/architecture.md).
+Single synchronous method (`on_node_complete`) rather than a LangGraph
+internal hook so the boundary is trivially unit-testable and stays
+decoupled from LangGraph version churn. Budget breach surfaces as
+`NonRetryable` straight from `CostTracker.check_budget` (architecture
+§8.2) — no bucket re-classification, no swallowing.
+
+**Files added:**
+
+- `ai_workflows/graph/cost_callback.py` — `CostTrackingCallback(cost_tracker, budget_cap_usd)`
+  with `on_node_complete(run_id, node_name, usage)`. Body is exactly
+  `_tracker.record(...)` followed by `_tracker.check_budget(...)` when
+  a cap is set; `budget_cap_usd=None` disables enforcement (no
+  `check_budget` call), `budget_cap_usd=0.0` is a real zero cap that
+  any spend breaches.
+- `tests/graph/test_cost_callback.py` — 5 tests: records flow into the
+  tracker; one `record` + one `check_budget` per invocation when
+  capped; breach raises `NonRetryable` with the ledger still recording
+  the breaching row; `None` cap never raises and never calls
+  `check_budget` regardless of spend; `0.0` is a real cap, not a
+  disabler.
+
+**ACs satisfied:** every invocation produces exactly one `record` +
+one `check_budget` when a cap is set; budget enforcement surfaces
+`NonRetryable` from `primitives.retry`; `uv run pytest tests/graph/test_cost_callback.py`
+green.
+
+**Deviations from spec:** none. Spec class signature reproduced
+verbatim. `node_name` is kept in the signature so `TieredNode` (M2
+Task 03) can pass it unconditionally, but it is not yet consumed —
+aggregation and roll-up are the tracker's concern, and structured
+logging lives at the `TieredNode` boundary per task 03.
+
 ### Added — M2 Task 05: HumanGate Adapter (2026-04-19)
 
 Second `ai_workflows.graph.*` adapter — the human-in-the-loop gate
