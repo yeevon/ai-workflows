@@ -140,6 +140,7 @@ A typical run:
 - **TierConfig schema** is the internal routing contract. Provider and model identifiers are never hardcoded outside this file.
 - **Checkpoint format** is LangGraph-owned. We do not serialize our own graph state.
 - **Provider errors** are normalized to the 3-bucket taxonomy at the `TieredNode` boundary. Everything downstream sees a `RetryableTransient | RetryableSemantic | NonRetryable` exception type.
+- **LLM `response_format` schemas are bare-typed.** Pydantic models passed as `output_schema=` to `tiered_node(...)` carry type annotations + `extra="forbid"` but **no** `Field(min_length/max_length/ge/le/...)` bounds. Runtime bounds live at the caller-input surface and in prompt text. See KDR-010 and [ADR-0002](adr/0002_bare_typed_response_format_schemas.md).
 - **Secrets** are read from environment at the provider driver boundary. No key ever crosses into `graph` or `workflows`.
 
 ## 8. Cross-cutting concerns
@@ -195,6 +196,7 @@ Referenced by short ID from future specs, tasks, and commits.
 | KDR-007 | LiteLLM is the unified adapter for Gemini + Qwen/Ollama. Collapses two hand-rolled provider drivers, supplies per-call cost enrichment, and provides transient-retry underneath our taxonomy. Claude Code CLI stays bespoke (subprocess OAuth). | §4.1, §6 |
 | KDR-008 | FastMCP is the MCP server implementation. Decorators over pydantic functions; tool schemas derive from signatures. | §4.4, §6 |
 | KDR-009 | LangGraph's built-in `SqliteSaver` owns checkpoint persistence. No `StorageCheckpointer` adapter. `Storage` owns run registry and gate log only. | §4.1, §4.2 |
+| KDR-010 | Pydantic models bound for LLM `response_format` ship bare-typed — no `Field(min_length/max_length/ge/le/...)` bounds — because Gemini's structured-output complexity budget rejects rich schemas. `extra="forbid"` is retained. Runtime bounds live at the caller-input surface (`*Input` models) and in prompt text; semantic enforcement stays at the paired `ValidatorNode` (KDR-004). MCP tool I/O models are unaffected. | [ADR-0002](adr/0002_bare_typed_response_format_schemas.md), §7 |
 
 ## 10. Evolution
 

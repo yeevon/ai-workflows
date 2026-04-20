@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Architecture: KDR-010 + ADR-0002 (bare-typed `response_format` schemas) (2026-04-20)
+
+Codifies the schema pattern surfaced empirically by M3 T07a / T07b so
+that M5 multi-tier planner and M6 `slice_refactor` do not re-discover
+Gemini's structured-output complexity-budget wall on a fresh workflow.
+
+- **New [ADR-0002](design_docs/adr/0002_bare_typed_response_format_schemas.md)**
+  — full narrative: the T07a `BadRequestError 400 — "schema produces a
+  constraint that has too many states for serving"` incident, the
+  α/β/γ trade-off, the decided pattern (bare-typed response schemas;
+  `extra="forbid"` retained; bounds at caller-input surface + prompt
+  text + validator node), and the reversibility story.
+- **New KDR-010** in [architecture.md §9](design_docs/architecture.md)
+  citing ADR-0002 as its source.
+- **New boundary bullet** under [architecture.md §7](design_docs/architecture.md)
+  pointing Builders at KDR-010 / ADR-0002 from the schema-contract
+  section they are most likely to read first.
+
+No code or test changes — documentation-only. MCP tool I/O models are
+explicitly out of scope of KDR-010 (they never cross into
+`response_format`).
+
+**Files touched:** `design_docs/adr/0002_bare_typed_response_format_schemas.md`,
+`design_docs/architecture.md`, `CHANGELOG.md`.
+
 ### Changed — M3 close-out: documentation cleanup (2026-04-20)
 
 Two non-code documentation items surfaced by the post-M3 retrospective
