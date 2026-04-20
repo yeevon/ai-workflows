@@ -41,7 +41,7 @@ _None._
 
 ## 🟢 LOW
 
-### 🟡 DEFERRED → T13 — M1-T10-ISS-01: `scripts/m1_smoke.py` imports the retired `compute_workflow_hash` — OWNED BY T13
+### ✅ RESOLVED BY T13 (2026-04-19) — M1-T10-ISS-01: `scripts/m1_smoke.py` imports the retired `compute_workflow_hash`
 
 **Finding.** `scripts/m1_smoke.py:36` still contains `from ai_workflows.primitives.workflow_hash import compute_workflow_hash` and `:62` still calls `workflow_dir_hash = compute_workflow_hash(Path.cwd())`. T10 deleted the target module.
 
@@ -53,6 +53,8 @@ _None._
 - If T13 **deletes** the script, the issue resolves by deletion.
 
 No T10 re-work is warranted; touching `scripts/m1_smoke.py` to remove one stale import among five would be drive-by scope expansion into a file that T13 owns the fate of.
+
+**Resolution (T13 milestone close-out, 2026-04-19).** T13 chose the delete branch. `scripts/m1_smoke.py` is gone; the `compute_workflow_hash` import and the one call site went with it. No replacement added — M3 owns the drift-detect design per ADR-0001. Verified by `tests/test_scaffolding.py::test_scripts_m1_smoke_removed_per_m1_t06_iss_04_and_m1_t10_iss_01`.
 
 ## Additions beyond spec — audited and justified
 
@@ -82,7 +84,7 @@ No T10 re-work is warranted; touching `scripts/m1_smoke.py` to remove one stale 
 
 | ID | Severity | Status | Where | Owner |
 | --- | --- | --- | --- | --- |
-| M1-T10-ISS-01 | LOW | 🟡 DEFERRED → T13 | `scripts/m1_smoke.py:36/:62` — stale `compute_workflow_hash` import + call in already-dead script | T13 (milestone close-out; folds into existing M1-T06-ISS-04 "rewrite or delete" decision) |
+| M1-T10-ISS-01 | LOW | ✅ RESOLVED | `scripts/m1_smoke.py` deleted by T13 close-out (2026-04-19) | T13 (delete branch chosen; M3 will own any post-pivot smoke script) |
 
 ## Deferred to future tasks
 

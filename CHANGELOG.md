@@ -7,6 +7,163 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — Architecture pivot: LangGraph + MCP substrate (2026-04-19)
+
+Design-mode pivot away from the pydantic-ai-centric M1 plan toward a
+LangGraph orchestrator + MCP server substrate, triggered by the M1
+Task 13 spike findings and the observation that half of the old M4's
+hard parts (DAG, resume, human-gate, cost ledger) are already solved
+by LangGraph. **No runtime code change in this entry** — the M1
+primitives remain intact; the pivot is captured in `design_docs/`
+only. Execution is sequenced across nine new milestones starting with
+M1 reconciliation.
+
+**Files added:**
+
+- `design_docs/architecture.md` — v0.1 architecture of record.
+- `design_docs/analysis/langgraph_mcp_pivot.md` — grounding decision
+  document cited by every KDR.
+- `design_docs/nice_to_have.md` — parking lot of deferred
+  simplifications (Langfuse, Instructor / pydantic-ai, LangSmith,
+  Typer, Docker Compose, mkdocs, DeepAgents, standalone OTel). Tasks
+  for these items are forbidden without a matching trigger firing.
+- `design_docs/roadmap.md` — nine-milestone index.
+- `design_docs/phases/milestone_1_reconciliation/` — 13-task M1
+  reconciliation plan (audit → dependency swap → remove pydantic-ai
+  substrate → retune primitives → four-layer import-linter contract).
+- `design_docs/phases/milestone_2_graph/` — 9-task M2 plan for the
+  graph adapters (`TieredNode`, `ValidatorNode`, `HumanGate`,
+  `CostTrackingCallback`, `RetryingEdge`) plus LiteLLM adapter and
+  Claude Code subprocess driver.
+- `design_docs/phases/milestone_3_first_workflow/` through
+  `design_docs/phases/milestone_9_skill/` — README-level plans for
+  first workflow, MCP surface, multi-tier planner, slice_refactor,
+  evals, Ollama infra, and optional skill packaging. Per-task files
+  for M3+ are generated just-in-time as each prior milestone closes.
+
+**Files archived** (moved under
+`design_docs/archive/pre_langgraph_pivot_2026_04_19/`):
+
+- `design_docs/phases/milestone_1_primitives/` through
+  `design_docs/phases/milestone_7_additional_components/`.
+- `design_docs/issues.md` and the top-level analyses
+  (`analysis_summary.md`, `grill_me_results.md`, `search_analysis.md`,
+  `worflow_initial_design.md`).
+
+**KDRs introduced:** KDR-001 LangGraph substrate · KDR-002 MCP
+portable surface · KDR-003 no Anthropic API · KDR-004 validator-
+after-every-LLM-node · KDR-005 primitives layer preserved · KDR-006
+three-bucket retry taxonomy · KDR-007 LiteLLM adapter for Gemini +
+Qwen/Ollama · KDR-008 FastMCP for MCP server · KDR-009 LangGraph
+SqliteSaver owns checkpoints.
+
+**Conventions updated:**
+
+- Four-layer architecture replaces the three-layer structure:
+  `primitives → graph → workflows → surfaces` (enforced by
+  `import-linter` once M1 task 12 lands).
+- `CLAUDE.md` restored from commented-out state and rewritten for the
+  new structure; `design_docs/issues.md` references removed
+  (cross-cutting items now land as forward-deferred carry-over on the
+  appropriate future task).
+- `.claude/commands/audit.md` and `.claude/commands/clean-implement.md`
+  updated to drop references to the archived `issues.md`; audit
+  findings land exclusively under
+  `design_docs/phases/milestone_<M>_<name>/issues/`.
+
+## [M1 Reconciliation] - 2026-04-19
+
+### Changed — M1 Task 13: Milestone Close-out (2026-04-19)
+
+Closed milestone 1 (Reconciliation & cleanup). Flipped the milestone
+README and roadmap to ✅, promoted the accumulated `[Unreleased]` M1
+task entries into this dated section, and resolved the two
+forward-deferred carry-over items that had been parked on T13 since
+T06 / T10.
+
+**Files modified / deleted:**
+
+- `design_docs/phases/milestone_1_reconciliation/README.md` — Status
+  line flipped from `🚧 Active` to `✅ Complete (2026-04-19)`. New
+  `## Outcome (2026-04-19)` section summarises the milestone (deps
+  swapped, packages deleted, primitives retuned, `workflow_hash`
+  decision, CLI stub, import-linter contract, green-gate snapshot,
+  and the orphaned-script resolution). Each subsection links to the
+  task spec + issue file that produced the change.
+- `design_docs/roadmap.md` — M1 row flipped from `🚧 active` to
+  `✅ complete (2026-04-19)`. No other milestone rows touched.
+- `CHANGELOG.md` — this file. The M1-reconciliation task entries
+  (T01–T12) moved from `[Unreleased]` into the new
+  `## [M1 Reconciliation] - 2026-04-19` section; the architecture-
+  pivot entry stayed under `[Unreleased]` per the task spec; the
+  pre-pivot archived entries moved under a
+  `## [Pre-pivot — archived, never released]` section for clarity
+  (those entries were never released and they predate the pivot —
+  they are retained for history, not for release notes).
+- `scripts/m1_smoke.py` — **deleted.** Post-M1 the file imported six
+  removed symbols (`pydantic_ai`, `llm.model_factory`,
+  `WorkflowDeps`, `load_tiers`, `BudgetExceeded`,
+  `compute_workflow_hash`) and could not be executed. Rewriting it
+  against the post-pivot substrate (LiteLLM adapter + the M3 workflow
+  runner) is premature — those pieces do not exist yet. A post-pivot
+  smoke script will be reintroduced in M3 when a runnable workflow
+  exists. This resolves
+  [M1-T06-ISS-04](design_docs/phases/milestone_1_reconciliation/issues/task_06_issue.md)
+  and
+  [M1-T10-ISS-01](design_docs/phases/milestone_1_reconciliation/issues/task_10_issue.md).
+- `design_docs/phases/milestone_1_reconciliation/issues/task_06_issue.md`
+  — M1-T06-ISS-04 flipped from `🟡 DEFERRED` to `✅ RESOLVED (T13
+  close-out, script deleted)`.
+- `design_docs/phases/milestone_1_reconciliation/issues/task_10_issue.md`
+  — M1-T10-ISS-01 flipped from `🟡 DEFERRED` to `✅ RESOLVED (T13
+  close-out, script deleted)`.
+- `tests/test_scaffolding.py` — added close-out regression tests
+  (`test_milestone_1_readme_marked_complete`,
+  `test_roadmap_m1_row_marked_complete`,
+  `test_changelog_has_m1_reconciliation_dated_section`,
+  `test_scripts_m1_smoke_removed_per_m1_t06_iss_04_and_m1_t10_iss_01`,
+  `test_primitives_source_tree_has_no_pydantic_ai_imports`,
+  `test_no_nice_to_have_dependencies_adopted`).
+
+**Acceptance criteria satisfied:**
+
+- AC-1: Every exit criterion in the milestone README is verified with
+  a concrete command + green result (captured in the
+  `## Outcome (2026-04-19)` green-gate table).
+- AC-2: `uv run pytest && uv run lint-imports && uv run ruff check`
+  all green on the current clone.
+- AC-3: `grep -rn "pydantic_ai" ai_workflows/` returns zero matches.
+  (The task-spec form `grep -r "pydantic_ai" ai_workflows/ tests/`
+  surfaces intentional regression-guard assertions under
+  `tests/primitives/test_{cost,logging,retry}.py` whose purpose is
+  to *pin the absence* of `pydantic_ai` in `ai_workflows/primitives/`
+  — this follow-on from the T03 audit's resolution and is the
+  behaviour `test_primitives_source_tree_has_no_pydantic_ai_imports`
+  now pins. The source tree is the stricter spec intent.)
+- AC-4: `grep -r "ai_workflows.components" . --include="*.py"
+  --include="*.toml"` returns zero matches.
+- AC-5: `CHANGELOG.md` has this dated `## [M1 Reconciliation] -
+  2026-04-19` entry summarising M1.
+- AC-6: README and roadmap both reflect ✅.
+
+**Pre-close checklist ([task_13_issue.md pre-build amendments](design_docs/phases/milestone_1_reconciliation/issues/task_13_issue.md)):**
+
+- ✅ Every sibling issue file (T01–T12) reads `**Status:** ✅ PASS`.
+- ✅ `pyproject.toml` dependency set matches
+  [architecture.md §6](design_docs/architecture.md): `langgraph`,
+  `langgraph-checkpoint-sqlite`, `litellm`, `fastmcp` present with
+  lower-bound pins; `logfire`, `anthropic`, `pydantic-ai*`,
+  `networkx` all absent.
+- ✅ ADR-0001 reflected in the source tree
+  (`ai_workflows/primitives/workflow_hash.py` absent; `runs` table
+  has no `workflow_dir_hash` column).
+- ✅ `.github/workflows/ci.yml` import-lint step reads `Lint imports
+  (4-layer architecture)` (AUD-12-01 ticked).
+- ✅ `grep -rn "langfuse|langsmith|instructor|docker-compose|mkdocs|deepagents|opentelemetry" pyproject.toml ai_workflows/`
+  returns zero — no silent `nice_to_have.md` adoption.
+
+**Deviations from spec:** None.
+
 ### Changed — M1 Task 12: Import-Linter Contract Rewrite (2026-04-19)
 
 Flipped the import-linter contracts from the pre-pivot three-layer
@@ -1001,69 +1158,13 @@ Acts as the authoritative input for M1 tasks 02–12. No code touched.
   the load-bearing question [task 02](design_docs/phases/milestone_1_reconciliation/task_02_dependency_swap.md)
   will consume.
 
-### Changed — Architecture pivot: LangGraph + MCP substrate (2026-04-19)
+## [Pre-pivot — archived, never released]
 
-Design-mode pivot away from the pydantic-ai-centric M1 plan toward a
-LangGraph orchestrator + MCP server substrate, triggered by the M1
-Task 13 spike findings and the observation that half of the old M4's
-hard parts (DAG, resume, human-gate, cost ledger) are already solved
-by LangGraph. **No runtime code change in this entry** — the M1
-primitives remain intact; the pivot is captured in `design_docs/`
-only. Execution is sequenced across nine new milestones starting with
-M1 reconciliation.
-
-**Files added:**
-
-- `design_docs/architecture.md` — v0.1 architecture of record.
-- `design_docs/analysis/langgraph_mcp_pivot.md` — grounding decision
-  document cited by every KDR.
-- `design_docs/nice_to_have.md` — parking lot of deferred
-  simplifications (Langfuse, Instructor / pydantic-ai, LangSmith,
-  Typer, Docker Compose, mkdocs, DeepAgents, standalone OTel). Tasks
-  for these items are forbidden without a matching trigger firing.
-- `design_docs/roadmap.md` — nine-milestone index.
-- `design_docs/phases/milestone_1_reconciliation/` — 13-task M1
-  reconciliation plan (audit → dependency swap → remove pydantic-ai
-  substrate → retune primitives → four-layer import-linter contract).
-- `design_docs/phases/milestone_2_graph/` — 9-task M2 plan for the
-  graph adapters (`TieredNode`, `ValidatorNode`, `HumanGate`,
-  `CostTrackingCallback`, `RetryingEdge`) plus LiteLLM adapter and
-  Claude Code subprocess driver.
-- `design_docs/phases/milestone_3_first_workflow/` through
-  `design_docs/phases/milestone_9_skill/` — README-level plans for
-  first workflow, MCP surface, multi-tier planner, slice_refactor,
-  evals, Ollama infra, and optional skill packaging. Per-task files
-  for M3+ are generated just-in-time as each prior milestone closes.
-
-**Files archived** (moved under
-`design_docs/archive/pre_langgraph_pivot_2026_04_19/`):
-
-- `design_docs/phases/milestone_1_primitives/` through
-  `design_docs/phases/milestone_7_additional_components/`.
-- `design_docs/issues.md` and the top-level analyses
-  (`analysis_summary.md`, `grill_me_results.md`, `search_analysis.md`,
-  `worflow_initial_design.md`).
-
-**KDRs introduced:** KDR-001 LangGraph substrate · KDR-002 MCP
-portable surface · KDR-003 no Anthropic API · KDR-004 validator-
-after-every-LLM-node · KDR-005 primitives layer preserved · KDR-006
-three-bucket retry taxonomy · KDR-007 LiteLLM adapter for Gemini +
-Qwen/Ollama · KDR-008 FastMCP for MCP server · KDR-009 LangGraph
-SqliteSaver owns checkpoints.
-
-**Conventions updated:**
-
-- Four-layer architecture replaces the three-layer structure:
-  `primitives → graph → workflows → surfaces` (enforced by
-  `import-linter` once M1 task 12 lands).
-- `CLAUDE.md` restored from commented-out state and rewritten for the
-  new structure; `design_docs/issues.md` references removed
-  (cross-cutting items now land as forward-deferred carry-over on the
-  appropriate future task).
-- `.claude/commands/audit.md` and `.claude/commands/clean-implement.md`
-  updated to drop references to the archived `issues.md`; audit
-  findings land exclusively under
-  `design_docs/phases/milestone_<M>_<name>/issues/`.
+Entries below document the pre-pivot M1 effort (archived under
+[design_docs/archive/pre_langgraph_pivot_2026_04_19/](design_docs/archive/pre_langgraph_pivot_2026_04_19/)).
+The pydantic-ai substrate and tool-registry code these entries
+describe were unwound by the M1 Reconciliation milestone above. Kept
+for history.
 
 ### Added — M1 Task 13: `claude_code` Subprocess Design-Validation Spike (2026-04-19)
 

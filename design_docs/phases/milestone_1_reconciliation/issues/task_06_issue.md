@@ -88,7 +88,7 @@ After the T06 refit `TierConfig.max_retries` no longer exists — KDR-007 delega
 - Append a carry-over to [task_07_issue.md](task_07_issue.md) so T07's Builder knows to drop the `TierConfig.max_retries` references from the retry module's docstrings while rewriting around the three-bucket taxonomy. Concrete "what to implement" line: **during the KDR-006 retry-taxonomy rewrite, drop the `TierConfig.max_retries` / `tier_config.max_retries` docstring references at `ai_workflows/primitives/retry.py:35` and `:131`; the field was removed by T06.** Back-link: [task_06_issue.md § M1-T06-ISS-03](#-medium--m1-t06-iss-03-ai_workflowsprimitivesretrypy-docstring-references-removed-tierconfigmax_retries--owned-by-t07).
 - When T07's post-build audit ticks the carry-over, flip this line to `RESOLVED (commit sha)`.
 
-## 🟢 LOW — M1-T06-ISS-04: `scripts/m1_smoke.py` imports the removed `load_tiers` — OWNED BY T13
+## 🟢 LOW — M1-T06-ISS-04: `scripts/m1_smoke.py` imports the removed `load_tiers` — ✅ RESOLVED BY T13 (2026-04-19)
 
 **Finding.** `scripts/m1_smoke.py:35` still contains `from ai_workflows.primitives.tiers import load_pricing, load_tiers`. T06 removed `load_tiers` (replaced by `TierRegistry.load`). The file was already broken post-T03 (imports `pydantic_ai`, `llm.model_factory`, `WorkflowDeps`), so the gate is not regressed — the file cannot be executed.
 
@@ -97,6 +97,8 @@ After the T06 refit `TierConfig.max_retries` no longer exists — KDR-007 delega
 **Action — forward-deferral propagation (CLAUDE.md):**
 
 - Append a note to [task_13_issue.md](task_13_issue.md) so T13's Builder knows to decide the file's fate (rewrite around the new substrate, or delete — both are valid close-out moves). Concrete "what to implement" line: **either rewrite `scripts/m1_smoke.py` against the post-pivot substrate (LiteLLM adapter + `TierRegistry.load`) or delete it entirely; the file is currently unreachable because it imports `pydantic_ai`, `llm.model_factory`, `WorkflowDeps`, and `load_tiers` — all removed in M1.** Back-link: [task_06_issue.md § M1-T06-ISS-04](#-low--m1-t06-iss-04-scriptsm1_smokepy-imports-the-removed-load_tiers--owned-by-t13).
+
+**Resolution (T13 milestone close-out, 2026-04-19).** T13 chose the delete branch: `scripts/m1_smoke.py` is gone. Rewriting it against the post-pivot substrate would need the M2 LiteLLM adapter + the M3 workflow runner, neither of which exist yet. A post-pivot smoke script will be reintroduced in M3 when there is a runnable workflow to smoke-test. Verified by `tests/test_scaffolding.py::test_scripts_m1_smoke_removed_per_m1_t06_iss_04_and_m1_t10_iss_01`.
 
 ## Additions beyond spec — audited and justified
 
@@ -125,7 +127,7 @@ No additions that grow coupling or fabricate scope — every item is either pres
 | M1-T06-ISS-01 | 🟡 MEDIUM | T07 | DEFERRED — carry-over appended to [task_07_issue.md](task_07_issue.md). |
 | M1-T06-ISS-02 | 🟡 MEDIUM | T08 | DEFERRED — carry-over appended to [task_08_issue.md](task_08_issue.md). |
 | M1-T06-ISS-03 | 🟡 MEDIUM | T07 | DEFERRED — carry-over appended to [task_07_issue.md](task_07_issue.md). |
-| M1-T06-ISS-04 | 🟢 LOW | T13 | DEFERRED — carry-over appended to [task_13_issue.md](task_13_issue.md). |
+| M1-T06-ISS-04 | 🟢 LOW | T13 | ✅ RESOLVED — T13 close-out deleted `scripts/m1_smoke.py` (2026-04-19). |
 
 ## Deferred to nice_to_have
 

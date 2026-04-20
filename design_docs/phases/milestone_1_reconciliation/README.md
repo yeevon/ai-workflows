@@ -1,6 +1,6 @@
 # Milestone 1 — Reconciliation & Cleanup
 
-**Status:** 🚧 Active (2026-04-19).
+**Status:** ✅ Complete (2026-04-19).
 **Grounding:** [architecture.md](../../architecture.md) · [analysis/langgraph_mcp_pivot.md](../../analysis/langgraph_mcp_pivot.md) · [roadmap.md](../../roadmap.md).
 
 ## Goal
@@ -72,3 +72,99 @@ Each task doc carries this shape (filled per task):
 ## Issues
 
 Audit findings and blockers land under [issues/](issues/) following the existing `task_NN_issue.md` convention.
+
+## Outcome (2026-04-19)
+
+M1 landed clean on all five exit criteria. Every task 01–12 issue file
+reads `✅ PASS`; task 13 ([task_13_issue.md](issues/task_13_issue.md))
+closes the milestone.
+
+### Dependencies swapped
+
+[Task 02 — Dependency swap](task_02_dependency_swap.md) dropped
+`pydantic-ai[*]`, `anthropic`, `pydantic-graph`, `pydantic-evals`,
+`logfire`, `networkx`, `tenacity`, `platformdirs`, and added
+`langgraph`, `langgraph-checkpoint-sqlite`, `litellm`, `fastmcp` per
+[architecture.md §6](../../architecture.md). `pyproject.toml` is the
+source of truth.
+
+### Packages deleted
+
+- [Task 03 — Remove pydantic-ai LLM substrate](task_03_remove_llm_substrate.md)
+  deleted `ai_workflows/primitives/llm/` (`model_factory`, `types`,
+  `caching`) and the matching tests.
+- [Task 04 — Remove tool registry + stdlib tools](task_04_remove_tool_registry.md)
+  deleted `ai_workflows/primitives/tools/` (registry, fs, shell, http,
+  git, validators) and the matching tests.
+- [Task 12 — Import-linter contract rewrite](task_12_import_linter_rewrite.md)
+  deleted `ai_workflows/components/` (empty pre-pivot shell).
+
+### Primitives retuned
+
+- [Task 05 — Trim Storage to run registry + gate log](task_05_trim_storage.md) —
+  `SQLiteStorage` reduced to `runs` + `human_gate_decisions`;
+  LangGraph's `SqliteSaver` owns checkpoints (KDR-009).
+- [Task 06 — Refit TierConfig + tiers.yaml](task_06_refit_tier_config.md) —
+  `TierRegistry.load` replaces the eager `load_tiers` helper; two
+  runtime tiers (`gemini_flash`, `local_coder`) per KDR-007.
+- [Task 07 — Refit RetryPolicy to 3-bucket taxonomy](task_07_refit_retry_policy.md) —
+  `RetryableTransient` / `RetryableRateLimited` / `NonRetryable` per
+  KDR-006; `RetryingEdge` deferred to M2.
+- [Task 08 — Prune CostTracker surface](task_08_prune_cost_tracker.md) —
+  accept LiteLLM-enriched cost events, tighten the budget/cap path.
+- [Task 09 — StructuredLogger sanity pass](task_09_logger_sanity.md) —
+  structlog-only, no Logfire residue.
+
+### `workflow_hash` decision
+
+[Task 10 — `workflow_hash` decision + ADR-0001](task_10_workflow_hash_decision.md)
+landed as **Option B — Remove**. See
+[design_docs/adr/0001_workflow_hash.md](../../adr/0001_workflow_hash.md).
+M3's drift-detect design owns any future replacement.
+
+### CLI stubbed
+
+[Task 11 — CLI stub-down](task_11_cli_stub_down.md) reduced
+`ai_workflows/cli/` to `app = Typer(...)` + `version` command; runtime
+subcommands (`run`, `resume`, `list-runs`, `inspect`) are reintroduced
+in M3 when a workflow exists to drive.
+
+### Import-linter contract
+
+[Task 12 — Import-linter contract rewrite](task_12_import_linter_rewrite.md)
+installed the four-layer contract from
+[architecture.md §3](../../architecture.md):
+`primitives → graph → workflows → surfaces`. Three `forbidden` contracts
+in `pyproject.toml`. Empty `ai_workflows/graph/` and `ai_workflows/mcp/`
+packages reserved for M2 and M4.
+
+### Green-gate snapshot
+
+Verified in [task_13_issue.md](issues/task_13_issue.md) as the
+close-out audit; commands re-run by any future clone:
+
+| Gate | Result |
+| --- | --- |
+| `uv run pytest` | ✅ green |
+| `uv run lint-imports` | ✅ 3 contracts kept / 0 broken |
+| `uv run ruff check` | ✅ all checks passed |
+| `grep -rn "pydantic_ai" ai_workflows/` | zero hits (source tree clean; test-side regression-guard assertions intentionally pin the string's absence per T03 audit) |
+| `grep -r "ai_workflows.components" . --include="*.py" --include="*.toml"` | zero hits |
+| `grep -rn "langfuse\|langsmith\|instructor\|docker-compose\|mkdocs\|deepagents\|opentelemetry" pyproject.toml ai_workflows/` | zero hits (no [nice_to_have.md](../../nice_to_have.md) adoption) |
+
+### Orphaned script removed
+
+`scripts/m1_smoke.py` was deleted as part of close-out: post-M1 it
+imported six removed symbols (`pydantic_ai`, `llm.model_factory`,
+`WorkflowDeps`, `load_tiers`, `BudgetExceeded`, `compute_workflow_hash`)
+and could not be executed. A post-pivot smoke script is not required
+until M3 has a runnable workflow; it will be reintroduced there.
+Resolves forward-deferred carry-over
+[M1-T06-ISS-04](issues/task_06_issue.md) and
+[M1-T10-ISS-01](issues/task_10_issue.md).
+
+### Next
+
+[M2 — Graph-layer adapters + provider drivers](../milestone_2_graph/README.md)
+is unblocked. M2 Task 01 picks up from the reserved
+`ai_workflows.graph` package marker installed in T12.

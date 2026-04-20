@@ -11,7 +11,7 @@ This roadmap replaces the archived milestone plan at `archive/pre_langgraph_pivo
 
 | # | Name | Directory | Status |
 | --- | --- | --- | --- |
-| **M1** | **Reconciliation & cleanup** | [phases/milestone_1_reconciliation/](phases/milestone_1_reconciliation/README.md) | 🚧 active |
+| **M1** | **Reconciliation & cleanup** | [phases/milestone_1_reconciliation/](phases/milestone_1_reconciliation/README.md) | ✅ complete (2026-04-19) |
 | M2 | Graph-layer adapters + provider drivers | [phases/milestone_2_graph/](phases/milestone_2_graph/README.md) | planned |
 | M3 | First workflow (`planner`, single tier) | [phases/milestone_3_first_workflow/](phases/milestone_3_first_workflow/README.md) | planned |
 | M4 | MCP server (FastMCP) | [phases/milestone_4_mcp/](phases/milestone_4_mcp/README.md) | planned |

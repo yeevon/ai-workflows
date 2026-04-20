@@ -329,6 +329,136 @@ def _split_dep_name(spec: str) -> str:
     return spec.strip()
 
 
+# ---------------------------------------------------------------------------
+# M1 close-out (Task 13)
+# ---------------------------------------------------------------------------
+#
+# Tests below pin the milestone-1 exit criteria asserted by M1 Task 13
+# (milestone close-out). They verify that documentation state (README,
+# roadmap, CHANGELOG), the scripts/ tree, the primitives source tree,
+# and the dependency set all reflect the ✅ close. Future accidental
+# reversion of any artefact visibly fails here.
+
+
+def test_milestone_1_readme_marked_complete() -> None:
+    """M1 Task 13 AC-6: milestone README status line reads ✅ Complete."""
+    readme = (
+        REPO_ROOT
+        / "design_docs"
+        / "phases"
+        / "milestone_1_reconciliation"
+        / "README.md"
+    )
+    text = readme.read_text(encoding="utf-8")
+    assert "**Status:** ✅ Complete" in text, (
+        "M1 README Status must be '✅ Complete (<date>)' after T13 close-out"
+    )
+    assert "## Outcome" in text, (
+        "M1 README must carry an Outcome section summarising the milestone"
+    )
+
+
+def test_roadmap_m1_row_marked_complete() -> None:
+    """M1 Task 13 AC-6: roadmap M1 row reads ✅ complete."""
+    roadmap = REPO_ROOT / "design_docs" / "roadmap.md"
+    text = roadmap.read_text(encoding="utf-8")
+    assert "✅ complete" in text, (
+        "design_docs/roadmap.md must mark M1 as '✅ complete (<date>)'"
+    )
+
+
+def test_changelog_has_m1_reconciliation_dated_section() -> None:
+    """M1 Task 13 AC-5: CHANGELOG promotes M1 entries into a dated section."""
+    changelog = REPO_ROOT / "CHANGELOG.md"
+    text = changelog.read_text(encoding="utf-8")
+    assert "## [M1 Reconciliation]" in text, (
+        "CHANGELOG.md must have a '## [M1 Reconciliation] - <date>' section "
+        "promoting the M1 task entries out of [Unreleased]"
+    )
+    assert "### Changed — M1 Task 13: Milestone Close-out" in text, (
+        "CHANGELOG.md must carry a T13 close-out entry"
+    )
+
+
+def test_scripts_m1_smoke_removed_per_m1_t06_iss_04_and_m1_t10_iss_01() -> None:
+    """M1 Task 13: resolves M1-T06-ISS-04 + M1-T10-ISS-01.
+
+    Carry-over from [task_06_issue.md § M1-T06-ISS-04] and
+    [task_10_issue.md § M1-T10-ISS-01]: ``scripts/m1_smoke.py`` imported
+    six symbols removed during M1 (``pydantic_ai``,
+    ``llm.model_factory``, ``WorkflowDeps``, ``load_tiers``,
+    ``BudgetExceeded``, ``compute_workflow_hash``) and could not be
+    executed. T13 chose the delete branch; M3 owns any post-pivot smoke
+    script. Pin the absence so a future restore is visibly blocked.
+    """
+    smoke_path = REPO_ROOT / "scripts" / "m1_smoke.py"
+    assert not smoke_path.exists(), (
+        "scripts/m1_smoke.py must stay deleted per T13 close-out; "
+        "a post-pivot smoke script belongs in M3 once a workflow is runnable."
+    )
+
+
+def test_primitives_source_tree_has_no_pydantic_ai_imports() -> None:
+    """M1 Task 13 AC-3: zero ``pydantic_ai`` references in ``ai_workflows/``.
+
+    The task-spec grep ``grep -r pydantic_ai ai_workflows/ tests/`` also
+    matches the three regression-guard tests under
+    ``tests/primitives/test_{cost,logging,retry}.py`` whose job is
+    literally to *pin the absence* of ``pydantic_ai`` — this is the same
+    convention T03's audit validated. Tightening AC-3 to the
+    ``ai_workflows/`` source tree (the stricter spec intent) is
+    unambiguous.
+    """
+    source_root = REPO_ROOT / "ai_workflows"
+    offenders: list[str] = []
+    for py_file in source_root.rglob("*.py"):
+        text = py_file.read_text(encoding="utf-8")
+        if "pydantic_ai" in text:
+            offenders.append(str(py_file.relative_to(REPO_ROOT)))
+    assert not offenders, (
+        f"pydantic_ai references leaked into ai_workflows/: {offenders}"
+    )
+
+
+def test_no_nice_to_have_dependencies_adopted() -> None:
+    """M1 Task 13 pre-close checklist: no silent nice_to_have.md adoption.
+
+    Scans ``pyproject.toml`` + ``ai_workflows/`` for the seven deferred
+    items ([nice_to_have.md §1/§3/§4/§8]): ``langfuse``, ``langsmith``,
+    ``instructor``, ``docker-compose``, ``mkdocs``, ``deepagents``,
+    ``opentelemetry``. Adoption requires an ADR + a new KDR per
+    [CLAUDE.md](../CLAUDE.md) — not a task.
+    """
+    import re
+
+    forbidden = (
+        "langfuse",
+        "langsmith",
+        "instructor",
+        "docker-compose",
+        "mkdocs",
+        "deepagents",
+        "opentelemetry",
+    )
+    pattern = re.compile("|".join(re.escape(tok) for tok in forbidden))
+
+    offenders: list[str] = []
+
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    if pattern.search(pyproject):
+        offenders.append("pyproject.toml")
+
+    source_root = REPO_ROOT / "ai_workflows"
+    for py_file in source_root.rglob("*.py"):
+        text = py_file.read_text(encoding="utf-8")
+        if pattern.search(text):
+            offenders.append(str(py_file.relative_to(REPO_ROOT)))
+
+    assert not offenders, (
+        f"nice_to_have.md dependency leaked without ADR: {offenders}"
+    )
+
+
 # Ensure the repo root is importable when pytest is invoked from elsewhere.
 # (pytest already adds the rootdir, but this makes the test usable from any
 # cwd without pytest discovery quirks.)
