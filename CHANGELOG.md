@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M2 Task 02: Claude Code Subprocess Driver (2026-04-19)
+
+Second provider driver in `primitives/llm/` — the bespoke counterpart
+to the M2 T01 LiteLLM adapter for the OAuth Claude Max tiers
+(`opus` / `sonnet` / `haiku`). LiteLLM does not cover subprocess-auth
+providers (KDR-007), so this driver owns the `claude` CLI invocation
+shape validated by the M1 Task 13 spike. Returns
+`(text, TokenUsage)` with `sub_models` populated from every row in
+the CLI's `modelUsage` block so a haiku auto-classifier spawned
+inside an opus call surfaces as a distinct cost-ledger entry.
+
+**Files added:**
+
+- `ai_workflows/primitives/llm/claude_code.py` — `ClaudeCodeSubprocess`
+  class (`__init__(route, per_call_timeout_s, pricing)`, async
+  `complete(*, system, messages, response_format=None)`). Spawns
+  `claude --print --output-format json --model <flag> --tools ""
+  --no-session-persistence` plus an optional `--system-prompt`, feeds
+  `messages` via stdin, parses the JSON result. Maps the primary
+  `modelUsage` row onto `TokenUsage` (cost from `pricing.yaml`) and
+  every other `modelUsage` row onto `sub_models`. Falls back to the
+  top-level `usage` block if `modelUsage` is absent (older CLI
+  versions). Timeouts raise `subprocess.TimeoutExpired`; non-zero
+  exits and `is_error: true` responses raise
+  `subprocess.CalledProcessError` — both bucket correctly under
+  `classify()` from M1 T07.
+- `tests/primitives/llm/test_claude_code.py` — 11 async / sync tests
+  covering AC-1 → AC-4 (happy path with `modelUsage` + cost math;
+  `--system-prompt` forwarding; stdin flattening; top-level-usage
+  fallback; full-model-ID exact-match; timeout → `TimeoutExpired`
+  bucketed `RetryableTransient`; non-zero exit →
+  `CalledProcessError` bucketed `NonRetryable`; `is_error: true` →
+  `CalledProcessError` bucketed `NonRetryable`; no
+  `ANTHROPIC_API_KEY` / `anthropic` SDK reference; `response_format`
+  parity). No live `claude` CLI invocation —
+  `asyncio.create_subprocess_exec` is stubbed in every test.
+
+**Files updated:**
+
+- `ai_workflows/primitives/llm/__init__.py` — docstring refreshed to
+  cite both M2 T01 and M2 T02 now that the second driver has landed;
+  ``ModelPricing`` added to the sibling-module summary because the
+  Claude Code driver consumes it.
+
+**Acceptance criteria satisfied:**
+
+- AC-1 — Driver returns `(str, TokenUsage)` with `sub_models`
+  populated when `modelUsage` is present
+  (`test_complete_returns_text_and_token_usage_with_sub_models`).
+- AC-2 — Cost computed from `pricing.yaml` for the primary row and
+  every sub-model row
+  (`test_complete_returns_text_and_token_usage_with_sub_models`
+  asserts both cost values explicitly).
+- AC-3 — Timeouts and non-zero exits bucket correctly via
+  `classify()` (`test_timeout_raises_timeoutexpired_bucketed_transient`,
+  `test_non_zero_exit_raises_calledprocesserror_bucketed_nonretryable`,
+  `test_is_error_true_raises_calledprocesserror_bucketed_nonretryable`).
+- AC-4 — KDR-003 grep clean: driver source contains no
+  `ANTHROPIC_API_KEY` / `from anthropic` / `import anthropic`
+  reference (`test_no_anthropic_api_key_reference_in_driver_source`).
+- AC-5 — `uv run pytest tests/primitives/llm/test_claude_code.py`
+  green (11 passed locally).
+
+**Deviations from spec:**
+
+- Task spec names the third `__init__` argument as `pricing:
+  PricingTable`; no `PricingTable` type exists in the codebase. Used
+  the existing `dict[str, ModelPricing]` shape that `load_pricing()`
+  returns — same contract, concrete stdlib type. Documented at the
+  class `__init__` signature.
+- Task spec mentions `is_error: true` only implicitly (via the M1
+  Task 13 spike findings). The driver treats `is_error: true` as a
+  synthetic `CalledProcessError` so `classify()` buckets it as
+  `NonRetryable`, matching the spike's AC-5 mapping for invalid-model
+  / auth-loss / unknown-flag errors. Covered by
+  `test_is_error_true_raises_calledprocesserror_bucketed_nonretryable`.
+- `response_format` is accepted for API parity with the LiteLLM
+  adapter but intentionally ignored — the CLI has no structured-
+  output mode and `KDR-004`'s `ValidatorNode` runs after every LLM
+  node regardless. Documented in the method docstring and covered by
+  `test_response_format_is_accepted_and_ignored`.
+
 ### Added — M2 Task 01: LiteLLM Provider Adapter (2026-04-19)
 
 First post-M1 runtime component — the async wrapper around
