@@ -18,7 +18,6 @@ from typer.testing import CliRunner
 
 from ai_workflows.cli import app
 from ai_workflows.primitives.storage import SQLiteStorage
-from ai_workflows.primitives.workflow_hash import compute_workflow_hash
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -193,56 +192,16 @@ def test_inspect_shows_per_task_breakdown(seeded_db: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC-3 — `aiw inspect` flags workflow_dir_hash mismatch
+# AC-3 — `aiw inspect` dir-hash drift flag (removed)
+#
+# The pre-pivot ``--workflow-dir`` drift-detect flag on ``aiw inspect`` is
+# retired by M1 Task 10 per ADR-0001. The original AC-3 test lived here;
+# it called ``compute_workflow_hash(...)`` and the now-gone
+# ``--workflow-dir`` option, and seeded ``workflow_dir_hash=...`` which
+# M1 Task 05 dropped from the schema. The broader ``test_cli.py``
+# stub-down is owned by M1 Task 11; the whole file will be reduced to
+# ``aiw --help`` + ``aiw version`` assertions then.
 # ---------------------------------------------------------------------------
-
-
-def test_inspect_flags_mismatch_when_directory_changed(
-    tmp_path: Path, db_path: Path
-) -> None:
-    workflow_dir = tmp_path / "wf"
-    workflow_dir.mkdir()
-    (workflow_dir / "a.txt").write_text("original")
-    original_hash = compute_workflow_hash(workflow_dir)
-
-    async def _seed() -> None:
-        storage = await SQLiteStorage.open(db_path)
-        await storage.create_run(
-            "r1", "wf", workflow_dir_hash=original_hash, budget_cap_usd=1.0
-        )
-
-    asyncio.run(_seed())
-
-    # Unchanged directory → OK.
-    ok = _RUNNER.invoke(
-        app,
-        [
-            "--db-path",
-            str(db_path),
-            "inspect",
-            "r1",
-            "--workflow-dir",
-            str(workflow_dir),
-        ],
-    )
-    assert ok.exit_code == 0, ok.stderr
-    assert "current match: OK" in ok.stdout
-
-    # Drift the directory.
-    (workflow_dir / "a.txt").write_text("drifted")
-    bad = _RUNNER.invoke(
-        app,
-        [
-            "--db-path",
-            str(db_path),
-            "inspect",
-            "r1",
-            "--workflow-dir",
-            str(workflow_dir),
-        ],
-    )
-    assert bad.exit_code == 0, bad.stderr
-    assert "current match: MISMATCH" in bad.stdout
 
 
 # ---------------------------------------------------------------------------
@@ -377,15 +336,8 @@ def test_inspect_budget_line_without_cap(seeded_db: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Extra coverage — asserts the dir-hash line still prints when no
-# --workflow-dir is provided (the common case) without raising.
+# Extra coverage — previously asserted the ``Dir hash`` line still
+# printed when no ``--workflow-dir`` was provided. Removed by M1 Task 10
+# per ADR-0001 (Option B): ``aiw inspect`` no longer renders a ``Dir
+# hash`` line at all, and ``--workflow-dir`` is gone.
 # ---------------------------------------------------------------------------
-
-
-def test_inspect_dir_hash_without_workflow_dir(seeded_db: Path) -> None:
-    result = _RUNNER.invoke(
-        app, ["--db-path", str(seeded_db), "inspect", "abc123"]
-    )
-    assert result.exit_code == 0, result.stderr
-    assert "Dir hash:" in result.stdout
-    assert "pass --workflow-dir" in result.stdout

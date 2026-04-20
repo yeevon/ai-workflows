@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed — M1 Task 10: `workflow_hash` Decision + ADR-0001 (2026-04-19)
+
+Retired the pre-pivot `ai_workflows.primitives.workflow_hash` primitive
+per [ADR-0001](design_docs/adr/0001_workflow_hash.md) (Option B —
+Remove). Rationale: the helper hashed a directory tree
+(`workflow.yaml` + `prompts/` + `schemas/` + `custom_tools.py`) that
+does not exist under the post-pivot
+[architecture.md §4.3](design_docs/architecture.md) — workflows are
+now Python modules exporting a built LangGraph `StateGraph`, not YAML
+directories. The `runs.workflow_dir_hash` column was already dropped
+by M1 Task 05; nothing reads the helper any more. Source-code drift
+between `aiw run` and `aiw resume` is a real gap that LangGraph's
+`SqliteSaver` does not close (KDR-009) — the ADR records the question
+and defers its design to M3, when `aiw resume` lands against the real
+module-based workflow shape.
+
+**Files added:**
+
+- `design_docs/adr/0001_workflow_hash.md` — Context / Decision /
+  Consequences / References (KDR-005, KDR-009, architecture.md §4.1,
+  §4.3, M1 T05, M1 T10, M1 T11).
+
+**Files removed:**
+
+- `ai_workflows/primitives/workflow_hash.py` — directory-hashing
+  primitive retired per ADR-0001.
+- `tests/primitives/test_workflow_hash.py` — its only coverage target
+  is gone.
+
+**Files modified:**
+
+- `ai_workflows/primitives/__init__.py` — docstring drops the
+  `workflow_hash` item from the primitives roster and cites ADR-0001
+  for the retirement rationale.
+- `ai_workflows/workflows/__init__.py` — docstring rewritten around
+  the new "workflow = Python module exporting StateGraph" shape;
+  drops the pre-pivot "content hash of a workflow directory" sentence
+  and cites ADR-0001.
+- `ai_workflows/cli.py` — minimum incision to unblock the module
+  deletion (the broader stub-down is owned by M1 Task 11): dropped
+  `from ai_workflows.primitives.workflow_hash import compute_workflow_hash`;
+  removed the `_render_dir_hash_line` helper, the `--workflow-dir`
+  option on `aiw inspect`, the "Dir hash" line from `_render_inspect`
+  output, and the "Workflow hash: stored" line from the `aiw resume`
+  stub. Top-of-file docstring updated.
+- `tests/test_cli.py` — dropped the now-unresolvable
+  `from ai_workflows.primitives.workflow_hash import compute_workflow_hash`
+  import. Existing tests that call `compute_workflow_hash(...)` or
+  `--workflow-dir` remain in the file; they were already failing
+  under the M1 Task 11 `SQLiteStorage.create_run()` kwarg drift and
+  are slated for deletion by T11. This T10 change narrows the failure
+  mode (now `NameError` at runtime rather than `ImportError` at
+  collection time) without rewriting T11-owned tests.
+- `tests/test_scaffolding.py` —
+  `test_workflow_hash_module_is_retired_per_adr_0001` pins the
+  module/test deletion and the ADR's key phrases ("Accepted",
+  "Option B", "KDR-009"), and asserts `ModuleNotFoundError` on a live
+  import attempt.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+
+- AC-1 (ADR exists and states outcome unambiguously) —
+  `design_docs/adr/0001_workflow_hash.md` lands Option B in its
+  `Decision` section; `Status: Accepted (2026-04-19)` at the top.
+- AC-2 (Option B: module + test deleted, no `__init__.py` re-exports) —
+  both files absent; `ai_workflows/primitives/__init__.py` docstring
+  no longer names the module. Pinned by
+  `test_workflow_hash_module_is_retired_per_adr_0001`.
+- AC-3 (Option A docstring link — not applicable under Option B).
+- AC-4 (`uv run pytest` green) — T-scope: `tests/test_scaffolding.py`
+  green; `tests/primitives/` green; `tests/test_cli.py` residual
+  failures remain T11-owned and are not regressed by this task.
+
+**Deviations from spec:**
+
+1. **`ai_workflows/cli.py` edits beyond the spec's "touch only the
+   listed files" Option B AC.** The spec's Option B AC lists the
+   primitive, its test, and `__init__.py` re-exports. The pre-build
+   issue file amendment adds "Remove any
+   `from ai_workflows.primitives.workflow_hash import …` import in
+   `ai_workflows/cli.py`" — which is the minimum required to keep
+   gates green when the module is deleted (cli.py imports
+   `compute_workflow_hash` at line 43 pre-change; the scaffolding
+   smoke test imports cli.py; leaving the dead import would break
+   scaffolding, not just cli.py-owned tests). The edit is a minimum
+   incision: remove the one import and its two call sites (plus the
+   `_render_dir_hash_line` helper and the `--workflow-dir` option
+   which have no other use). The broader CLI stub-down remains T11's
+   job.
+2. **`tests/test_cli.py` edits beyond the spec.** Same rationale as
+   (1) — the top-of-file `compute_workflow_hash` import would break
+   collection under Option B. Only the import is removed; the tests
+   that *use* the helper are left intact for T11 to delete wholesale.
+3. **`test_workflow_hash_module_is_retired_per_adr_0001` added to
+   `tests/test_scaffolding.py`.** Task ACs do not require a pin test;
+   this one is belt-and-suspenders to prevent accidental resurrection
+   and to give the audit a concrete test to grade AC-2 against.
+
 ### Changed — M1 Task 09: StructuredLogger Sanity Pass (2026-04-19)
 
 Rewrote `ai_workflows/primitives/logging.py` to match the post-pivot

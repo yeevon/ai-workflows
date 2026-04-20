@@ -119,6 +119,35 @@ def test_scaffolding_file_exists(relative_path: str) -> None:
     assert path.is_file(), f"missing scaffolding file: {relative_path}"
 
 
+def test_workflow_hash_module_is_retired_per_adr_0001() -> None:
+    """M1 Task 10 / ADR-0001: the pre-pivot ``workflow_hash`` primitive is gone.
+
+    Pins three artefacts at once — the module, the test file, and the
+    ADR — so a future restore of any of the first two visibly collides
+    with the decision recorded in the third.
+    """
+    module_path = REPO_ROOT / "ai_workflows" / "primitives" / "workflow_hash.py"
+    assert not module_path.exists(), (
+        "workflow_hash.py must stay deleted per ADR-0001; "
+        "resurrecting it requires a new ADR superseding 0001."
+    )
+
+    test_path = REPO_ROOT / "tests" / "primitives" / "test_workflow_hash.py"
+    assert not test_path.exists(), (
+        "tests/primitives/test_workflow_hash.py must stay deleted per ADR-0001."
+    )
+
+    adr_path = REPO_ROOT / "design_docs" / "adr" / "0001_workflow_hash.md"
+    assert adr_path.is_file(), "ADR-0001 must exist at design_docs/adr/0001_workflow_hash.md."
+    adr_text = adr_path.read_text(encoding="utf-8")
+    assert "Accepted" in adr_text, "ADR-0001 must declare its status."
+    assert "Option B" in adr_text, "ADR-0001 must name the Remove outcome."
+    assert "KDR-009" in adr_text, "ADR-0001 must cite KDR-009 per the task spec."
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("ai_workflows.primitives.workflow_hash")
+
+
 def test_pyproject_declares_required_dependencies() -> None:
     """Every dependency listed in the Task 01 spec must appear in pyproject."""
     # Python 3.11+ ships tomllib in the stdlib.

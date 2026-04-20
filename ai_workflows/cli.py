@@ -5,8 +5,8 @@ shipped the bare Typer app and the ``version`` command; M1 Task 12 wires
 the primitive commands that validate the storage + cost tracking layer:
 
 * ``aiw list-runs`` — tabular listing of the most recent runs.
-* ``aiw inspect <run_id>`` — per-run drill-down (status, dir-hash drift,
-  budget, per-task breakdown, per-call usage table).
+* ``aiw inspect <run_id>`` — per-run drill-down (status, budget,
+  per-task breakdown, per-call usage table).
 * ``aiw resume <run_id>`` — placeholder summary (full implementation in
   Milestone 4; the stub exists so the SQLite queries are exercised).
 * ``aiw run <workflow>`` — placeholder (full implementation lands in
@@ -15,14 +15,16 @@ the primitive commands that validate the storage + cost tracking layer:
 Global options (``--log-level``, ``--db-path``) attach to the root
 callback and flow into every subcommand via the Typer context object.
 
+The pre-pivot ``--workflow-dir`` drift-detect flag on ``aiw inspect``
+is gone per M1 Task 10 /
+[ADR-0001](../../design_docs/adr/0001_workflow_hash.md). The broader
+CLI stub-down is owned by M1 Task 11.
+
 Relationship to other modules
 -----------------------------
 * :mod:`ai_workflows.primitives.storage` — ``SQLiteStorage`` owns the
   reads (``get_run``, ``list_runs``, ``get_tasks``, ``list_llm_calls``,
   ``get_cost_breakdown``, ``get_total_cost``).
-* :mod:`ai_workflows.primitives.workflow_hash` — ``aiw inspect`` uses
-  :func:`compute_workflow_hash` to flag workflow-directory drift (CRIT-02)
-  when ``--workflow-dir`` is supplied.
 * :mod:`ai_workflows.primitives.logging` — ``configure_logging`` is
   invoked from the root callback so the chosen ``--log-level`` is
   honoured for every subcommand.
@@ -40,7 +42,6 @@ import typer
 
 from ai_workflows.primitives.logging import configure_logging
 from ai_workflows.primitives.storage import SQLiteStorage
-from ai_workflows.primitives.workflow_hash import compute_workflow_hash
 
 
 class LogLevel(StrEnum):
@@ -149,19 +150,14 @@ def _render_list_runs(rows: list[dict[str, Any]]) -> str:
 def inspect(
     ctx: typer.Context,
     run_id: str = typer.Argument(..., help="Run identifier."),
-    workflow_dir: Path | None = typer.Option(
-        None,
-        "--workflow-dir",
-        help="Re-hash this directory to flag drift against the stored hash.",
-    ),
 ) -> None:
-    """Drill-down: status, dir-hash drift, budget, task + call breakdowns."""
+    """Drill-down: status, budget, task + call breakdowns."""
     db_path: Path = ctx.obj["db_path"]
     payload = asyncio.run(_load_inspect(db_path, run_id))
     if payload is None:
         typer.echo(f"Run not found: {run_id}", err=True)
         raise typer.Exit(code=1)
-    typer.echo(_render_inspect(payload, workflow_dir))
+    typer.echo(_render_inspect(payload))
 
 
 async def _load_inspect(
@@ -184,9 +180,7 @@ async def _load_inspect(
     }
 
 
-def _render_inspect(
-    payload: dict[str, Any], workflow_dir: Path | None
-) -> str:
+def _render_inspect(payload: dict[str, Any]) -> str:
     run = payload["run"]
     tasks: list[dict[str, Any]] = payload["tasks"]
     calls: list[dict[str, Any]] = payload["calls"]
@@ -196,7 +190,6 @@ def _render_inspect(
     lines: list[str] = []
     lines.append(f"Run: {run['run_id']}")
     lines.append(f"Workflow: {run['workflow_id']}")
-    lines.append(_render_dir_hash_line(run.get("workflow_dir_hash"), workflow_dir))
     lines.append(f"Status: {run.get('status', '')}")
     lines.append(_render_budget_line(total_cost, run.get("budget_cap_usd")))
     lines.append(_render_time_line(run.get("started_at"), run.get("finished_at")))
@@ -227,21 +220,6 @@ def _render_inspect(
     else:
         lines.append("Cost breakdown: (none)")
     return "\n".join(lines)
-
-
-def _render_dir_hash_line(
-    stored_hash: str | None, workflow_dir: Path | None
-) -> str:
-    """Render the ``Dir hash`` line, flagging drift when a path is supplied."""
-    short = (stored_hash or "")[:12]
-    if workflow_dir is None:
-        return f"Dir hash: {short}...  (pass --workflow-dir to compare)"
-    try:
-        current = compute_workflow_hash(workflow_dir)
-    except (FileNotFoundError, NotADirectoryError) as exc:
-        return f"Dir hash: {short}...  (current match: ERROR — {exc})"
-    marker = "OK" if current == stored_hash else "MISMATCH"
-    return f"Dir hash: {short}...  (current match: {marker})"
 
 
 def _render_budget_line(total: float, cap: float | None) -> str:
@@ -322,7 +300,6 @@ def resume(
         f"Workflow: {run['workflow_id']}",
         f"Status: {run.get('status', '')}",
         "Tasks that would re-run: (none — stub; Milestone 4)",
-        "Workflow hash: stored — pass `aiw inspect --workflow-dir` to compare.",
         "",
         "Full resume available in Milestone 4.",
     ]

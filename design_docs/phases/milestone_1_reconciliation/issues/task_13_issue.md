@@ -42,7 +42,14 @@ T06 removed `load_tiers` (replaced by `TierRegistry.load`). `scripts/m1_smoke.py
 
 - [ ] **M1-T06-ISS-04 · LOW** — Decide `scripts/m1_smoke.py`'s fate during M1 close-out: **either rewrite `scripts/m1_smoke.py` against the post-pivot substrate (LiteLLM adapter + `TierRegistry.load`, no `pydantic_ai`, no `WorkflowDeps`) or delete it entirely.** The file is currently unreachable because it imports `pydantic_ai`, `llm.model_factory`, `WorkflowDeps`, and `load_tiers` — all removed in M1. Document the decision in the T13 CHANGELOG block. Source: [task_06_issue.md §M1-T06-ISS-04](task_06_issue.md#-low--m1-t06-iss-04-scriptsm1_smokepy-imports-the-removed-load_tiers--owned-by-t13).
 
+### From [M1-T10-ISS-01](task_10_issue.md) (T10 post-build audit, 2026-04-19)
+
+T10 (ADR-0001) retired `ai_workflows.primitives.workflow_hash`. `scripts/m1_smoke.py:36` still contains `from ai_workflows.primitives.workflow_hash import compute_workflow_hash` and `:62` still calls `compute_workflow_hash(Path.cwd())`. The file was already broken post-T03 / T06 / T07 / T08 (imports `pydantic_ai`, `llm.model_factory`, `WorkflowDeps`, `load_tiers`, `BudgetExceeded`), so no gate is regressed — the file cannot be executed. T10 does not newly break it; it adds one more stale import to a file that is already fully unexecutable.
+
+- [ ] **M1-T10-ISS-01 · LOW** — Fold into the M1-T06-ISS-04 close-out decision for `scripts/m1_smoke.py`: when T13 decides whether to rewrite or delete, the `compute_workflow_hash` import and the `workflow_dir_hash = compute_workflow_hash(Path.cwd())` call must both go. If T13 rewrites the smoke script against the post-pivot substrate, there is no `compute_workflow_hash` replacement — M3 owns the drift-detect design, and the smoke script should not pre-empt it. If T13 deletes the script, the issue resolves by deletion. Source: [task_10_issue.md §M1-T10-ISS-01](task_10_issue.md#-low--m1-t10-iss-01-scriptsm1_smokepy-imports-the-retired-compute_workflow_hash--owned-by-t13).
+
 ## Propagation status
 
 Post-build audit of this task will overwrite this file with implementation findings. The milestone does not close until every issue file in this directory reads `✅ PASS`.
 On completion of the M1-T06-ISS-04 carry-over, [task_06_issue.md](task_06_issue.md) flips it from `DEFERRED` to `RESOLVED (commit sha)` on the next T06 re-audit touch point.
+On completion of the M1-T10-ISS-01 carry-over, [task_10_issue.md](task_10_issue.md) flips it from `DEFERRED` to `RESOLVED (commit sha)` on the next T10 re-audit touch point.
