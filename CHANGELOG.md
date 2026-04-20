@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M3 Task 04: `aiw run` CLI Command (2026-04-20)
+
+Revives the `aiw run <workflow>` command (pre-pivot stub, torn down
+by M1 Task 11) so a user can drive the planner `StateGraph`
+end-to-end from the terminal. The command auto-generates a ULID-shape
+run id, opens `SQLiteStorage` + an `AsyncSqliteSaver` checkpointer at
+their respective default paths, invokes the compiled graph, and
+either prints a `run_id / awaiting: gate / resume with: …` triplet
+(the typical gate-interrupt path) or, if a future gate-less workflow
+completes, the plan JSON + total cost. Aligns with
+[architecture.md §4.4](design_docs/architecture.md).
+
+**Files touched:**
+
+- `ai_workflows/cli.py` — adds the `run` command, a ULID-shape run-id
+  helper, a lazy workflow-module importer that emits the registered
+  set on typo, and a one-time `configure_logging(level="INFO")` call
+  at command entry so structured logs route to stderr (keeps stdout
+  machine-parseable for downstream tooling).
+- `ai_workflows/workflows/planner.py` — adds the
+  `planner_tier_registry() -> dict[str, TierConfig]` helper so the
+  CLI and the T07 e2e test share one definition. Both tiers route
+  through `LiteLLMRoute(model="gemini/gemini-2.5-flash")` —
+  `GEMINI_API_KEY` is read by `LiteLLMAdapter`, never by this module
+  (KDR-003 spirit).
+- `ai_workflows/primitives/storage.py` — adds
+  `default_storage_path()` + `AIW_STORAGE_DB` env override, mirroring
+  the `AIW_CHECKPOINT_DB` / `DEFAULT_CHECKPOINT_PATH` pattern in
+  `graph/checkpointer.py`. Distinct on-disk file from the
+  checkpointer (KDR-009).
+- `tests/cli/test_run.py` (new, in a new `tests/cli/` package) —
+  happy gate-interrupt path + ULID-shape assertions, `--run-id`
+  override, unknown-workflow exit 2 with registered list,
+  missing-`--goal` Typer exit 2, `--budget` cap breach surfaces the
+  NonRetryable-budget message via `aget_state`-backed fallback, plus
+  a source-level KDR-003 guard for the CLI module.
+
+**Acceptance criteria satisfied:**
+
+- [x] `aiw run planner --goal '<text>'` runs the T03 graph to the gate
+      interrupt and prints the expected output.
+- [x] Run id auto-generated (26-char Crockford base32 ULID-shape) when
+      `--run-id` is not supplied.
+- [x] `Storage.create_run(run_id, "planner", budget)` called exactly
+      once per invocation (asserted by reading the `runs` row back).
+- [x] Gate interrupt output names the exact `aiw resume` command.
+- [x] `--budget` cap enforced end-to-end — the test pins
+      `--budget 0.00001` to trigger the NonRetryable-budget path.
+- [x] Source-level guard confirms the CLI does not read
+      `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` directly.
+- [x] `uv run pytest tests/cli/test_run.py` green (8 passed);
+      `uv run lint-imports` 3 / 3 kept; `uv run ruff check` clean.
+
+**Deviations from spec:**
+
+- *Task spec names `BudgetExceeded` as the exception surfaced on
+  budget cap.* That class was removed in M1 Task 08 in favour of
+  `NonRetryable("budget exceeded: …")` (three-bucket taxonomy,
+  KDR-006). The CLI surfaces the NonRetryable's message verbatim so
+  the user-facing "budget" text is preserved.
+- *Task spec says resolve the tier registry via a
+  `planner_tier_registry()` helper.* Implemented as named; the CLI
+  looks the helper up generically as
+  `getattr(module, f"{workflow}_tier_registry", None)` so
+  M5/M6-added workflows can follow the same convention without
+  touching the CLI.
+- *Task spec implies `ainvoke` raising a `BudgetExceeded`-like
+  exception the CLI catches.* The real cascade is: `NonRetryable`
+  raised inside the explorer node → caught by
+  `wrap_with_error_handler` and written to state → the next routed
+  validator node hits a `KeyError` reading the never-written
+  upstream output, and that escapes LangGraph. The CLI's top-level
+  `except Exception` inspects the checkpointed state via
+  `compiled.aget_state(cfg)` to recover the real `NonRetryable`
+  message. The budget test asserts on the surfaced message, not the
+  specific exception type.
+- Added `configure_logging(level="INFO")` at the top of the `run`
+  command. Required so structured logs route to stderr (keeps
+  machine-readable output on stdout) — architecture.md §8.1 always
+  required this; no previous CLI surface was invoking the
+  configurator.
+
 ### Added — M3 Task 03: Planner StateGraph (2026-04-20)
 
 The first concrete LangGraph workflow. Extends the T02 schema module

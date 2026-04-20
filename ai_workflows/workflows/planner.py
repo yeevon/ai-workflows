@@ -36,6 +36,7 @@ from ai_workflows.graph.retrying_edge import retrying_edge
 from ai_workflows.graph.tiered_node import tiered_node
 from ai_workflows.graph.validator_node import validator_node
 from ai_workflows.primitives.retry import RetryPolicy
+from ai_workflows.primitives.tiers import LiteLLMRoute, TierConfig
 from ai_workflows.workflows import register
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
     "ExplorerReport",
     "PlannerState",
     "build_planner",
+    "planner_tier_registry",
 ]
 
 
@@ -313,6 +315,32 @@ def build_planner() -> StateGraph:
     g.add_edge("gate", "artifact")
     g.add_edge("artifact", END)
     return g
+
+
+def planner_tier_registry() -> dict[str, TierConfig]:
+    """Return the two tiers this workflow calls (both Gemini Flash via LiteLLM).
+
+    Shared by the ``aiw run`` CLI (M3 Task 04) and the end-to-end smoke
+    test (M3 Task 07) so both paths use one definition. KDR-003 spirit:
+    this helper never reads ``GEMINI_API_KEY`` — the env-var read stays
+    at the ``LiteLLMAdapter`` boundary when a provider call actually
+    fires. ``max_concurrency`` + ``per_call_timeout_s`` match the values
+    the planner graph was exercised against in T03's tests.
+    """
+    return {
+        "planner-explorer": TierConfig(
+            name="planner-explorer",
+            route=LiteLLMRoute(model="gemini/gemini-2.5-flash"),
+            max_concurrency=2,
+            per_call_timeout_s=60,
+        ),
+        "planner-synth": TierConfig(
+            name="planner-synth",
+            route=LiteLLMRoute(model="gemini/gemini-2.5-flash"),
+            max_concurrency=2,
+            per_call_timeout_s=90,
+        ),
+    }
 
 
 register("planner", build_planner)

@@ -51,10 +51,48 @@ See also
 from __future__ import annotations
 
 import asyncio
+import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+
+#: Env var a caller can set to redirect the default storage path. Mirrors
+#: the ``AIW_CHECKPOINT_DB`` convention in ``graph/checkpointer.py`` so
+#: the two DB files share one override pattern. Consulted only by
+#: :func:`default_storage_path` when its explicit argument is ``None``.
+AIW_STORAGE_DB_ENV = "AIW_STORAGE_DB"
+
+#: Default on-disk location for the run registry + gate log.
+#: Distinct from ``DEFAULT_CHECKPOINT_PATH`` per KDR-009 (Storage and the
+#: LangGraph checkpoint saver never share a file).
+DEFAULT_STORAGE_PATH = Path.home() / ".ai-workflows" / "storage.sqlite"
+
+
+def default_storage_path(db_path: str | Path | None = None) -> Path:
+    """Resolve and prepare the on-disk path for :class:`SQLiteStorage`.
+
+    Path resolution (in order of precedence):
+
+    1. Explicit ``db_path`` argument if non-``None``.
+    2. ``AIW_STORAGE_DB`` env var if set.
+    3. ``~/.ai-workflows/storage.sqlite``.
+
+    The parent directory is created lazily so the first invocation on a
+    fresh machine does not require manual setup — mirrors the
+    ``_prepare_path`` behaviour in ``graph/checkpointer.py``. Added in
+    M3 Task 04 so the CLI / MCP surfaces can open Storage with the same
+    default handling the checkpointer already has.
+    """
+    if db_path is not None:
+        resolved = Path(db_path).expanduser()
+    else:
+        env_override = os.environ.get(AIW_STORAGE_DB_ENV)
+        resolved = (
+            Path(env_override).expanduser() if env_override else DEFAULT_STORAGE_PATH
+        )
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    return resolved
 
 
 @runtime_checkable
