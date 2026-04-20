@@ -121,8 +121,8 @@ No other scope expansion. `primitives/retry.py`, `primitives/tiers.py`, `primiti
 | --- | --- | --- | --- |
 | AUD-03-01 (pre-build HIGH) | 🔴 → ✅ | Resolved in-task | **RESOLVED** (this audit) |
 | AUD-03-02 (pre-build MEDIUM) | 🟡 → ✅ | Resolved in-task | **RESOLVED** (this audit) |
-| M1-T02-ISS-01 (T02 carry-over) | 🟡 MEDIUM | Partial close on the `llm/*` slice; remaining slices owned by T04 + T07 + T09; milestone close at T13 | **PARTIALLY RESOLVED** — tick `primitives/llm/*` bullet on [task_02_issue.md §Propagation status](task_02_issue.md#propagation-status) once the T02 file is re-visited |
-| M1-T03-ISS-01 | 🟡 MEDIUM | Forward-deferred to T06 (carry-over appended); flip to `RESOLVED` on T06 post-build audit | **DEFERRED** (propagation applied to [task_06_issue.md](task_06_issue.md)) |
+| M1-T02-ISS-01 (T02 carry-over) | 🟡 MEDIUM | Close-out verified by T13 | ✅ **RESOLVED (T03 0d27a85 `llm/*` slice + T04/T07/T09/T13)** — [task_02_issue.md §Propagation status](task_02_issue.md#propagation-status) now shows all four slices closed |
+| M1-T03-ISS-01 | 🟡 MEDIUM | Forward-deferred to T06 (carry-over appended) | ✅ **RESOLVED (T06 b29f44c)** — tiers.py refit landed; offending test deleted per [task_06_issue.md issue log](task_06_issue.md) |
 
 ## Deferred to nice_to_have
 

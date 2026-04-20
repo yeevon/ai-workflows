@@ -80,8 +80,8 @@ _None._ Implementation touched only the files named in task spec §Delete, the m
 | --- | --- | --- | --- |
 | AUD-04-01 | pre-build amendment | self (T04) | **RESOLVED** (no-op branch skipped) |
 | AUD-04-02 | pre-build amendment | self (T04) | **RESOLVED** (flat `test_tool_registry.py` deleted) |
-| M1-T02-ISS-01 (tools/* slice) | 🟡 MEDIUM (carry-over) | self (T04) | **RESOLVED** for the `primitives/tools/*` slice; `retry.py` (T07) + `logging.py` (T09) portions remain open in [task_02_issue.md](task_02_issue.md). |
-| M1-T04-ISS-01 | 🟡 MEDIUM | Forward-deferred to T09; close-out verified by T09 re-audit | **DEFERRED** (propagation applied to [task_09_issue.md](task_09_issue.md)) |
+| M1-T02-ISS-01 (tools/* slice) | 🟡 MEDIUM (carry-over) | self (T04) | ✅ **RESOLVED (T04 ed5c9e6)** for the `primitives/tools/*` slice; `retry.py` (T07 901b67c) + `logging.py` (T09 d427bf6) portions now also closed in [task_02_issue.md](task_02_issue.md). |
+| M1-T04-ISS-01 | 🟡 MEDIUM | Forward-deferred to T09; close-out verified by T09 re-audit | ✅ **RESOLVED (T09 d427bf6)** — logging.py sanitization landed; carry-over ticked in [task_09_issue.md](task_09_issue.md). |
 
 ## Deferred to nice_to_have
 

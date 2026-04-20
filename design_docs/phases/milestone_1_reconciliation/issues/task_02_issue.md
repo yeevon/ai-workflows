@@ -89,7 +89,7 @@ _None._ Implementation touched only `pyproject.toml`, `uv.lock` (regenerated), `
 
 | ID | Severity | Owner / next touch | Status |
 | --- | --- | --- | --- |
-| M1-T02-ISS-01 | 🟡 MEDIUM | Forward-deferred to T03, T04, T07, T09; close-out verified by T13 | **DEFERRED** (propagation applied to four target issue files) |
+| M1-T02-ISS-01 | 🟡 MEDIUM | Forward-deferred to T03, T04, T07, T09; close-out verified by T13 | ✅ **RESOLVED** — all four slices closed: `llm/*` (T03 0d27a85), `tools/*` (T04 ed5c9e6), `retry.py` anthropic (T07 901b67c), `logging.py` logfire (T09 d427bf6); milestone close verified by T13 (607db20) |
 
 ## Deferred to nice_to_have
 
@@ -99,9 +99,9 @@ _None._ No finding in this audit maps to [nice_to_have.md](../../../nice_to_have
 
 ISS-01 forward-deferral (interim pytest-red state) propagated to:
 
-- [task_03_issue.md — Carry-over from prior audits](task_03_issue.md) — pydantic_ai purge under `primitives/llm/*`.
-- [task_04_issue.md — Carry-over from prior audits](task_04_issue.md) — pydantic_ai purge under `primitives/tools/*`.
-- [task_07_issue.md — Carry-over from prior audits](task_07_issue.md) — anthropic import removal from `primitives/retry.py`.
-- [task_09_issue.md — Carry-over from prior audits](task_09_issue.md) — logfire removal from `primitives/logging.py` + restore of `test_scaffolding.py` CLI-path assertions.
+- ✅ [task_03_issue.md — Carry-over from prior audits](task_03_issue.md) — pydantic_ai purge under `primitives/llm/*` — **RESOLVED (T03 0d27a85)**.
+- ✅ [task_04_issue.md — Carry-over from prior audits](task_04_issue.md) — pydantic_ai purge under `primitives/tools/*` — **RESOLVED (T04 ed5c9e6)**.
+- ✅ [task_07_issue.md — Carry-over from prior audits](task_07_issue.md) — anthropic import removal from `primitives/retry.py` — **RESOLVED (T07 901b67c)**.
+- ✅ [task_09_issue.md — Carry-over from prior audits](task_09_issue.md) — logfire removal from `primitives/logging.py` + restore of `test_scaffolding.py` CLI-path assertions — **RESOLVED (T09 d427bf6)**.
 
-On post-build audit of each target task, the Auditor must tick the propagated carry-over items that were actually closed and flip the corresponding line in this issue file from `DEFERRED` to `RESOLVED (commit sha)`.
+All four slices closed. Full suite green at milestone close (T13 607db20, 148 passed).

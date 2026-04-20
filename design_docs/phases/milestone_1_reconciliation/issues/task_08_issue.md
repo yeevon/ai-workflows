@@ -83,7 +83,7 @@ _None._
 | M1-T06-ISS-02 | MEDIUM | ✅ RESOLVED (cycle 1) | `pricing.yaml` kept as-is; cost.py no longer reads it | Closed by T08 refit |
 | M1-T08-ISS-01 | LOW | ✅ RESOLVED (cycle 2) | `tiers.py:19` — stale `CostTracker.calculate_cost` ref | Closed |
 | M1-T08-ISS-02 | LOW | ✅ RESOLVED (cycle 2) | `tiers.py:30` — stale "sole consumer of ModelPricing" claim | Closed |
-| M1-T08-DEF-01 | LOW | 🟡 DEFERRED → T09 | `logging.py:25` references removed `BudgetExceeded` | T09 (logger sanity) |
+| M1-T08-DEF-01 | LOW | ✅ RESOLVED (T09 d427bf6) | `logging.py:25` references removed `BudgetExceeded` | T09 logger-sanity pass landed; docstring drift closed |
 
 ## Deferred to future tasks
 

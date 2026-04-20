@@ -124,9 +124,9 @@ No additions that grow coupling or fabricate scope — every item is either pres
 | ID | Severity | Owner | Status |
 | --- | --- | --- | --- |
 | M1-T03-ISS-01 | 🟡 MEDIUM | T06 | ✅ RESOLVED — offending test deleted; carry-over ticked. |
-| M1-T06-ISS-01 | 🟡 MEDIUM | T07 | DEFERRED — carry-over appended to [task_07_issue.md](task_07_issue.md). |
-| M1-T06-ISS-02 | 🟡 MEDIUM | T08 | DEFERRED — carry-over appended to [task_08_issue.md](task_08_issue.md). |
-| M1-T06-ISS-03 | 🟡 MEDIUM | T07 | DEFERRED — carry-over appended to [task_07_issue.md](task_07_issue.md). |
+| M1-T06-ISS-01 | 🟡 MEDIUM | T07 | ✅ RESOLVED (T07 901b67c) — `test_retry.py` `TierConfig` construction fixed; carry-over ticked in [task_07_issue.md](task_07_issue.md). |
+| M1-T06-ISS-02 | 🟡 MEDIUM | T08 | ✅ RESOLVED (T08 3af914b) — `pricing.yaml` kept as-is; cost.py no longer reads it; carry-over ticked in [task_08_issue.md](task_08_issue.md). |
+| M1-T06-ISS-03 | 🟡 MEDIUM | T07 | ✅ RESOLVED (T07 901b67c) — `retry.py` docstring drift corrected; carry-over ticked in [task_07_issue.md](task_07_issue.md). |
 | M1-T06-ISS-04 | 🟢 LOW | T13 | ✅ RESOLVED — T13 close-out deleted `scripts/m1_smoke.py` (2026-04-19). |
 
 ## Deferred to nice_to_have

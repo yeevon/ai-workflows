@@ -94,7 +94,7 @@ Workflows are registered by name; the registry is how surfaces reach them.
 
 ### 4.4 Surfaces
 
-- **`aiw` CLI** (`ai_workflows.cli`) — `aiw run <workflow> <inputs>`, `aiw resume <run_id>`, `aiw list-runs`, `aiw cost-report`. Primary path for CI, scripting, and non-interactive use. (Click-based for now; see [nice_to_have.md](nice_to_have.md) §4 for the Typer / pydantic-native option if CLI and MCP schemas start diverging.)
+- **`aiw` CLI** (`ai_workflows.cli`) — `aiw run <workflow> <inputs>`, `aiw resume <run_id>`, `aiw list-runs`, `aiw cost-report`. Primary path for CI, scripting, and non-interactive use. Implemented with **Typer** (landed in M1 Task 01; stubs live in `ai_workflows/cli.py`, full commands ship in M3).
 - **MCP server** (`ai_workflows.mcp`) — **built on FastMCP**: `@mcp.tool()` decorators over pydantic-typed functions; FastMCP generates the JSON-RPC schema, handles stdio/HTTP transport, and runs the server. Exposes:
   - `run_workflow(workflow_id, inputs, tier_overrides?) → {run_id, status, stream_handle?}`
   - `resume_run(run_id, gate_response?) → {status, ...}`

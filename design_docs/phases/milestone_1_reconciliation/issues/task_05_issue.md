@@ -99,7 +99,7 @@ All six ACs pass on T05-scope reading.
 | ID | Severity | Owner / next touch | Status |
 | --- | --- | --- | --- |
 | AUD-05-01 | pre-build amendment | self (T05) | **RESOLVED** (`workflow_dir_hash` column dropped; T10 ADR owns any re-addition) |
-| M1-T05-ISS-01 | 🟡 MEDIUM | Forward-deferred to T08; close-out verified by T08 re-audit | **DEFERRED** (propagation applied to [task_08_issue.md](task_08_issue.md)) |
+| M1-T05-ISS-01 | 🟡 MEDIUM | Forward-deferred to T08; close-out verified by T08 re-audit | ✅ **RESOLVED (T08 3af914b)** — trimmed-Storage method refs in cost.py closed by T08 refit per [task_08_issue.md](task_08_issue.md). |
 
 ## Deferred to nice_to_have
 
