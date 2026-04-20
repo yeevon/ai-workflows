@@ -2,8 +2,13 @@
 
 Milestone 1 Task 11 reduced this module to ``aiw --help`` / ``aiw version``.
 Milestone 3 Task 04 revives the ``aiw run`` command so a user can drive
-the ``planner`` :class:`StateGraph` end-to-end from the terminal. M3
-Task 05 will re-introduce ``aiw resume``; M3 Task 06 brings
+the ``planner`` :class:`StateGraph` end-to-end from the terminal.
+Milestone 3 Task 05 adds the companion ``aiw resume`` command: reads
+the run's workflow + budget back from Storage, reseeds the cost tracker
+from ``runs.total_cost_usd`` (stamped by ``aiw run`` on gate pause),
+rebuilds the graph + checkpointer, and hands ``Command(resume=...)`` to
+LangGraph's async saver so the pending ``HumanGate`` clears and the
+workflow completes into its artifact (KDR-009). M3 Task 06 brings
 ``aiw list-runs`` / ``aiw cost-report`` back. The M4 MCP surface will
 mirror the same four commands.
 
@@ -35,14 +40,16 @@ import contextlib
 import importlib
 import secrets
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import typer
+from langgraph.types import Command
 
 from ai_workflows import workflows
 from ai_workflows.graph.checkpointer import build_async_checkpointer
 from ai_workflows.graph.cost_callback import CostTrackingCallback
-from ai_workflows.primitives.cost import CostTracker
+from ai_workflows.primitives.cost import CostTracker, TokenUsage
 from ai_workflows.primitives.logging import configure_logging
 from ai_workflows.primitives.retry import NonRetryable
 from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path
@@ -206,16 +213,13 @@ async def _run_async(
         callback = CostTrackingCallback(
             cost_tracker=tracker, budget_cap_usd=budget_cap_usd
         )
-        cfg = {
-            "configurable": {
-                "thread_id": run_id_resolved,
-                "run_id": run_id_resolved,
-                "tier_registry": tier_registry,
-                "cost_callback": callback,
-                "storage": storage,
-                "workflow": workflow,
-            }
-        }
+        cfg = _build_cfg(
+            run_id=run_id_resolved,
+            workflow=workflow,
+            tier_registry=tier_registry,
+            callback=callback,
+            storage=storage,
+        )
 
         await storage.create_run(run_id_resolved, workflow, budget_cap_usd)
 
@@ -225,9 +229,37 @@ async def _run_async(
             await _surface_graph_error(compiled, cfg, exc)
             return
 
-        _emit_final_state(final, run_id_resolved, tracker)
+        await _emit_final_state(final, run_id_resolved, tracker, storage)
     finally:
         await checkpointer.conn.close()
+
+
+def _build_cfg(
+    *,
+    run_id: str,
+    workflow: str,
+    tier_registry: dict,
+    callback: CostTrackingCallback,
+    storage: SQLiteStorage,
+) -> dict[str, Any]:
+    """Build the LangGraph ``config["configurable"]`` dict shared by run + resume.
+
+    Keeping this in one place pins the field set both commands pass in
+    (``thread_id`` + ``run_id`` kept identical per KDR-009 so the
+    checkpointer's thread matches the Storage run id) and eliminates the
+    drift between ``_run_async`` and ``_resume_async`` that would
+    otherwise accumulate as the field set grows in M4 / M5.
+    """
+    return {
+        "configurable": {
+            "thread_id": run_id,
+            "run_id": run_id,
+            "tier_registry": tier_registry,
+            "cost_callback": callback,
+            "storage": storage,
+            "workflow": workflow,
+        }
+    }
 
 
 def _import_workflow_module(workflow: str) -> Any:
@@ -316,14 +348,20 @@ async def _surface_graph_error(compiled: Any, cfg: dict, exc: Exception) -> None
     raise typer.Exit(code=1)
 
 
-def _emit_final_state(final: dict[str, Any], run_id: str, tracker: CostTracker) -> None:
-    """Print the expected post-invoke output and return.
+async def _emit_final_state(
+    final: dict[str, Any],
+    run_id: str,
+    tracker: CostTracker,
+    storage: SQLiteStorage,
+) -> None:
+    """Print the expected post-invoke output and update Storage.
 
     Two clean branches per the task spec:
 
     * ``__interrupt__`` in the returned state → the graph paused at a
-      ``HumanGate``; print the run id + the exact ``aiw resume``
-      command the user needs.
+      ``HumanGate``; stamp ``runs.total_cost_usd`` (so ``aiw resume``
+      can reseed the cost tracker — see T05 AC-5) and print the run id
+      + the exact ``aiw resume`` command the user needs.
     * ``plan`` in the returned state → the graph completed; print the
       pretty-JSON plan + the total cost.
 
@@ -334,6 +372,9 @@ def _emit_final_state(final: dict[str, Any], run_id: str, tracker: CostTracker) 
     returning zero with no output.
     """
     if "__interrupt__" in final:
+        await storage.update_run_status(
+            run_id, "pending", total_cost_usd=tracker.total(run_id)
+        )
         typer.echo(run_id)
         typer.echo("awaiting: gate")
         typer.echo(
@@ -358,8 +399,181 @@ def _emit_final_state(final: dict[str, Any], run_id: str, tracker: CostTracker) 
     raise typer.Exit(code=1)
 
 
-# TODO(M3): `resume <run_id> [--gate-response ...]` — rehydrate from
-#   LangGraph's SqliteSaver checkpoint (architecture.md §4.4, KDR-009).
+# ---------------------------------------------------------------------------
+# `aiw resume`
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def resume(
+    run_id: str = typer.Argument(
+        ...,
+        help="Run id returned by a prior `aiw run` invocation.",
+    ),
+    gate_response: str = typer.Option(
+        "approved",
+        "--gate-response",
+        "-r",
+        help="Response forwarded verbatim to `Command(resume=...)`.",
+    ),
+) -> None:
+    """Rehydrate a checkpointed run and clear the pending ``HumanGate``.
+
+    Reads the run's workflow id + budget cap from Storage, reseeds the
+    :class:`CostTracker` from the row's ``total_cost_usd`` (stamped by
+    ``aiw run`` on gate pause so budget caps carry across ``run`` +
+    ``resume``), recompiles the graph under :func:`build_async_checkpointer`,
+    and hands ``Command(resume=gate_response)`` to the saver so the
+    gate clears and the workflow advances into its artifact node
+    (approved → plan persisted via ``write_artifact``; rejected →
+    artifact node no-ops; either way the ``runs`` row lands in its
+    terminal state here).
+    """
+    configure_logging(level="INFO")
+    asyncio.run(_resume_async(run_id=run_id, gate_response=gate_response))
+
+
+async def _resume_async(*, run_id: str, gate_response: str) -> None:
+    """Async body of ``aiw resume``.
+
+    Split out so the Typer command can stay sync while the graph and
+    Storage APIs remain async (same reason ``_run_async`` is factored
+    out of ``run``).
+    """
+    storage = await SQLiteStorage.open(default_storage_path())
+    row = await storage.get_run(run_id)
+    if row is None:
+        typer.echo(f"no run found: {run_id}", err=True)
+        raise typer.Exit(code=2)
+
+    workflow = row["workflow_id"]
+    budget_cap_usd = row["budget_cap_usd"]
+    stored_cost = row["total_cost_usd"] or 0.0
+
+    workflow_module = _import_workflow_module(workflow)
+    builder = workflows.get(workflow)
+    tier_registry = _resolve_tier_registry(workflow, workflow_module)
+
+    tracker = CostTracker()
+    if stored_cost > 0:
+        # Synthetic entry so ``tracker.total(run_id)`` + the per-call
+        # ``CostTrackingCallback.check_budget`` both see the cost the
+        # preceding ``aiw run`` already incurred. Budget cap from the
+        # original run rides across verbatim (T05 AC-5).
+        tracker.record(
+            run_id,
+            TokenUsage(
+                cost_usd=stored_cost,
+                model="<resumed>",
+                tier="<resumed>",
+            ),
+        )
+    callback = CostTrackingCallback(
+        cost_tracker=tracker, budget_cap_usd=budget_cap_usd
+    )
+
+    checkpointer = await build_async_checkpointer()
+    try:
+        compiled = builder().compile(checkpointer=checkpointer)
+        cfg = _build_cfg(
+            run_id=run_id,
+            workflow=workflow,
+            tier_registry=tier_registry,
+            callback=callback,
+            storage=storage,
+        )
+
+        try:
+            final = await compiled.ainvoke(Command(resume=gate_response), cfg)
+        except Exception as exc:  # noqa: BLE001 — top-level CLI boundary
+            await _surface_graph_error(compiled, cfg, exc)
+            return
+
+        await _emit_resume_final(
+            final=final,
+            run_id=run_id,
+            gate_response=gate_response,
+            tracker=tracker,
+            storage=storage,
+        )
+    finally:
+        await checkpointer.conn.close()
+
+
+async def _emit_resume_final(
+    *,
+    final: dict[str, Any],
+    run_id: str,
+    gate_response: str,
+    tracker: CostTracker,
+    storage: SQLiteStorage,
+) -> None:
+    """Emit the post-resume output and flip the ``runs`` row to its terminal state.
+
+    Three branches per T05 spec §2 and §6:
+
+    * ``__interrupt__`` in the returned state → another gate fired;
+      stamp cost-at-pause and re-print the same three-line handle
+      ``aiw run`` prints, so a downstream caller can loop.
+    * ``gate_plan_review_response == "rejected"`` → flip ``runs.status``
+      to ``gate_rejected`` with ``finished_at`` + the rolled-up
+      ``total_cost_usd``; exit 1. No artifact write — that's the
+      ``_artifact_node``'s contract (planner.py).
+    * ``plan`` present (and response was approved) → flip ``runs.status``
+      to ``completed`` with ``total_cost_usd``; print the plan JSON +
+      the cost total; exit 0.
+
+    A terminal fallback surfaces any state-resident ``last_exception``
+    so a rare post-gate failure is reported rather than swallowed.
+    """
+    total = tracker.total(run_id)
+
+    if "__interrupt__" in final:
+        await storage.update_run_status(
+            run_id, "pending", total_cost_usd=total
+        )
+        typer.echo(run_id)
+        typer.echo("awaiting: gate")
+        typer.echo(
+            f"resume with: aiw resume {run_id} --gate-response <approved|rejected>"
+        )
+        return
+
+    # Prefer the state-recorded response (HumanGate writes it through
+    # the ``gate_<id>_response`` key); fall back to the flag the caller
+    # passed if the gate node did not get a chance to persist it (e.g.
+    # graph errored before the gate's post-interrupt block ran).
+    response = final.get("gate_plan_review_response", gate_response)
+
+    if response == "rejected":
+        finished_at = datetime.now(UTC).isoformat()
+        await storage.update_run_status(
+            run_id,
+            "gate_rejected",
+            finished_at=finished_at,
+            total_cost_usd=total,
+        )
+        typer.echo(f"plan rejected by gate for run {run_id}")
+        typer.echo(f"total cost: ${total:.4f}")
+        raise typer.Exit(code=1)
+
+    plan = final.get("plan")
+    if plan is not None:
+        await storage.update_run_status(
+            run_id, "completed", total_cost_usd=total
+        )
+        typer.echo(plan.model_dump_json(indent=2))
+        typer.echo(f"total cost: ${total:.4f}")
+        return
+
+    last = final.get("last_exception")
+    if last is not None:
+        typer.echo(f"error: {last}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("resume produced no plan and no interrupt", err=True)
+    raise typer.Exit(code=1)
+
+
 # TODO(M3): `list-runs` — query Storage.list_runs (architecture.md §4.1,
 #   §4.4).
 # TODO(M3): `cost-report <run_id>` — CostTracker rollup

@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M3 Task 05: `aiw resume` CLI Command (2026-04-20)
+
+Adds the companion `aiw resume <run_id> [--gate-response …]` command
+that rehydrates a run from the `AsyncSqliteSaver` checkpoint written
+by T04 and hands `Command(resume=<response>)` to LangGraph's async
+saver so the pending `HumanGate` clears. On approve the planner's
+`_artifact_node` writes the plan to `Storage.write_artifact`; on
+reject the artifact node no-ops and the `runs` row flips to
+`gate_rejected`. Aligns with [architecture.md §4.4](design_docs/architecture.md)
+and KDR-009 (LangGraph owns resume).
+
+**Files touched:**
+
+- `ai_workflows/cli.py` — adds the `resume` command, an
+  `_resume_async` body, an `_emit_resume_final` terminal-state
+  router, a shared `_build_cfg` helper used by both `run` and
+  `resume`, and (small T04 extension) a cost-at-pause stamp
+  inside `_emit_final_state` so `aiw resume` can reseed
+  `CostTracker` from `runs.total_cost_usd` and honour `--budget`
+  caps across the run / resume boundary. `_emit_final_state` is
+  now async (takes a `Storage` handle) so the stamp can land.
+- `tests/cli/test_resume.py` (new) — seven tests covering: happy
+  path (plan artifact persists + status `completed`), verbatim
+  `--gate-response` forwarding via the gate log, unknown-run-id
+  exit 2 with "no run found" message (no traceback), rejected
+  gate flips status to `gate_rejected` + skips artifact + exits 1,
+  cost reseed across the run / resume boundary (asserting the
+  stamped cost rides through), missing-checkpoint exit 1 without
+  a traceback, and the one-`update_run_status`-per-phase invariant.
+
+**Acceptance criteria satisfied:**
+
+- [x] `aiw resume <run_id>` rehydrates from `AsyncSqliteSaver`
+      and completes a gate-paused `planner` run.
+- [x] `--gate-response` is forwarded verbatim to
+      `Command(resume=...)` (verified via `gate_responses` row).
+- [x] Unknown `run_id` exits 2 with a helpful message — no
+      traceback.
+- [x] `Storage` run-status row flips to `completed` on success,
+      `gate_rejected` on rejection (with `finished_at` stamped
+      explicitly — `_update_run_status_sync` auto-stamps only for
+      `{completed, failed}`).
+- [x] Cost tracker reseeded from the stored cost so `--budget`
+      caps carry across `run` + `resume` (end-to-end row-readback
+      test).
+- [x] `uv run pytest tests/cli/test_resume.py` green (7 passed);
+      full suite 289 passed; `uv run lint-imports` 3 / 3 kept;
+      `uv run ruff check` clean.
+
+**Deviations from spec:**
+
+- *Task spec implies the `--budget` cap reseed is testable by
+  tripping the cap on resume.* The planner workflow has no
+  post-gate LLM calls, so the cap-check boundary inside
+  `CostTrackingCallback.on_node_complete` never fires on resume —
+  AC-5 is instead tested end-to-end by asserting `runs.total_cost_usd`
+  on the `completed` row matches the cost stamped on gate pause
+  (if the reseed were missing, the final row's cost would be 0).
+  Functional equivalence; the cap-check path itself is covered by
+  T04's budget-breach test.
+- *Task spec step 1 says "`Storage.update_run_status(run_id, "completed")`
+  (or equivalent closer helper — add one if missing)".* The existing
+  `update_run_status` method covers both `completed` + `gate_rejected`
+  (it auto-stamps `finished_at` for `completed`; the CLI passes an
+  explicit `finished_at` for `gate_rejected` because the Storage
+  auto-stamp set is `{completed, failed}`). No new closer helper
+  introduced — keeps the primitives surface unchanged.
+- *Task spec does not mention a cost-at-pause stamp.* Required by
+  AC-5's carry-across-run + resume invariant. Landed as a one-line
+  `await storage.update_run_status(run_id, "pending",
+  total_cost_usd=tracker.total(run_id))` inside `_emit_final_state`
+  — minimal T04 extension, preserves the pre-existing
+  `run_id / awaiting: gate / resume with: …` stdout contract.
+
 ### Added — M3 Task 04: `aiw run` CLI Command (2026-04-20)
 
 Revives the `aiw run <workflow>` command (pre-pivot stub, torn down
