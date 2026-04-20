@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M2 Task 01: LiteLLM Provider Adapter (2026-04-19)
+
+First post-M1 runtime component — the async wrapper around
+`litellm.acompletion()` that fulfils the "LiteLLM-backed adapter"
+role described in `architecture.md §4.1` (KDR-007). Returns
+`(text, TokenUsage)` with LiteLLM's cost enrichment mapped onto the
+primitives ledger shape; retry classification stays in the graph
+layer (KDR-006), so `max_retries=0` is forced at the LiteLLM call
+site and every exception passes through verbatim.
+
+**Files added:**
+
+- `ai_workflows/primitives/llm/__init__.py` — provider-driver
+  subpackage marker. Docstring cites M2 T01 / T02 and clarifies the
+  relationship to `tiers.py`, `cost.py`, and `retry.py`.
+- `ai_workflows/primitives/llm/litellm_adapter.py` — `LiteLLMAdapter`
+  class (`__init__(route, per_call_timeout_s)`, async
+  `complete(*, system, messages, response_format=None)`). Forwards
+  `LiteLLMRoute.api_base`, the per-call timeout, `max_retries=0`, and
+  any pydantic `response_format`. Maps `response.usage.prompt_tokens /
+  completion_tokens / cost_usd` onto `TokenUsage`; falls back to
+  `response._hidden_params["response_cost"]` for providers (Ollama)
+  that expose cost there only.
+- `tests/primitives/llm/__init__.py` + `test_litellm_adapter.py` — 12
+  async tests covering AC-1 → AC-4 (happy path, system-prompt
+  prepending, `api_base` / `response_format` / `timeout` forwarding,
+  three cost-source paths, `max_retries=0`, and rate-limit + bad-
+  request pass-through). No live LiteLLM call — `litellm.acompletion`
+  is swapped for an `AsyncMock` in every test.
+
+**Files updated:**
+
+- `ai_workflows/primitives/__init__.py` — corrected the package
+  docstring: the M2 provider-driver home is `primitives/llm/` (per
+  this task's spec), not `primitives/providers/` as the M1 T03
+  docstring speculated. Noted the pre-pivot `llm/` was deleted by
+  M1 T03 and the new `llm/` is a clean build sharing only the path.
+
+**Acceptance criteria satisfied:**
+
+- AC-1 — `LiteLLMAdapter.complete()` returns `(str, TokenUsage)`
+  matching the primitives schema
+  (`test_complete_returns_text_and_token_usage`).
+- AC-2 — `TokenUsage.cost_usd` is populated from LiteLLM's enrichment
+  when present, with a hidden-params fall-back
+  (`test_cost_usd_populated_from_usage`,
+  `test_cost_usd_falls_back_to_hidden_params`,
+  `test_cost_usd_defaults_to_zero_when_absent`).
+- AC-3 — `max_retries=0` verified in a unit test
+  (`test_max_retries_is_zero`).
+- AC-4 — no classification / retry logic inside the adapter; both a
+  transient (`RateLimitError`) and a non-retryable (`BadRequestError`)
+  LiteLLM exception are re-raised verbatim.
+- AC-5 — `uv run pytest tests/primitives/llm/test_litellm_adapter.py`
+  green (12 passed locally).
+
+**Deviations from spec:**
+
+- The task file lists the signature as `complete(system, messages,
+  response_format=None) -> tuple[str, TokenUsage]` but says nothing
+  about `LiteLLMRoute.api_base` or per-call timeout propagation. Both
+  are forwarded because they are already in the `LiteLLMRoute` /
+  `TierConfig` contracts from M1 T06 — dropping them would make the
+  adapter unusable for Ollama (needs `api_base`) and break
+  `architecture.md §8.6` timeout discipline.
+- Cost extraction checks `response._hidden_params["response_cost"]`
+  as a fall-back channel alongside the spec's `response.usage.cost_usd`.
+  Ollama routes zero-price on `usage` but populate hidden params;
+  without the fall-back every local-coder call would silently book at
+  `$0` and `CostTracker.by_model` would undercount.
+
 ### Changed — Architecture pivot: LangGraph + MCP substrate (2026-04-19)
 
 Design-mode pivot away from the pydantic-ai-centric M1 plan toward a

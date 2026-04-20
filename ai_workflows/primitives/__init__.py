@@ -3,9 +3,13 @@
 This package contains the lowest-level building blocks of the framework,
 aligned with [architecture.md §4.1](../../design_docs/architecture.md):
 ``storage``, ``cost``, ``tiers``, ``retry``, and ``logging``. Provider
-drivers (LiteLLM adapter + Claude Code subprocess) land under
-``primitives/providers`` in M2; the pre-pivot ``llm/`` subpackage was
-removed in M1 Task 03 per KDR-001 / KDR-005. The pre-pivot ``tools/``
+drivers land under ``primitives/llm/`` — the ``LiteLLMAdapter``
+arrives in M2 Task 01 (KDR-007) and the ``ClaudeCodeSubprocess``
+driver arrives in M2 Task 02 (KDR-003). The pre-pivot ``llm/``
+subpackage (``model_factory.py`` / ``substrate.py``) was removed in
+M1 Task 03 per KDR-001 / KDR-005; the new ``llm/`` subpackage is a
+clean build sharing only the path, not the contents. The pre-pivot
+``tools/``
 subpackage is removed in M1 Task 04 per KDR-002 / KDR-008. The
 pre-pivot ``workflow_hash`` primitive is retired in M1 Task 10 per
 [ADR-0001](../../design_docs/adr/0001_workflow_hash.md) — directory
