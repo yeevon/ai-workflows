@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M2 Task 04: ValidatorNode Adapter (2026-04-19)
+
+First `ai_workflows.graph.*` adapter to land — the validator that
+pairs with every `TieredNode` per KDR-004. Parses an upstream LLM
+node's raw text against a pydantic schema, writes the parsed instance
+back into state on success, or raises `RetryableSemantic` with a
+prompt-ready `revision_hint` (built from `ValidationError.errors()`)
+that `RetryingEdge` will forward to the retry turn. Pure validation —
+no LLM call, no cost record, no structured log emission.
+
+**Files added:**
+
+- `ai_workflows/graph/validator_node.py` — `validator_node(*, schema,
+  input_key, output_key, node_name, max_attempts=3)` factory
+  returning an `async` LangGraph node. Success returns `{output_key:
+  parsed, f"{input_key}_revision_hint": None}` (stale hint cleared on
+  pass). Failure raises `RetryableSemantic(reason=..., revision_hint=...)`
+  via the formatter `_format_revision_hint`, which turns every
+  `ValidationError` entry into a `- <loc>: <msg>` line so the LLM can
+  see exactly which field to fix. `max_attempts` is validated `>= 1`
+  at build time and carried as a soft doc hint (enforcement is M2
+  Task 07's `RetryingEdge`).
+- `tests/graph/test_validator_node.py` — happy path, schema
+  violation, non-JSON input (asserts `RetryableSemantic`, not
+  `NonRetryable`), stale-hint clearing on success, missing-field hint
+  content, and the `max_attempts < 1` build-time guard.
+
+**ACs satisfied:** node writes a pydantic instance to state on
+success; `revision_hint` populated and references the schema
+mismatch; no LLM call and no cost record (pure validation); `uv run
+pytest tests/graph/test_validator_node.py` green.
+
+**Deviations from spec:** none. The spec's signature is reproduced
+verbatim. The optional `max_attempts < 1` build-time guard is the only
+addition — it catches a mis-configured zero before the node is ever
+invoked and does not add a dependency or alter runtime behaviour.
+
 ### Added — M2 Task 02: Claude Code Subprocess Driver (2026-04-19)
 
 Second provider driver in `primitives/llm/` — the bespoke counterpart
