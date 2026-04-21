@@ -7,6 +7,590 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M7 Eval Harness] - 2026-04-21
+
+### Changed — M7 Task 06: Milestone Close-out (2026-04-21)
+
+Flips M7 to ✅ Complete. Docs-only sweep: promotes the M7 T01–T05
+`[Unreleased]` entries into this dated section, ticks all forward-deferred
+carry-overs, records the close-out-time live replay baseline, and logs the
+locked capture-mechanism choice.
+
+**Carry-overs landed:**
+
+- **M7-T01-ISS-01 (LOW)** — `design_docs/architecture.md` §3 and new §4.5
+  now document `ai_workflows.evals` as a peer of `graph` (consumed by
+  `workflows` via `CaptureCallback` and by surfaces via `EvalRunner`;
+  `graph` stays evals-unaware). §3 ASCII diagram + import-contract rules
+  updated to cover all six layer edges; §4.5 adds the component-role table
+  (`EvalCase` / `EvalSuite` / `EvalTolerance`, fixture helpers,
+  `CaptureCallback`, `EvalRunner`, `_compare`, `_capture_cli`), the
+  sub-graph resolution paragraph (`_resolve_node_scope` walking
+  `CompiledStateGraph.builder`), and the CI-surface paragraph (paths-filter
+  gated `eval-replay` job).
+- **M7-T05-ISS-01 (MEDIUM)** — `tests/cli/test_eval_commands.py`'s autouse
+  `_reensure_planner_registered` fixture now snapshots + restores the
+  `ai_workflows.workflows._REGISTRY` around every test (replacing the
+  "register planner at entry, no teardown" shape that leaked registrations
+  session-wide). Future-proof: any additional workflow that a later test
+  registers is cleaned up without fixture edits.
+- **M7-T05-ISS-04 (LOW)** — `design_docs/phases/milestone_7_evals/task_05_ci_hookup_seed_fixtures.md`
+  explorer-fixture deliverable text amended in place to
+  `field_overrides={"summary": "substring"}` (was the fictional `"notes"`
+  field); planner-synth node_name corrected to `"planner"` (what the code
+  actually registers). Inline "(Amended 2026-04-21 at T06 close-out…)"
+  notes preserve the audit trail.
+- **M7-T05-ISS-06 (LOW)** — Two deferrals added to `design_docs/nice_to_have.md`:
+  §13 ("Register pydantic models with LangGraph's msgpack type registry or
+  move to JSON-mode checkpointing") for the `UnserializableValueError`
+  warnings spam that live runs emit and T05's fixture-capture procedure
+  re-triggered; §14 ("Promote live-mode eval replay to a nightly or
+  manual-PR-annotated CI job + tolerance refinement") for the live-replay
+  baseline findings below. Both have explicit triggers — no premature
+  adoption.
+
+**Close-out-time live replay baseline (2026-04-21):**
+
+Ran one manual live-replay of each shipped workflow before sealing the
+milestone (double-gated `AIW_EVAL_LIVE=1 AIW_E2E=1`):
+
+- `uv run aiw eval run planner --live` → **0 passed, 2 failed**. Both
+  failures are model-phrasing drift on the free-text `summary` field — e.g.
+  expected `"This report outlines considerations and assumptions…"`, got
+  `"This report outlines the considerations and assumptions…"`.
+- `uv run aiw eval run slice_refactor --live` → **0 passed, 1 failed**.
+  Failure is phrasing + structural drift in the `diff` field (no tolerance
+  override; `strict_json` applies, which is the conservative default for a
+  generated-code field).
+
+**Tolerance decision:** deferred to `nice_to_have.md §14`. The substring
+tolerance on captured full-sentence prefixes is too strict for live replay
+to be signal-producing on day 1; tuning it (shortening to distinctive
+keywords like `"release checklist"`, `"v1.2.0"`, `"def add"`) is
+mechanical but premature without a forcing incident. The deterministic CI
+gate (2/2 `planner` + 1/1 `slice_refactor` all green on every PR) is the
+load-bearing check M7 promises; live mode remains a diagnostic ritual at
+close-out time until the trigger fires.
+
+**Commit baseline:** `1d85007` (m7 kickoff: "task for milestone 7
+created") plus the uncommitted M7 T01–T06 working tree. The uncommitted
+tree covers every file under `ai_workflows/evals/`, the `eval-replay` job in
+`.github/workflows/ci.yml`, the three seed fixtures under `evals/`, the
+CLI `aiw eval` subcommands in `ai_workflows/cli.py`, and the capture hook
+in `ai_workflows/graph/tiered_node.py`. Reproducing the 0/2 + 0/1
+live-replay failure pattern requires this combined state — the fixtures
+are committed in the M7 T05 promotion above, the runner logic is in the
+uncommitted T03 tree, and the CLI dispatch is in the uncommitted T04
+tree. Mirrors the M6 T09 baseline-recording shape.
+
+**Capture-mechanism choice locked:** `aiw eval capture --run-id <id>
+--dataset <name>` uses **checkpoint-channel reconstruction** — reads
+`AsyncSqliteSaver.aget(cfg).channel_values` on a completed run to
+reassemble fixtures, firing zero new provider calls. This was selected
+over the fallback re-run-with-`AIW_CAPTURE_EVALS=<dataset>` approach
+because the reconstructed bytes are the bytes the run actually exchanged
+and the procedure is free + deterministic + offline. The re-run path
+remains a viable second capture method if a future workflow wires LLM
+nodes that the checkpoint reducer would drop before completion, but no
+such case exists today.
+
+**Green-gate snapshot (2026-04-21):**
+
+- `uv run pytest` → **538 passed, 4 skipped** (three `AIW_E2E=1`-gated
+  e2e smokes plus the `AIW_EVAL_LIVE=1 + AIW_E2E=1`-gated live-mode eval
+  replay suite). No failures, no errors.
+- `uv run lint-imports` → **4 contracts kept, 0 broken** — the new
+  `evals cannot import surfaces` contract (M7 T01) sits alongside the
+  three pre-existing layer contracts.
+- `uv run ruff check` → **All checks passed**.
+
+**Files touched:** `design_docs/phases/milestone_7_evals/README.md`
+(Status flipped + Outcome section), `design_docs/roadmap.md` (M7 row
+flipped to ✅ complete), `README.md` (status table + narrative + layout +
+gate snapshot + Next pointer), `design_docs/architecture.md` (§3 + §4.5),
+`design_docs/nice_to_have.md` (new §13 + §14),
+`design_docs/phases/milestone_7_evals/task_05_ci_hookup_seed_fixtures.md`
+(in-place corrections), `tests/cli/test_eval_commands.py`
+(snapshot+restore registry fixture),
+`design_docs/phases/milestone_7_evals/task_06_milestone_closeout.md`
+(carry-overs ticked), `CHANGELOG.md` (this promotion).
+
+### Added — M7 Task 05: CI Hookup + Seed Fixtures (2026-04-21)
+
+Lands the three seed eval fixtures covering both shipped workflows, the
+`eval-replay` CI job that runs deterministic replay on every PR that
+touches `ai_workflows/workflows/**`, `ai_workflows/graph/**`, or
+`evals/**`, and the subgraph-resolution fix in the replay runner that
+was gating `slice_worker` coverage.
+
+**Seed fixtures (committed verbatim under `evals/`):**
+
+- `evals/planner/explorer/happy-path-01.json` — captured from run
+  `eval-seed-planner` (goal: "Write a release checklist for version
+  1.2.0"). `output_schema_fqn =
+  ai_workflows.workflows.planner.ExplorerReport`. Tolerance: `strict_json`
+  with `field_overrides={"summary": "substring"}`.
+- `evals/planner/planner/happy-path-01.json` — same run, the
+  `planner-synth`-tier node (code node_name is `"planner"`, not
+  `"synth"` as the spec sketch used). `output_schema_fqn =
+  ai_workflows.workflows.planner.PlannerPlan`. Tolerance: `strict_json`
+  with `field_overrides={"summary": "substring"}`.
+- `evals/slice_refactor/slice_worker/happy-path-01.json` — captured from
+  run `eval-seed-slice2` (the prior `eval-seed-slice` attempt lost the
+  `AIW_CAPTURE_EVALS` env var across Bash tool invocations on the
+  resume path — operator error, not a capture-callback bug). Seed plan
+  was a four-step refactor; the committed fixture is
+  `slice_id=1`. `output_schema_fqn =
+  ai_workflows.workflows.slice_refactor.SliceResult`. Tolerance:
+  `strict_json` with `field_overrides={"notes": "substring"}`.
+
+**Capture procedure (reproducible from a clean checkout with
+`GEMINI_API_KEY` + Ollama + `claude` CLI auth):**
+
+```bash
+export AIW_CAPTURE_EVALS=planner-seed
+aiw run planner --goal "Write a release checklist for version 1.2.0" \
+  --run-id eval-seed-planner
+aiw resume eval-seed-planner --approve
+aiw eval capture --run-id eval-seed-planner --dataset planner
+
+export AIW_CAPTURE_EVALS=slice-seed
+aiw run slice_refactor \
+  --goal "Write three one-line unit tests for an add(a, b) function." \
+  --run-id eval-seed-slice2
+aiw resume eval-seed-slice2 --approve    # planner gate
+aiw resume eval-seed-slice2 --approve    # strict-review gate
+
+aiw eval run planner
+aiw eval run slice_refactor
+```
+
+**Post-capture edits (none invalidate captured bytes):**
+
+- Moved CaptureCallback's dataset-scoped layout
+  `<root>/<dataset>/<workflow>/<node>/<case>.json` → flat
+  `<root>/<workflow>/<node>/<case>.json` by copying the canonical
+  fixture for each node out of the dataset directory and removing the
+  staging `planner-seed/` / `slice-seed/` / `slice-seed2/` trees. The
+  T05 spec explicitly calls for the flat committed layout.
+- Renamed case_ids to `happy-path-01` across all three fixtures for
+  readable PR diffs (capture stamps a timestamp + uuid8 by default).
+- Swapped the spec's `field_overrides={"notes": "substring"}` for
+  explorer → `{"summary": "substring"}` because `ExplorerReport` has
+  no `notes` field (only `summary`, `considerations`, `assumptions`).
+  Spec deviation; kept the substring intent on the free-text field that
+  actually exists.
+
+**CI job (`.github/workflows/ci.yml`):**
+
+Added `eval-replay` job that runs after `test`. Uses
+`dorny/paths-filter@v3` to detect changes under
+`ai_workflows/workflows/**`, `ai_workflows/graph/**`, or `evals/**`
+and conditionally runs `uv run aiw eval run planner` +
+`uv run aiw eval run slice_refactor`. Pushes to main always run
+(no PR context for the filter); the PR path gates on file changes.
+Replay is deterministic-only — live mode stays out of PR CI (spec
+boundary per T05 §CI scope boundary).
+
+**Replay-runner subgraph resolution (retrofit to M7 T03):**
+
+The T03 replay runner did flat-node lookup on
+`build_workflow().nodes`, which misses LLM nodes wired inside
+compiled sub-graphs. `slice_refactor` wraps `slice_worker` +
+`slice_worker_validator` inside `slice_branch` (a compiled sub-graph
+dispatched per-slice via `Send`), so `aiw eval run slice_refactor`
+failed with `_EvalCaseError: case references node 'slice_worker'
+which is not registered in workflow 'slice_refactor'`. Fixed by
+introducing `_resolve_node_scope(graph, node, validator)` +
+`_node_exists_anywhere(graph, node)` in
+`ai_workflows/evals/runner.py`. The helper walks each top-level
+runnable's `.builder` attribute (present on `CompiledStateGraph`) to
+find the enclosing `StateGraph`, then returns that graph's
+`state_schema` so the replay's `initial_state` hydration uses the
+right TypedDict. Paired validator must resolve in the same scope —
+cross-scope pairing is a wiring error the runner surfaces as
+`_EvalCaseError`. Retrofit propagated to
+`design_docs/phases/milestone_7_evals/issues/task_03_issue.md` as
+`M7-T03-ISS-02 (RESOLVED in T05)`.
+
+**`slice_refactor_eval_node_schemas()`:** added to
+`ai_workflows/workflows/slice_refactor.py` so T04's
+`aiw eval capture` can resolve `output_schema_fqn` for
+`slice_worker` → `SliceResult` uniformly with planner.
+
+**Files touched:**
+
+- `ai_workflows/evals/runner.py` — added `_resolve_node_scope` +
+  `_node_exists_anywhere`, extended `_invoke_replay` to use them,
+  docstring updated.
+- `ai_workflows/workflows/slice_refactor.py` — added
+  `slice_refactor_eval_node_schemas()`; surfaced on `__all__`.
+- `.github/workflows/ci.yml` — new `eval-replay` job using
+  `dorny/paths-filter@v3`.
+- `evals/planner/explorer/happy-path-01.json` (new)
+- `evals/planner/planner/happy-path-01.json` (new)
+- `evals/slice_refactor/slice_worker/happy-path-01.json` (new)
+- `tests/evals/test_seed_fixtures_deterministic.py` — new. Three
+  tests: planner replay green, slice_refactor replay green, all
+  committed fixtures parse as `EvalCase`.
+- `tests/evals/test_runner_deterministic.py` — appended two tests
+  covering `_resolve_node_scope` (sub-graph walk returns
+  `SliceBranchState`; missing validator → `None`).
+- `design_docs/phases/milestone_7_evals/issues/task_03_issue.md` —
+  new carry-over entry `M7-T03-ISS-02` documenting the retrofit.
+
+**ACs satisfied:** all 6.
+
+### Added — M7 Task 04: CLI Surface (`aiw eval capture` + `aiw eval run`) (2026-04-21)
+
+Adds the `aiw eval` Typer sub-app with two commands:
+
+- `aiw eval capture --run-id <id> --dataset <name> [--output-root <path>]` —
+  reconstructs one `EvalCase` fixture per LLM node from a completed
+  run's checkpointed LangGraph state. No provider calls fire, no cost
+  accrues. Reads `AsyncSqliteSaver.aget(cfg).channel_values` directly;
+  resolves the per-node output-schema via a new workflow-module
+  registry pattern (`<workflow_id>_eval_node_schemas()`).
+- `aiw eval run <workflow_id> [--live] [--dataset …] [--fail-fast]` —
+  loads the suite via `load_suite`, constructs `EvalRunner`, prints
+  `report.summary_lines()`, exits 0/1 on all-pass/any-fail. Live mode
+  inherits T03's `AIW_EVAL_LIVE=1` + `AIW_E2E=1` double-gate.
+
+**Path choice for capture (deterministic checkpoint-reconstruction):**
+The T04 spec offered two options — reconstruct from checkpointed state
+(preferred) or fall back to re-running with `AIW_CAPTURE_EVALS`. We
+chose the preferred path. Rationale: the `AsyncSqliteSaver.aget()`
+API exposes the full final state dict under `channel_values`, keyed by
+the same `f"{node_name}_output"` convention `TieredNode` writes. That
+is the ground truth the spec's "bytes the completed run actually
+exchanged" points at. The re-run fallback is documented in the spec as
+"second-choice" because it fires live provider calls; avoiding it keeps
+capture free + deterministic.
+
+**Per-workflow schema registry:** the capture helper needs to stamp
+`EvalCase.output_schema_fqn` on each fixture but LangGraph `StateNodeSpec`
+does not expose the `output_schema=` binding. Rather than introspecting
+the TieredNode runnable, each workflow module now exports a callable
+`<workflow_id>_eval_node_schemas()` returning `{node_name: pydantic_cls}`.
+`planner_eval_node_schemas()` lands in this task for the planner;
+`slice_refactor` (M5) gets its own registry when T05's seed fixtures
+need it. A workflow without the registry raises
+`WorkflowCaptureUnsupportedError` → exit 2, so the missing-registry
+surface is audit-visible.
+
+**Files touched:**
+
+- `ai_workflows/cli.py` — new `eval_app` Typer sub-app, `eval_capture`
+  + `eval_run` commands, `_eval_capture_async` + `_eval_run_async`
+  bodies, `_run_fail_fast` iteration wrapper.
+- `ai_workflows/evals/_capture_cli.py` — new. `capture_completed_run`
+  helper opens the checkpointer via `build_async_checkpointer`,
+  reads `saver.aget(cfg).channel_values`, filters out node-output
+  bookkeeping + downstream-node outputs via `_filter_inputs`, builds
+  + writes `EvalCase` via `save_case` with suffix-on-collision
+  discipline mirroring `CaptureCallback`. Typed exceptions
+  `UnknownRunError` / `CaptureNotCompletedError` /
+  `WorkflowCaptureUnsupportedError` drive CLI exit codes.
+- `ai_workflows/workflows/planner.py` — adds
+  `planner_eval_node_schemas()` exporting
+  `{"explorer": ExplorerReport, "planner": PlannerPlan}`.
+- `tests/cli/test_eval_commands.py` — new. 11 tests covering: sub-group
+  help surfacing, all-pass exit 0, fail exit 1, unknown-workflow exit 2,
+  live without env vars exit 2, dataset scoping, empty suite, pending
+  run capture, unknown run capture, happy-path capture round-trip (runs
+  `aiw run` + `aiw resume` + `aiw eval capture` end-to-end and verifies
+  fixtures at `evals/<dataset>/planner/{explorer,planner}/*.json`).
+
+**ACs satisfied:** all 6.
+
+1. Capture writes fixture JSON for every LLM node; exits 2 on
+   unknown / non-completed run_id.
+2. `aiw eval run planner` deterministic replay exits 0 all-pass / 1 any-fail.
+3. `--live` refuses unless both `AIW_EVAL_LIVE=1` and `AIW_E2E=1` set.
+4. `aiw eval` sub-group surfaces under `aiw --help`.
+5. Shared-dispatch discipline kept: the CLI imports `EvalRunner` from
+   `ai_workflows.evals` and does not reimplement replay logic;
+   import-linter's `evals → surfaces` contract is unchanged.
+6. `uv run pytest` (533 passed, 4 skipped), `uv run lint-imports`
+   (4 kept 0 broken), `uv run ruff check` (All checks passed).
+
+### Added — M7 Task 03: Replay Runner (2026-04-21)
+
+Adds `EvalRunner` — the deterministic + live replay engine for the M7
+prompt-regression harness. Given an `EvalSuite`, the runner rebuilds a
+one-node `StateGraph` around the target node + its paired
+`ValidatorNode`, monkey-patches `LiteLLMAdapter` with a hermetic
+`StubLLMAdapter` in deterministic mode (double-env-gated live mode
+dispatches to real providers for M7 T05), and renders a pass/fail
+`EvalReport`. Tolerance comparison supports `strict_json` + `substring`
++ `regex` with per-field overrides via `EvalTolerance.field_overrides`.
+
+**Files touched:**
+
+- `ai_workflows/evals/runner.py` — new. `EvalRunner(mode=...)`
+  constructor, `async run(suite)` entry point, `_run_case` dispatch,
+  `_invoke_replay` pulls `target_spec.runnable` + validator spec from
+  the workflow's own `StateGraph.nodes`, `_hydrate_state` rebuilds
+  pydantic-typed state keys from JSON dumps via
+  `typing.get_type_hints(state_schema)`, `_stub_tier_registry` rewrites
+  all tiers to `LiteLLMRoute("stub/{name}")` for deterministic mode,
+  `_patched_adapters` async context manager swaps `LiteLLMAdapter` →
+  `StubLLMAdapter` via `unittest.mock.patch.object`. Exports
+  `EvalReport` + `EvalResult` dataclasses with `summary_lines()`
+  renderer.
+- `ai_workflows/evals/_compare.py` — new. `compare(expected, actual,
+  tolerance, output_schema_fqn) -> tuple[bool, str]` dispatches to
+  strict-JSON / substring / regex / mixed-field paths. Strict-JSON
+  path parses both sides through the resolved output schema when
+  possible and renders `difflib.unified_diff` on mismatch.
+- `ai_workflows/evals/_stub_adapter.py` — new. `StubLLMAdapter` with
+  class-level `_pending_output` + `_calls` (mirrors T02's
+  `_StubLiteLLMAdapter.script` pattern — `TieredNode._dispatch`
+  instantiates the adapter fresh per call, so state must live on the
+  class). Raises `StubAdapterMissingCaseError` when no output is armed
+  (surfaces AC-5).
+- `ai_workflows/evals/__init__.py` — exports `EvalReport`,
+  `EvalResult`, `EvalRunner`.
+- `tests/evals/test_compare.py` — new. Eight tests: one per tolerance
+  mode (pass + fail), unified-diff shape on mismatch, mixed-mode with
+  `field_overrides`, schema-parse-failure fallback.
+- `tests/evals/test_runner_deterministic.py` — new. Six tests covering
+  AC-1 (passing replay), AC-2 code-side drift (prompt template edit),
+  AC-2 schema drift (stricter validator), AC-5 missing-node (loud
+  surface), `summary_lines()` renderer, and a precondition guard pinning
+  `_explorer_prompt` as an attribute of `planner_module` so the
+  template-drift test can monkey-patch it.
+- `tests/evals/test_runner_live.py` — new. Four tests: refuses live
+  construction without `AIW_EVAL_LIVE=1`, refuses without `AIW_E2E=1`,
+  constructs cleanly with both gates set, and a `@pytest.mark.e2e`
+  smoke test skipped until T05 seeds live fixtures.
+- `pyproject.toml` — fourth import-linter contract renamed
+  `"evals depends on graph + primitives only"` →
+  `"evals cannot import surfaces"`; `forbidden_modules` trimmed from
+  `[workflows, cli, mcp]` → `[cli, mcp]`. Inline comment documents the
+  M7-T01-ISS-03 retrofit amendment: the runner genuinely requires the
+  `evals → workflows` edge to extract the target node's
+  `StateNodeSpec.runnable` for single-node replay.
+- `tests/test_scaffolding.py` — contract-name assertion substring
+  updated `"evals depends on"` → `"evals cannot import surfaces"`;
+  docstring records the amendment.
+- `design_docs/phases/milestone_7_evals/issues/task_01_issue.md` —
+  retrofitted M7-T01-ISS-03 amendment documenting the import-linter
+  contract relaxation.
+
+**Acceptance criteria satisfied:**
+
+- [x] AC-1 — `EvalRunner(mode="deterministic").run(suite)` replays
+  captured fixtures and returns `EvalReport` with zero failures when
+  the captured output matches.
+- [x] AC-2 — Prompt-template drift (code-side) and schema drift
+  (validator-side) both surface as `EvalResult.error` non-empty.
+- [x] AC-3 — Tolerance modes (`strict_json` / `substring` / `regex`)
+  plus `field_overrides` cover the T03 grading matrix.
+- [x] AC-4 — Live mode is double-env-gated: `AIW_EVAL_LIVE=1` +
+  `AIW_E2E=1` required at construction; either missing → `RuntimeError`.
+- [x] AC-5 — A fixture whose `node_name` is not in the workflow graph
+  surfaces `EvalResult.error` with the node name mentioned; no silent
+  pass.
+- [x] `uv run pytest` → 522 passed, 4 skipped.
+  `uv run lint-imports` → 4 kept, 0 broken. `uv run ruff check` clean.
+
+**Deviations from spec:**
+
+- **Layer contract.** T01 originally forbade `evals → workflows`; the
+  T03 runner genuinely requires that edge to pull
+  `StateNodeSpec.runnable` out of the workflow's `StateGraph` for
+  single-node replay. Contract relaxed to forbid only the two
+  surfaces; amendment logged as M7-T01-ISS-03.
+- **Tier dispatch in deterministic mode.** Rewrites the tier registry
+  to route every tier through `LiteLLMRoute("stub/{name}")` so only
+  `LiteLLMAdapter` needs to be monkey-patched. Avoids having to also
+  intercept `ClaudeCodeAdapter` for workflows whose live config points
+  at claude-code tiers.
+- **Stub adapter state.** Class-level `_pending_output` rather than
+  instance-level, because `TieredNode._dispatch` constructs the
+  adapter fresh per call. Mirrors T02's `_StubLiteLLMAdapter.script`.
+
+### Added — M7 Task 02: Capture Callback (2026-04-21)
+
+Adds `CaptureCallback` — the opt-in capture path that turns real workflow
+runs into replayable eval fixtures. `TieredNode` invokes it duck-typed
+through `config.configurable["eval_capture_callback"]` after the cost
+callback on every successful LLM-node call; `_dispatch.run_workflow` /
+`_dispatch.resume_run` construct it when `AIW_CAPTURE_EVALS=<dataset>`
+is set (or when an explicit `capture_evals` override is threaded
+through). No behaviour change when the env var is unset.
+
+**Files touched:**
+
+- `ai_workflows/evals/capture_callback.py` — new. `CaptureCallback`
+  class with `on_node_complete(*, run_id, node_name, inputs,
+  raw_output, output_schema)` method; swallows exceptions and logs at
+  WARN so a broken capture never breaks a live run; suffixes
+  `-002`/`-003`/… on colliding case_ids; normalises pydantic inputs
+  via `model_dump(mode="json")`. `output_schema_fqn()` module helper
+  resolves `f"{schema.__module__}.{schema.__qualname__}"` or returns
+  `None` for free-text nodes.
+- `ai_workflows/evals/__init__.py` — exports `CaptureCallback` +
+  `output_schema_fqn`; docstring notes the workflows→evals dispatch
+  wiring.
+- `ai_workflows/graph/tiered_node.py` — after the cost callback,
+  reads `configurable.get("eval_capture_callback")` and calls
+  `on_node_complete(...)` when present. Fully duck-typed — no import
+  of `CaptureCallback`, keeping the graph layer evals-unaware.
+- `ai_workflows/workflows/_dispatch.py` — adds
+  `_build_eval_capture_callback` helper reading `AIW_CAPTURE_EVALS`,
+  extends `_build_cfg` to thread the callback into `configurable`,
+  and plumbs the new `capture_evals: str | None = None` kwarg through
+  `run_workflow` and `resume_run`.
+- `tests/evals/test_capture_callback.py` — seven tests: writes
+  fixture under `<root>/<workflow>/<node>/<case_id>.json`, records
+  `output_schema_fqn`, handles free-text (`None` schema), appends
+  numeric suffix on deterministic case_id collision (pins
+  `uuid.uuid4` + `datetime.now`), swallows `OSError` from
+  `fixture_path` and logs a warning, defaults root to
+  `AIW_EVALS_ROOT/<dataset>`, and normalises pydantic-model inputs.
+- `tests/evals/test_layer_contract.py` — relaxed to guard only
+  `graph → evals`; workflows is now an allowed consumer because
+  `_dispatch` must attach the callback. Docstring records the T01/T02
+  rule refinement.
+- `tests/workflows/test_dispatch_capture_opt_in.py` — new (closes
+  M7-T02-ISS-02). Three integration tests pinning the
+  `AIW_CAPTURE_EVALS` → `_build_eval_capture_callback` → `_build_cfg`
+  → `TieredNode` → fixture-on-disk chain end-to-end against a stubbed
+  planner run: env-set → fixtures appear under
+  `<root>/<dataset>/planner/<node>/*.json`; env-unset → no fixture
+  directory + `configurable` omits the key; approve-path result
+  shape is identical with or without capture. Uses the hermetic
+  `planner_tier_registry` override pattern from
+  `tests/mcp/conftest.py` so the synth tier stays on LiteLLM.
+- `design_docs/phases/milestone_7_evals/task_02_capture_callback.md`
+  — amended in place (closes M7-T02-ISS-01): deliverable path and
+  class signature updated to reflect `ai_workflows/evals/capture_callback.py`
+  + the `on_node_complete(...)` shape; AC-1 flipped from
+  `ai_workflows.graph` to `ai_workflows.evals` (which is what the
+  milestone README exit criterion 1 always required); test-file
+  location moved to `tests/evals/test_capture_callback.py`.
+- `design_docs/phases/milestone_7_evals/issues/task_02_issue.md` —
+  audit issue file for this task (status FAIL → PASS after Cycle 2
+  re-implement; see issue file for per-AC grading).
+- `design_docs/phases/milestone_7_evals/issues/task_01_issue.md` —
+  retrofitted M7-T01-ISS-02 amendment documenting the layer-contract
+  relaxation discovered while implementing T02.
+
+**Acceptance criteria satisfied:**
+
+- [x] `CaptureCallback.on_node_complete(...)` writes exactly one
+  `EvalCase` JSON file per successful call.
+- [x] `AIW_CAPTURE_EVALS=<dataset>` (or the `capture_evals` override)
+  is the only knob that turns capture on; unset → zero graph-side
+  side-effects (verified by existing T01 layer + dispatch tests still
+  green).
+- [x] `TieredNode` fires the callback after the cost callback on the
+  success path (ordering preserved in the edit).
+- [x] Fixture path follows the T01 convention
+  (`<root>/<workflow>/<node>/<case_id>.json`) — reuses
+  `evals.storage.fixture_path`.
+- [x] Exceptions during capture are logged and swallowed — verified by
+  `test_capture_failure_logs_warning_but_does_not_raise`.
+- [x] Pydantic inputs are normalised to JSON-ready dicts — verified by
+  `test_normalizes_pydantic_inputs`.
+- [x] `uv run pytest` → 502 passed, 3 skipped.
+  `uv run lint-imports` → 4 kept, 0 broken. `uv run ruff check` clean.
+
+**Deviations from spec:**
+
+- **Module placement.** Task sketch put the callback in
+  `ai_workflows/graph/`; that would force `graph → evals` (lower
+  layer reaching higher layer — an import-linter violation). Moved
+  to `ai_workflows/evals/capture_callback.py`; the graph layer
+  consumes it duck-typed via `configurable`, staying evals-unaware.
+- **Callback shape.** Followed the existing `CostTrackingCallback`
+  convention (single `on_node_complete` method on a bare class)
+  rather than subclassing `langchain_core.callbacks.BaseCallbackHandler`
+  as the sketch suggested — the rest of the codebase already
+  standardised on the bare-class pattern and LangChain's handler API
+  does not carry the `output_schema` context the replay runner needs.
+- **Layer-contract test scope.** T01 forbade both `graph → evals` and
+  `workflows → evals`. The second half was over-restrictive —
+  `_dispatch` must import `CaptureCallback` to construct it at
+  opt-in time. Test relaxed; contract still guards the load-bearing
+  direction (`graph → evals`). Recorded as M7-T01-ISS-02 amendment
+  to the T01 audit file.
+
+### Added — M7 Task 01: Eval Dataset Schema + Storage Layout (2026-04-21)
+
+Lands the substrate for the M7 prompt-regression harness: a new
+`ai_workflows.evals` package with pydantic v2 schemas and on-disk JSON
+fixture helpers. No capture logic, no replay logic, no CLI — those
+arrive in T02 / T03 / T04.
+
+**Files touched:**
+
+- `ai_workflows/evals/__init__.py` — package docstring cites the task
+  and names downstream consumers (T02 capture, T03 replay, T04 CLI);
+  exports `EvalCase`, `EvalSuite`, `EvalTolerance`, `save_case`,
+  `load_suite`, `load_case`, `fixture_path`, `default_evals_root`,
+  `EVALS_ROOT`.
+- `ai_workflows/evals/schemas.py` — `EvalCase`, `EvalSuite`,
+  `EvalTolerance` pydantic v2 models; `extra="forbid"`, `frozen=True`;
+  bare-typed per KDR-010; `EvalSuite` enforces the
+  workflow_id-matches-case invariant in `model_validator(mode="after")`.
+- `ai_workflows/evals/storage.py` — `save_case` / `load_case` /
+  `load_suite` / `fixture_path` / `default_evals_root` helpers; default
+  root `evals/`; `AIW_EVALS_ROOT` env override; refuses overwrite
+  unless `overwrite=True`; pretty-prints JSON via
+  `model_dump_json(indent=2)` for reviewable diffs.
+- `ai_workflows/evals/py.typed` — marker for type-checker clients.
+- `evals/.gitkeep` — ensures fixture root exists in the repo.
+- `pyproject.toml` — adds the fourth import-linter contract,
+  `"evals depends on graph + primitives only"`, forbidding
+  `ai_workflows.evals` from importing workflows / cli / mcp.
+- `tests/evals/__init__.py` — empty.
+- `tests/evals/test_schemas.py` — nine tests exercising extra-forbid,
+  frozen, round-trip, default tolerance, rejected modes, empty-suite,
+  and workflow-id invariants.
+- `tests/evals/test_storage.py` — ten tests covering canonical path,
+  overwrite refusal + flag, suite aggregation, non-JSON skip, missing
+  workflow → empty suite, env-override root, and tolerance round-trip.
+- `tests/evals/test_layer_contract.py` — companion AST grep that
+  enforces `graph/` and `workflows/` do not import
+  `ai_workflows.evals`. Paired with the import-linter contract in
+  `pyproject.toml`, this closes both directions of the evals layer
+  rule.
+- `tests/test_scaffolding.py` — updated the contract-count assertion
+  from `== 3` to `== 4` and added a substring check for the new
+  `"evals depends on"` contract.
+
+**Acceptance criteria satisfied:**
+
+- [x] `from ai_workflows.evals import EvalCase, EvalSuite, save_case,
+      load_suite` works.
+- [x] Models are pydantic v2 with `extra="forbid"` and `frozen=True`,
+      bare-typed per KDR-010.
+- [x] `save_case` / `load_suite` round-trip is lossless for every
+      field (covered by `test_round_trip_preserves_tolerance_overrides`
+      + `test_eval_case_serialization_round_trip`).
+- [x] Import-linter: **4 kept, 0 broken** (`uv run lint-imports`).
+- [x] `uv run pytest tests/evals/` green (21 passed).
+- [x] `uv run ruff check` clean.
+- [x] No `ai_workflows.evals` imports from `graph/` or `workflows/`
+      (verified by `test_layer_contract.py`).
+
+**Gate snapshot:** `uv run pytest` → 496 passed, 3 skipped.
+`uv run lint-imports` → 4 kept, 0 broken. `uv run ruff check` → clean.
+
+**Deviations from spec:**
+
+- The task's sketched contract covers only the `evals → {workflows,
+  cli, mcp}` direction. The paired rule (`graph`/`workflows` cannot
+  import `ai_workflows.evals`) is enforced by the companion
+  `tests/evals/test_layer_contract.py` AST grep rather than a second
+  import-linter contract — one contract in `pyproject.toml` matches
+  the task spec's "existing 3 + new 1 = 4 total" arithmetic, and the
+  AST test closes the other direction with zero contract-file noise.
+  Both rules are part of the default `uv run pytest` gate.
+
 ## [M6 Slice Refactor] - 2026-04-20
 
 ### Changed — M6 Task 09: Milestone Close-out (2026-04-20)

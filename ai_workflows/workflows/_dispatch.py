@@ -57,6 +57,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
+import os
 import secrets
 import time
 from datetime import UTC, datetime
@@ -65,6 +66,7 @@ from typing import Any
 from langgraph.types import Command
 
 from ai_workflows import workflows
+from ai_workflows.evals import CaptureCallback
 from ai_workflows.graph.checkpointer import build_async_checkpointer
 from ai_workflows.graph.cost_callback import CostTrackingCallback
 from ai_workflows.primitives.cost import CostTracker, TokenUsage
@@ -328,6 +330,7 @@ def _build_cfg(
     tier_registry: dict,
     callback: CostTrackingCallback,
     storage: SQLiteStorage,
+    eval_capture_callback: CaptureCallback | None = None,
 ) -> dict[str, Any]:
     """Build the LangGraph ``config["configurable"]`` dict passed to ``ainvoke``.
 
@@ -341,18 +344,57 @@ def _build_cfg(
     existing acquisition path (`graph/tiered_node.py`) enforces the cap
     at the provider-call boundary, independent of graph topology (spec
     AC-1).
+
+    M7 T02 optionally threads a :class:`CaptureCallback` through
+    ``configurable["eval_capture_callback"]``. ``TieredNode`` reads the
+    key duck-typed and no-ops when absent, so unset default paths stay
+    byte-identical.
     """
-    return {
-        "configurable": {
-            "thread_id": run_id,
-            "run_id": run_id,
-            "tier_registry": tier_registry,
-            "cost_callback": callback,
-            "storage": storage,
-            "workflow": workflow,
-            "semaphores": _build_semaphores(tier_registry),
-        }
+    configurable: dict[str, Any] = {
+        "thread_id": run_id,
+        "run_id": run_id,
+        "tier_registry": tier_registry,
+        "cost_callback": callback,
+        "storage": storage,
+        "workflow": workflow,
+        "semaphores": _build_semaphores(tier_registry),
     }
+    if eval_capture_callback is not None:
+        configurable["eval_capture_callback"] = eval_capture_callback
+    return {"configurable": configurable}
+
+
+def _build_eval_capture_callback(
+    *,
+    workflow: str,
+    run_id: str,
+    dataset_override: str | None = None,
+) -> CaptureCallback | None:
+    """Return a :class:`CaptureCallback` when capture is opted in; else None.
+
+    Opt-in paths (in priority order):
+
+    * ``dataset_override`` — explicit kwarg threaded from a future
+      CLI / MCP surface (T04 wires ``--capture-evals <dataset>``; the
+      MCP tool is expected to accept an equivalent kwarg).
+    * ``AIW_CAPTURE_EVALS`` environment variable — the
+      dev-ergonomics path a Builder uses to capture seed fixtures
+      (T05) without changing the command line.
+
+    Both paths pass the dataset name to :class:`CaptureCallback`, which
+    prefixes its fixture root with the dataset so sibling captures
+    (e.g. ``planner-seed`` / ``planner-regen-2026-05``) stay
+    disambiguated on disk.
+    """
+
+    dataset_name = dataset_override or os.getenv("AIW_CAPTURE_EVALS")
+    if not dataset_name:
+        return None
+    return CaptureCallback(
+        dataset_name=dataset_name,
+        workflow_id=workflow,
+        run_id=run_id,
+    )
 
 
 async def _extract_error_message(compiled: Any, cfg: dict, exc: Exception) -> str:
@@ -385,6 +427,7 @@ async def run_workflow(
     budget_cap_usd: float | None = None,
     run_id: str | None = None,
     tier_overrides: dict[str, str] | None = None,
+    capture_evals: str | None = None,
 ) -> dict[str, Any]:
     """Dispatch a workflow run end-to-end and return a surface-ready dict.
 
@@ -437,12 +480,18 @@ async def run_workflow(
         callback = CostTrackingCallback(
             cost_tracker=tracker, budget_cap_usd=budget_cap_usd
         )
+        eval_capture = _build_eval_capture_callback(
+            workflow=workflow,
+            run_id=run_id_resolved,
+            dataset_override=capture_evals,
+        )
         cfg = _build_cfg(
             run_id=run_id_resolved,
             workflow=workflow,
             tier_registry=tier_registry,
             callback=callback,
             storage=storage,
+            eval_capture_callback=eval_capture,
         )
 
         await storage.create_run(run_id_resolved, workflow, budget_cap_usd)
@@ -643,12 +692,17 @@ async def resume_run(
     checkpointer = await build_async_checkpointer()
     try:
         compiled = builder().compile(checkpointer=checkpointer)
+        eval_capture = _build_eval_capture_callback(
+            workflow=workflow,
+            run_id=run_id,
+        )
         cfg = _build_cfg(
             run_id=run_id,
             workflow=workflow,
             tier_registry=tier_registry,
             callback=callback,
             storage=storage,
+            eval_capture_callback=eval_capture,
         )
 
         try:

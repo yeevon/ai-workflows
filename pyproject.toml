@@ -103,3 +103,28 @@ name = "workflows cannot import surfaces"
 type = "forbidden"
 source_modules = ["ai_workflows.workflows"]
 forbidden_modules = ["ai_workflows.cli", "ai_workflows.mcp"]
+
+# M7 Task 01 adds a fourth contract: the eval harness may consume
+# primitives + graph (needs validator / tiered-node adapters at M7
+# Task 03 replay time) plus workflows (T03's replay runner imports
+# the workflow module to pull out a node's built
+# StateNodeSpec.runnable for single-node replay). The companion
+# rule (graph cannot import evals) is policed in
+# tests/evals/test_layer_contract.py — a one-shot AST check for
+# `ai_workflows.evals` references under graph/.
+#
+# Amendment 2026-04-21 (T03 retrofit, M7-T01-ISS-03): T01 originally
+# forbade `evals → workflows`. T03's replay runner genuinely requires
+# that edge — the runner imports the workflow module to extract the
+# node's `StateNodeSpec.runnable` and wire a single-node replay
+# graph. The corrected architectural rule: `evals` is peer to the
+# two surfaces (library of replay/capture helpers), not below
+# workflows. Contract now restricts only `evals → {cli, mcp}`.
+[[tool.importlinter.contracts]]
+name = "evals cannot import surfaces"
+type = "forbidden"
+source_modules = ["ai_workflows.evals"]
+forbidden_modules = [
+    "ai_workflows.cli",
+    "ai_workflows.mcp",
+]

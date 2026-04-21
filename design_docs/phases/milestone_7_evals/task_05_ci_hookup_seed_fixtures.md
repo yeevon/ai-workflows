@@ -17,8 +17,8 @@ Two inseparable deliverables:
 
 Committed under `evals/`:
 
-- `evals/planner/explorer/happy-path-01.json` — captured from a real `planner` run with goal `"Write a release checklist for version 1.2.0"`. `output_schema_fqn = "ai_workflows.workflows.planner.ExplorerReport"`. Tolerance: `strict_json` with `field_overrides={"notes": "substring"}` (free-text field).
-- `evals/planner/synth/happy-path-01.json` — same run, the synth (`planner-synth`) phase. `output_schema_fqn = "ai_workflows.workflows.planner.PlannerPlan"`. Tolerance: `strict_json` with `field_overrides={"summary": "substring"}`.
+- `evals/planner/explorer/happy-path-01.json` — captured from a real `planner` run with goal `"Write a release checklist for version 1.2.0"`. `output_schema_fqn = "ai_workflows.workflows.planner.ExplorerReport"`. Tolerance: `strict_json` with `field_overrides={"summary": "substring"}` (free-text field). *(Amended 2026-04-21 at T06 close-out: `ExplorerReport` has no `notes` field — the original sketch's `{"notes": "substring"}` was a fiction. `summary` is the free-text field that actually exists; M7-T05-ISS-04.)*
+- `evals/planner/planner/happy-path-01.json` — same run, the planner-synth (`planner-synth`) phase. *(Amended 2026-04-21: the committed node_name is `"planner"` (what the code registers) rather than the sketch's `"synth"`; directory layout is `evals/planner/planner/…`.)* `output_schema_fqn = "ai_workflows.workflows.planner.PlannerPlan"`. Tolerance: `strict_json` with `field_overrides={"summary": "substring"}`.
 - `evals/slice_refactor/slice_worker/happy-path-01.json` — captured from a real `slice_refactor` run with a 3-step plan. `output_schema_fqn = "ai_workflows.workflows.slice_refactor.SliceResult"`. Tolerance: `strict_json`.
 
 Target **minimum 3 cases total**, covering both workflows. More cases welcome but not required at M7 — T06 close-out audit will flag coverage holes as forward-deferred to future tasks.

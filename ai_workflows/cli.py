@@ -40,11 +40,21 @@ Code adapter boundary (KDR-003).
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
+from pathlib import Path
 from typing import Any
 
 import typer
 
+from ai_workflows import workflows
+from ai_workflows.evals import EvalRunner, load_suite
+from ai_workflows.evals._capture_cli import (
+    CaptureNotCompletedError,
+    UnknownRunError,
+    WorkflowCaptureUnsupportedError,
+    capture_completed_run,
+)
 from ai_workflows.primitives.logging import configure_logging
 from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path
 from ai_workflows.workflows._dispatch import (
@@ -467,6 +477,224 @@ def _emit_list_runs_table(rows: list[dict[str, Any]]) -> None:
     typer.echo(_fmt(headers))
     for tup in formatted:
         typer.echo(_fmt(tup))
+
+
+# ---------------------------------------------------------------------------
+# `aiw eval capture` / `aiw eval run` (M7 Task 04)
+# ---------------------------------------------------------------------------
+
+
+eval_app = typer.Typer(
+    name="eval",
+    help="Capture fixtures from completed runs and replay them against the graph.",
+    no_args_is_help=True,
+    add_completion=False,
+)
+"""M7 Task 04 — ``aiw eval`` sub-app.
+
+Holds ``capture`` + ``run`` commands. Registered under the root
+:data:`app` via :meth:`typer.Typer.add_typer` so ``aiw --help`` lists
+``eval`` alongside ``run`` / ``resume`` / ``list-runs``.
+"""
+
+app.add_typer(eval_app, name="eval")
+
+
+@eval_app.command("capture")
+def eval_capture(
+    run_id: str = typer.Option(
+        ...,
+        "--run-id",
+        help="Completed run id whose LLM nodes become fixtures.",
+    ),
+    dataset: str = typer.Option(
+        ...,
+        "--dataset",
+        help="Dataset sub-directory under the eval root.",
+    ),
+    output_root: Path = typer.Option(
+        Path("evals"),
+        "--output-root",
+        help="Filesystem root the dataset directory is created under.",
+    ),
+) -> None:
+    """Snapshot every LLM-node call from a completed run into fixture JSON.
+
+    Reads the run's final state from the LangGraph checkpointer and
+    reconstructs one :class:`EvalCase` per registered LLM node — no
+    provider call fires, no cost accrues, no live auth required
+    (M7 T04 spec's preferred path). Exits 2 if the run is not known
+    or is not in ``status='completed'``; exits 2 if the workflow has
+    no ``<workflow_id>_eval_node_schemas`` registry.
+    """
+
+    configure_logging(level="INFO")
+    asyncio.run(
+        _eval_capture_async(
+            run_id=run_id,
+            dataset=dataset,
+            output_root=output_root,
+        )
+    )
+
+
+async def _eval_capture_async(
+    *,
+    run_id: str,
+    dataset: str,
+    output_root: Path,
+) -> None:
+    """Async body of ``aiw eval capture``."""
+
+    storage = await SQLiteStorage.open(default_storage_path())
+    try:
+        written = await capture_completed_run(
+            run_id=run_id,
+            dataset=dataset,
+            storage=storage,
+            output_root=output_root,
+        )
+    except UnknownRunError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from None
+    except CaptureNotCompletedError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from None
+    except WorkflowCaptureUnsupportedError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from None
+
+    if not written:
+        typer.echo(
+            f"no LLM-node outputs captured for run {run_id!r} "
+            "(registry empty or state lacks any matching outputs)"
+        )
+        return
+
+    typer.echo(f"wrote {len(written)} fixture(s):")
+    for path in written:
+        typer.echo(f"  {path}")
+
+
+@eval_app.command("run")
+def eval_run(
+    workflow_id: str = typer.Argument(
+        ...,
+        help="Workflow name registered in ai_workflows.workflows.",
+    ),
+    live: bool = typer.Option(
+        False,
+        "--live",
+        help="Run against live providers (requires AIW_EVAL_LIVE=1 + AIW_E2E=1).",
+    ),
+    dataset: str | None = typer.Option(
+        None,
+        "--dataset",
+        help="Dataset subdirectory under the eval root to scope the suite to.",
+    ),
+    fail_fast: bool = typer.Option(
+        False,
+        "--fail-fast",
+        help="Stop iteration after the first failing case.",
+    ),
+) -> None:
+    """Replay the eval suite against the current graph.
+
+    Exits 0 on all-pass, 1 on any fail, 2 on misuse (unknown workflow,
+    live-mode env gate not satisfied). Prints one summary line per
+    case to stdout in the format
+    :meth:`EvalReport.summary_lines` produces — human-readable and
+    grep-friendly.
+    """
+
+    configure_logging(level="INFO")
+    asyncio.run(
+        _eval_run_async(
+            workflow_id=workflow_id,
+            live=live,
+            dataset=dataset,
+            fail_fast=fail_fast,
+        )
+    )
+
+
+async def _eval_run_async(
+    *,
+    workflow_id: str,
+    live: bool,
+    dataset: str | None,
+    fail_fast: bool,
+) -> None:
+    """Async body of ``aiw eval run``."""
+
+    try:
+        importlib.import_module(f"ai_workflows.workflows.{workflow_id}")
+        workflows.get(workflow_id)
+    except (ModuleNotFoundError, KeyError):
+        typer.echo(
+            f"unknown workflow {workflow_id!r}; registered: "
+            f"{workflows.list_workflows()}",
+            err=True,
+        )
+        raise typer.Exit(code=2) from None
+
+    mode: Any = "live" if live else "deterministic"
+    try:
+        runner = EvalRunner(mode=mode)
+    except RuntimeError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from None
+
+    root: Path | None = None
+    if dataset is not None:
+        from ai_workflows.evals.storage import default_evals_root
+
+        root = default_evals_root() / dataset
+
+    suite = load_suite(workflow_id, root=root)
+    if not suite.cases:
+        typer.echo(
+            f"no eval cases found for workflow {workflow_id!r}"
+            + (f" under dataset {dataset!r}" if dataset else ""),
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+
+    report = await runner.run(suite) if not fail_fast else await _run_fail_fast(
+        runner, suite
+    )
+
+    for line in report.summary_lines():
+        typer.echo(line)
+
+    if report.fail_count > 0:
+        raise typer.Exit(code=1)
+
+
+async def _run_fail_fast(runner: EvalRunner, suite: Any) -> Any:
+    """Invoke ``runner`` one case at a time, stopping on the first failure.
+
+    :class:`EvalRunner.run` already iterates sequentially; the
+    fail-fast variant truncates the sequence as soon as a result is
+    ``passed=False`` — useful in CI-sim where an early failure on a
+    50-case suite would otherwise continue for minutes.
+    """
+
+    from ai_workflows.evals import EvalSuite
+    from ai_workflows.evals.runner import EvalReport
+
+    results: list[Any] = []
+    for case in suite.cases:
+        one = EvalSuite(workflow_id=suite.workflow_id, cases=(case,))
+        partial = await runner.run(one)
+        results.extend(partial.results)
+        if partial.fail_count > 0:
+            break
+    return EvalReport(
+        suite_workflow_id=suite.workflow_id,
+        mode=runner._mode,  # noqa: SLF001 — same package, private-by-convention
+        results=tuple(results),
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation only

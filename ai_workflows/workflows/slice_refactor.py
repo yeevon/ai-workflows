@@ -188,6 +188,7 @@ __all__ = [
     "HARD_STOP_METADATA_ARTIFACT_KIND",
     "build_slice_refactor",
     "slice_refactor_tier_registry",
+    "slice_refactor_eval_node_schemas",
     "initial_state",
 ]
 
@@ -1251,6 +1252,33 @@ def slice_refactor_tier_registry() -> dict[str, TierConfig]:
         per_call_timeout_s=180,
     )
     return registry
+
+
+def slice_refactor_eval_node_schemas() -> dict[str, type[BaseModel]]:
+    """Return the eval-capture schema map: ``node_name → output pydantic class``.
+
+    M7 T04 capture helper reads this to stamp :attr:`EvalCase.output_schema_fqn`
+    per captured node. ``slice_refactor`` contributes one LLM node
+    (``slice_worker`` inside the per-slice sub-graph, emitting
+    :class:`SliceResult`). The planner sub-graph composed into this
+    workflow has its own registry at
+    :func:`ai_workflows.workflows.planner.planner_eval_node_schemas` —
+    dispatch does not merge sibling registries, so capture of a
+    slice_refactor run walks only the node set this function declares.
+
+    Note: ``slice_worker`` runs inside a LangGraph sub-graph, so the
+    top-level :meth:`AsyncSqliteSaver.aget` snapshot that T04's
+    ``aiw eval capture`` reads does **not** contain
+    ``slice_worker_output`` at the parent thread level. The
+    :class:`ai_workflows.evals.CaptureCallback` live-capture path
+    (activated via ``AIW_CAPTURE_EVALS``) fires inside every
+    :class:`TieredNode` invocation regardless of sub-graph nesting, so
+    it is the authoritative capture path for this workflow. This
+    function still ties the node name to its pydantic class so
+    downstream replay (``aiw eval run slice_refactor``) resolves
+    ``output_schema_fqn`` consistently.
+    """
+    return {"slice_worker": SliceResult}
 
 
 def initial_state(run_id: str, inputs: dict[str, Any]) -> dict[str, Any]:

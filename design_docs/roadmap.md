@@ -17,7 +17,7 @@ This roadmap replaces the archived milestone plan at `archive/pre_langgraph_pivo
 | M4 | MCP server (FastMCP) | [phases/milestone_4_mcp/](phases/milestone_4_mcp/README.md) | ✅ complete (2026-04-20) |
 | M5 | Multi-tier `planner` | [phases/milestone_5_multitier_planner/](phases/milestone_5_multitier_planner/README.md) | ✅ complete (2026-04-20) |
 | M6 | `slice_refactor` DAG | [phases/milestone_6_slice_refactor/](phases/milestone_6_slice_refactor/README.md) | ✅ complete (2026-04-20) |
-| M7 | Eval harness | [phases/milestone_7_evals/](phases/milestone_7_evals/README.md) | planned |
+| M7 | Eval harness | [phases/milestone_7_evals/](phases/milestone_7_evals/README.md) | ✅ complete (2026-04-21) |
 | M8 | Ollama infrastructure | [phases/milestone_8_ollama/](phases/milestone_8_ollama/README.md) | planned |
 | M9 | Claude Code skill packaging | [phases/milestone_9_skill/](phases/milestone_9_skill/README.md) | optional |
 

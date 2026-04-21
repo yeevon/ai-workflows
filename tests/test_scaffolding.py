@@ -194,15 +194,20 @@ def test_pyproject_registers_aiw_script() -> None:
 
 
 def test_pyproject_declares_expected_importlinter_contracts() -> None:
-    """The four-layer architectural contracts from M1 Task 12 must be present.
+    """The post-pivot architectural contracts must be present.
 
     M1 Task 12 replaced the pre-pivot three-contract set (which named
-    ``components``) with the post-pivot four-layer contract per
-    [architecture.md §3](../design_docs/architecture.md):
+    ``components``) with a four-layer contract per
+    [architecture.md §3](../design_docs/architecture.md); M7 Task 01
+    extended the set with the evals-layer contract (M7 Task 03
+    amendment relaxed its wording from "depends on graph +
+    primitives only" to "cannot import surfaces" — see M7-T01-ISS-03
+    / the pyproject.toml inline comment):
 
     1. primitives cannot import graph, workflows, or surfaces
     2. graph cannot import workflows or surfaces
     3. workflows cannot import surfaces
+    4. evals cannot import surfaces
 
     Substring matching keeps the test resilient to wording tweaks
     while pinning the layer vocabulary.
@@ -213,10 +218,11 @@ def test_pyproject_declares_expected_importlinter_contracts() -> None:
         pyproject = tomllib.load(fh)
     contracts = pyproject["tool"]["importlinter"]["contracts"]
     names = {c["name"] for c in contracts}
-    assert len(contracts) == 3, f"expected exactly 3 contracts, got {len(contracts)}: {names}"
+    assert len(contracts) == 4, f"expected exactly 4 contracts, got {len(contracts)}: {names}"
     assert any("primitives cannot import" in n for n in names)
     assert any("graph cannot import" in n for n in names)
     assert any("workflows cannot import surfaces" in n for n in names)
+    assert any("evals cannot import surfaces" in n for n in names)
 
 
 # ---------------------------------------------------------------------------

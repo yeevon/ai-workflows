@@ -1,6 +1,6 @@
 # Task 06 — Milestone Close-out
 
-**Status:** 📝 Planned.
+**Status:** ✅ Complete (2026-04-21).
 **Grounding:** [milestone README](README.md) · [CLAUDE.md](../../../CLAUDE.md) close-out conventions · [M6 T09](../milestone_6_slice_refactor/task_09_milestone_closeout.md) (pattern to mirror).
 
 ## What to Build
@@ -64,14 +64,14 @@ Any hole found is the close-out's to fix in-audit (doc maintenance only, not cod
 
 ## Acceptance Criteria
 
-- [ ] Every exit criterion in the milestone [README](README.md) has a concrete verification (paths / test names / issue-file links).
-- [ ] `uv run pytest && uv run lint-imports && uv run ruff check` green on a fresh clone; `lint-imports` reports **4 contracts kept** (the new `evals` contract plus the three pre-existing).
-- [ ] Close-out CHANGELOG entry records the live-replay runs for both `planner` and `slice_refactor` at close-out time (commit sha + pass/fail counts).
-- [ ] Close-out CHANGELOG entry records the capture-mechanism choice locked at T04.
-- [ ] M7 milestone README **and** roadmap reflect `✅ Complete (<YYYY-MM-DD>)`.
-- [ ] CHANGELOG has a dated `## [M7 Eval Harness] - <YYYY-MM-DD>` section; `[Unreleased]` preserved at the top.
-- [ ] Root README updated: status table, post-M7 narrative, What-runs-today, Next → M8.
-- [ ] All M7 task issue files audited for propagation holes; any gap closed or escalated.
+- [x] Every exit criterion in the milestone [README](README.md) has a concrete verification (paths / test names / issue-file links).
+- [x] `uv run pytest && uv run lint-imports && uv run ruff check` green on a fresh clone; `lint-imports` reports **4 contracts kept** (the new `evals` contract plus the three pre-existing).
+- [x] Close-out CHANGELOG entry records the live-replay runs for both `planner` and `slice_refactor` at close-out time (commit sha + pass/fail counts).
+- [x] Close-out CHANGELOG entry records the capture-mechanism choice locked at T04.
+- [x] M7 milestone README **and** roadmap reflect `✅ Complete (2026-04-21)`.
+- [x] CHANGELOG has a dated `## [M7 Eval Harness] - 2026-04-21` section; `[Unreleased]` preserved at the top.
+- [x] Root README updated: status table, post-M7 narrative, What-runs-today, Next → M8.
+- [x] All M7 task issue files audited for propagation holes; any gap closed or escalated.
 
 ## Dependencies
 
@@ -82,3 +82,10 @@ Any hole found is the close-out's to fix in-audit (doc maintenance only, not cod
 - Any code change. Close-out is docs-only; findings flow to M8+ carry-over or nice_to_have.md.
 - Promotion of LLM-as-judge, Langfuse, LangSmith, or embedding tolerance (see [nice_to_have.md §1 / §3](../../nice_to_have.md)).
 - Retrofitting eval coverage for future workflows (M8 eval cases get captured under M8 T0x, not back-filled here).
+
+## Carry-over from prior audits
+
+- [x] **M7-T01-ISS-01** (🟢 LOW) — **RESOLVED 2026-04-21.** `architecture.md` §3 updated with a peer-of-graph ASCII diagram + expanded six-edge import-contract rules; new §4.5 Evals layer subsection documents `EvalCase` / `EvalSuite` / `EvalTolerance`, `CaptureCallback`, `EvalRunner` + `_compare` + `_resolve_node_scope`, and the `eval-replay` CI surface. Back-link: [issues/task_01_issue.md#m7-t01-iss-01-architecturemd-§3--§4-does-not-yet-document-the-evals-layer](issues/task_01_issue.md).
+- [x] **M7-T05-ISS-01** (🟡 MEDIUM) — **RESOLVED 2026-04-21.** `tests/cli/test_eval_commands.py`'s autouse `_reensure_planner_registered` fixture now snapshots `ai_workflows.workflows._REGISTRY`, resets + seeds `planner` for the test, yields, then restores the full snapshot (preferred "snapshot as a whole" path from the audit recommendation — future workflow registrations survive without fixture edits). The T04 band-aid in `tests/evals/test_seed_fixtures_deterministic.py` remains as defence-in-depth. Back-link: [issues/task_05_issue.md#m7-t05-iss-01-testsclitest_eval_commandspy-autouse-fixture-leaves-session-wide-registry-pollution](issues/task_05_issue.md).
+- [x] **M7-T05-ISS-04** (🟢 LOW, doc-maintenance) — **RESOLVED 2026-04-21.** `task_05_ci_hookup_seed_fixtures.md` amended in place: explorer fixture tolerance text corrected to `field_overrides={"summary": "substring"}` with an inline "(Amended 2026-04-21 at T06 close-out: `ExplorerReport` has no `notes` field…)" note; planner-synth node_name corrected to `"planner"`. Audit trail preserved by the amendment note. Back-link: [issues/task_05_issue.md#m7-t05-iss-04-spec-deviation-explorer-tolerance-field_overridesnotes-substring--summary-substring](issues/task_05_issue.md).
+- [x] **M7-T05-ISS-06** (🟢 LOW, forward-looking) — **DEFERRED TO [nice_to_have.md §13](../../nice_to_have.md).** New nice_to_have entry captures two implementation options (register pydantic models with LangGraph's msgpack type registry, or switch checkpoint writes to JSON-mode before serializer handoff) + explicit triggers (LangGraph release that escalates to a hard error; noticeable capture-path slowdown; unexplained replay failure traced to serializer drift). No in-milestone fix — the warnings are advisory under current LangGraph and do not affect capture-callback correctness. Back-link: [issues/task_05_issue.md#m7-t05-iss-06-deserialization-warnings-during-slice_refactor-capture-path](issues/task_05_issue.md).

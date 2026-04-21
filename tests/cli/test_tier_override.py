@@ -24,6 +24,7 @@ dispatched" from "synth was dispatched" by the recorded ``route.model``.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,17 @@ from ai_workflows.workflows import planner as planner_module
 from ai_workflows.workflows.planner import build_planner
 
 _RUNNER = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Strip ANSI escape codes so substring checks survive Rich's
+    option highlighter, which fragments ``--tier-override`` into three
+    separately-styled chunks (``-``, ``-tier``, ``-override``) on
+    colour-capable terminals (notably GitHub Actions runners, which
+    set ``FORCE_COLOR=1``)."""
+    return _ANSI_RE.sub("", text)
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +284,7 @@ def test_malformed_override_without_equals_exits_two() -> None:
         app, _base_args(["--tier-override", "planner-synth"])
     )
     assert result.exit_code == 2
-    assert "tier-override" in result.output.lower()
+    assert "tier-override" in _plain(result.output).lower()
 
 
 def test_malformed_override_with_empty_half_exits_two() -> None:
@@ -280,7 +292,7 @@ def test_malformed_override_with_empty_half_exits_two() -> None:
         app, _base_args(["--tier-override", "=planner-synth"])
     )
     assert result.exit_code == 2
-    assert "tier-override" in result.output.lower()
+    assert "tier-override" in _plain(result.output).lower()
 
 
 # ---------------------------------------------------------------------------

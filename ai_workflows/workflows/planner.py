@@ -49,6 +49,7 @@ __all__ = [
     "TERMINAL_GATE_ID",
     "FINAL_STATE_KEY",
     "build_planner",
+    "planner_eval_node_schemas",
     "planner_tier_registry",
 ]
 
@@ -386,6 +387,31 @@ def build_planner() -> StateGraph:
     g.add_edge("gate", "artifact")
     g.add_edge("artifact", END)
     return g
+
+
+def planner_eval_node_schemas() -> dict[str, type[BaseModel]]:
+    """Return the eval-capture schema map: ``node_name → output pydantic class``.
+
+    Introduced by M7 Task 04 so ``aiw eval capture`` can reconstruct one
+    :class:`EvalCase` per LLM node from a completed run's checkpointed
+    state without re-firing any provider. The keys are the
+    ``TieredNode`` names this workflow wires into its graph (``explorer``
+    + ``planner``); the values are the pydantic output classes that the
+    paired ``ValidatorNode`` parses against. The capture helper resolves
+    each ``case.output_schema_fqn`` by dotting the class's
+    ``__module__`` + ``__qualname__`` (matches
+    :func:`ai_workflows.evals.capture_callback.output_schema_fqn`).
+
+    Kept as a callable (not a module-level dict) so future workflow
+    variants can parameterise it — the CLI just calls this when the
+    target workflow exposes it, and falls back to a clear error when
+    a workflow has no registry.
+    """
+
+    return {
+        "explorer": ExplorerReport,
+        "planner": PlannerPlan,
+    }
 
 
 def planner_tier_registry() -> dict[str, TierConfig]:

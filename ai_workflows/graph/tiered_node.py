@@ -243,6 +243,22 @@ def tiered_node(
             # exception — preserves the "exactly one structured log per
             # invocation" invariant on the budget-cap path.
             cost_callback.on_node_complete(run_id, node_name, usage_with_tier)
+            # Optional eval-capture callback (M7 T02). Duck-typed —
+            # TieredNode does not import ``ai_workflows.evals`` because
+            # ``graph`` must not reach ``evals`` (lower-layer-reaches-higher
+            # violation). The capture callback is wired at dispatch time
+            # via ``config.configurable["eval_capture_callback"]``. Any
+            # exception it raises is swallowed by the callback itself
+            # (capture must never break a live run).
+            eval_capture = configurable.get("eval_capture_callback")
+            if eval_capture is not None:
+                eval_capture.on_node_complete(
+                    run_id=run_id,
+                    node_name=node_name,
+                    inputs=dict(state),
+                    raw_output=text,
+                    output_schema=output_schema,
+                )
         except RetryableSemantic:
             # Pass-through: validators own this bucket, but if a wrapper
             # emits it here we must not re-classify.

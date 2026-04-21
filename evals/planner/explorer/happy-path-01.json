@@ -1,0 +1,24 @@
+{
+  "case_id": "planner-explorer-happy-path-01",
+  "workflow_id": "planner",
+  "node_name": "explorer",
+  "inputs": {
+    "run_id": "eval-seed-planner",
+    "input": {
+      "goal": "Write a release checklist for version 1.2.0",
+      "context": null,
+      "max_steps": 10
+    }
+  },
+  "expected_output": "{\n  \"summary\": \"This report outlines considerations and assumptions necessary for creating a comprehensive release checklist for version 1.2.0.\",\n  \"considerations\": [\n    \"Identify all components of the software that need to be tested or verified before release.\",\n    \"Determine the testing procedures required for each component, including unit tests, integration tests, and user acceptance testing (UAT).\",\n    \"Consider documentation requirements, such as updating user manuals and API docs if necessary.\",\n    \"Include steps for creating a backup of current production data/environment prior to deployment.\",\n    \"Ensure that rollback plans are in place in case the release does not go smoothly.\",\n    \"Outline communication strategies for announcing the new version to stakeholders and end-users.\",\n    \"Plan for post-release monitoring and support, including logging bug reports and addressing critical issues promptly.\"\n  ],\n  \"assumptions\": [\n    \"There is a clear understanding of what constitutes version 1.2.0 in terms of features, fixes, and enhancements over the previous version.\",\n    \"The existing development and testing environments are stable and ready to support the release process.\",\n    \"Sufficient resources (developers, testers, documenters) are available to complete all tasks listed in the checklist.\",\n    \"All stakeholders involved in the release process (development team, QA, product management, customer support) have agreed on timelines and responsibilities.\"\n  ]\n}",
+  "output_schema_fqn": "ai_workflows.workflows.planner.ExplorerReport",
+  "tolerance": {
+    "mode": "strict_json",
+    "field_overrides": {
+      "summary": "substring"
+    }
+  },
+  "captured_at": "2026-04-21T16:13:40.602007Z",
+  "captured_from_run_id": "eval-seed-planner",
+  "metadata": {}
+}

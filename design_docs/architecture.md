@@ -40,20 +40,21 @@ The existing `primitives` / `components` / `workflows` import-linter contract is
 
 ```bash
 surfaces        (ai_workflows.cli, ai_workflows.mcp)
-    ↓
-workflows       (ai_workflows.workflows.*)        — concrete LangGraph StateGraphs
-    ↓
-graph           (ai_workflows.graph.*)            — LangGraph adapters over primitives
-    ↓
-primitives      (ai_workflows.primitives.*)       — storage, cost, tiers, providers, retry, logging
+    ↓                                       ↘
+workflows       (ai_workflows.workflows.*)   → evals (ai_workflows.evals.*)
+    ↓                                           ↓
+graph           (ai_workflows.graph.*)         (replay reaches back into workflows
+    ↓                                           to extract StateNodeSpec.runnable;
+primitives      (ai_workflows.primitives.*)    graph stays evals-unaware)
 ```
 
-- `primitives` imports nothing from `graph` / `workflows` / `surfaces`.
-- `graph` imports only `primitives`.
-- `workflows` imports `graph` + `primitives`.
-- `surfaces` import `workflows` + `primitives`.
+- `primitives` imports nothing from `graph` / `workflows` / `surfaces` / `evals`.
+- `graph` imports only `primitives`. **`graph → evals` is forbidden** (graph is evals-unaware; capture is wired in duck-typed through `config.configurable["eval_capture_callback"]`). Enforced by `tests/evals/test_layer_contract.py` AST grep alongside the import-linter contracts.
+- `workflows` imports `graph` + `primitives`, and **may import `evals`** (`_dispatch` constructs `CaptureCallback` at opt-in time when `AIW_CAPTURE_EVALS` is set).
+- `evals` imports `primitives` + `graph` + `workflows` — the replay runner needs `StateNodeSpec.runnable` + `StateGraph.state_schema` to construct single-node replay graphs. **`evals → surfaces` is forbidden** (the fourth import-linter contract).
+- `surfaces` import `workflows` + `primitives` + `evals` (the `aiw eval` subcommands dispatch into `EvalRunner`).
 
-Enforced by `import-linter`. The `components/` layer from the archived design is collapsed into `graph/` — the old `Worker` / `Validator` / `Fanout` / `Pipeline` components become LangGraph node *patterns*, not stand-alone classes.
+Enforced by **four** `import-linter` contracts plus the `graph → evals` AST test. The `components/` layer from the archived design is collapsed into `graph/` — the old `Worker` / `Validator` / `Fanout` / `Pipeline` components become LangGraph node *patterns*, not stand-alone classes. The `evals` layer is described in §4.5.
 
 ## 4. Components
 
@@ -103,6 +104,23 @@ Workflows are registered by name; the registry is how surfaces reach them.
   The originally-paired `get_cost_report(run_id) → CostReport` tool was dropped at M4 kickoff (2026-04-20) on the same reasoning as the CLI's `aiw cost-report` (M3 T06 reframe): the by-X breakdowns drive zero decisions under the current subscription-billing provider set, and the total-only scalar is already surfaced by `list_runs`. See [nice_to_have.md §9](nice_to_have.md) for the three adoption triggers that would promote a dedicated cost-report tool back in.
   Schema-first: pydantic models define every input and output. This is the public contract for every host. (KDR-008.)
 - **Claude Code skill** (optional, late addition) — `.claude/skills/ai-workflows/SKILL.md` that shells out to `aiw` or calls the MCP server. Packaging-only; no logic.
+
+### 4.5 Evals layer (new — prompt-regression harness, M7)
+
+Peer of the `graph` layer: consumed by `workflows` (capture) and `surfaces` (replay), never by `graph` itself. Landed at M7; see [phases/milestone_7_evals/](phases/milestone_7_evals/README.md).
+
+| Module | Role |
+| --- | --- |
+| `EvalCase` / `EvalSuite` / `EvalTolerance` (pydantic v2, bare-typed per KDR-010) | On-disk fixture schema. One JSON file per LLM-node call under `evals/<workflow>/<node>/<case_id>.json`. |
+| `save_case` / `load_case` / `load_suite` / `fixture_path` | Filesystem helpers; default root `evals/` overridable by `AIW_EVALS_ROOT`. |
+| `CaptureCallback` | Opt-in production instrumentation. `TieredNode` invokes it duck-typed after `CostTrackingCallback` when `config.configurable["eval_capture_callback"]` is set. `_dispatch.run_workflow` / `_dispatch.resume_run` construct it when `AIW_CAPTURE_EVALS=<dataset>` is set (or an explicit `capture_evals` override is threaded). Swallows its own exceptions (WARN log) so a broken capture never breaks a live run. |
+| `EvalRunner` | Replay engine. Two modes: **deterministic** (default, CI-gated) swaps every tier to a `StubLLMAdapter` that returns captured output verbatim — exercises prompt-template rendering + validator schema parsing + graph wiring without any provider call. **Live** (opt-in via `AIW_EVAL_LIVE=1` + `AIW_E2E=1` double-gate) re-fires the captured inputs against real providers and grades against the pinned expected output with per-case `EvalTolerance`. |
+| `_compare` | Tolerance dispatch: `strict_json` (full schema-parsed equality + unified diff on mismatch), `substring`, `regex`; per-field `field_overrides`. |
+| `_capture_cli` (internal to the CLI surface) | `aiw eval capture` helper — reconstructs fixtures from `AsyncSqliteSaver.aget(cfg).channel_values` on a completed run. Zero provider calls. |
+
+**Replay-runner sub-graph resolution.** `EvalRunner` walks each top-level runnable's `.builder` attribute (present on `CompiledStateGraph`) to find LLM nodes wired inside compiled sub-graphs (e.g. `slice_refactor` wraps `slice_worker` + `slice_worker_validator` in the `slice_branch` sub-graph). The replay graph is constructed against the enclosing graph's `state_schema`, so reverse-hydration of pydantic leaves uses the right TypedDict.
+
+**CI surface.** The `eval-replay` GitHub Actions job (gated on paths `ai_workflows/workflows/**`, `ai_workflows/graph/**`, `evals/**`) runs `uv run aiw eval run planner` + `uv run aiw eval run slice_refactor` in deterministic mode on every PR touching those paths. Live mode stays manual / nightly.
 
 ## 5. Runtime data flow
 

@@ -272,6 +272,114 @@ None of these have a non-test caller today. Every production code path (budget c
 
 ---
 
+## 13. Register pydantic models with LangGraph's msgpack type registry (or move to JSON-mode checkpointing)
+
+**Role:** Eliminate the `Deserializing unregistered type ai_workflows.workflows.planner.PlannerInput / ExplorerReport / PlannerPlan / SliceSpec / SliceResult / SliceAggregate from checkpoint` warnings LangGraph emits during capture + resume paths. Two implementation options:
+
+1. Register each checkpoint-persisted pydantic model with LangGraph's msgpack type registry at module-import time, so the serializer round-trips them with stable IDs.
+2. Switch the checkpoint write path to `model_dump(mode="json")` before handoff to LangGraph's serializer — trades compactness for schema-stable text.
+
+**Replaces / subsumes:**
+
+- Nothing functional today. The warnings are advisory under the current LangGraph release — deserialization still succeeds. But a future LangGraph version is expected to block unregistered types at read time, which would break resume of any checkpoint written before that version.
+
+**Adds:**
+
+- Option 1: a registry-setup module imported once at `ai_workflows.workflows` init, touching every model that flows through LangGraph state.
+- Option 2: a small adapter in the `TieredNode` / state-update path that rewrites pydantic instances to JSON dicts before state commit.
+
+**Trigger to adopt** — any one of:
+
+- A LangGraph minor release promotes the warning to an error (tracked via their CHANGELOG; verifiable by running the M7 capture path against the new release).
+- A resume path fails in production with a deserialization error that traces back to one of the pydantic classes enumerated above.
+- Any milestone whose tests would benefit from warning-free stderr output for readability (e.g. a future eval harness extension that diffs log stream shape across runs).
+
+**Why not now:** the warnings are cosmetic on the current LangGraph version and adopting either fix before LangGraph forces the issue risks committing to an API that moves. The M7 capture + deterministic replay paths round-trip these classes today without functional incident. Tracked as a forward-looking maintenance item rather than a feature-wish.
+
+**Related history:** surfaced during M7 T05 `slice_refactor` seed capture (run `eval-seed-slice2`); logged as M7-T05-ISS-06 in [phases/milestone_7_evals/issues/task_05_issue.md](phases/milestone_7_evals/issues/task_05_issue.md); deferred to this entry at M7 T06 close-out (2026-04-21) per the "No code change beyond docs" close-out discipline.
+
+---
+
+## 14. Promote live-mode eval replay to a nightly or manual-PR-annotated CI job + tolerance refinement
+
+**Role:** Turn the `aiw eval run <workflow> --live` path from "manual opt-in" into a signal-producing automation. Today it is double-gated (`AIW_EVAL_LIVE=1` + `AIW_E2E=1`) and only exercised at milestone close-out; the current committed fixtures fail every live case because `strict_json` + full-sentence `field_overrides={"summary": "substring"}` tolerance is too strict to survive minor model-phrasing drift.
+
+**Replaces / subsumes:**
+
+- The manual "close-out-time live replay baseline" ritual recorded in CHANGELOG at each milestone close.
+- Nothing in deterministic CI (the deterministic `eval-replay` job landed at M7 T05 stays unchanged — this item only moves live mode out of manual-only status).
+
+**Adds:**
+
+- Tolerance refinement work across the seed fixtures: replace full-sentence captured substrings with short distinctive keywords (e.g. `"release checklist"`, `"v1.2.0"`, `"def add"`) so live comparisons produce signal rather than noise from phrasing drift. Each fixture needs per-field analysis.
+- A nightly or label-triggered GitHub Actions job (scheduled cron or `workflow_dispatch` + PR label) that runs `AIW_E2E=1 AIW_EVAL_LIVE=1 uv run aiw eval run planner --live` + `... slice_refactor --live`. Secrets wiring (`GEMINI_API_KEY`), Ollama runtime in CI, and a flake-rate policy (live output varies more than deterministic).
+- A drift-triage workflow when the live job fails: is the failure (a) genuine model-side regression, (b) phrasing drift below the threshold, or (c) tolerance mis-spec.
+
+**Trigger to adopt** — any one of:
+
+- **A prompt-regression incident** that deterministic replay missed but live replay would have caught — makes the cost of running live mode automatically worth paying.
+- **A second LLM-node-bearing workflow** beyond `planner` + `slice_refactor` where per-node model-side drift would bite before the next manual close-out.
+- **Provider-side changes** that land without advance notice often enough that a trailing signal becomes valuable (e.g. Gemini Flash retraining, Claude Code model upgrades).
+
+**Why not now:** at close-out time (M7 T06, 2026-04-21) the live replay was recorded once as a baseline — `planner` 0/2 live-fail, `slice_refactor` 0/1 live-fail, all model-phrasing drift below what the current substring tolerance tolerates. The deterministic CI gate (2/2 + 1/1 pass) is the one that protects PRs; live mode today is a diagnostic, not a gate. Automating it without refining tolerances would green-flag wall-of-noise failures, drowning real signal. Deferring both the automation and the tolerance tune until a concrete drift incident demonstrates the need.
+
+**Related history:** live-replay baseline recorded in CHANGELOG at M7 T06 close-out (2026-04-21).
+
+---
+
+## 15. Expose eval-harness tools on the MCP surface (parity with `aiw eval capture` / `aiw eval run`)
+
+**Role:** Add `capture_eval_dataset(run_id, dataset)` + `run_eval(workflow_id, dataset?, live?)` tools to [`ai_workflows/mcp/server.py`](../ai_workflows/mcp/server.py) so agents driving the workflow inside-out have the same replay + capture hooks that the CLI now exposes. KDR-002 ("CLI and MCP are peers"): the asymmetry is today's dev-loop shape — the harness is a Builder / Auditor tool, not a workflow-client one — but a host-authored agent that wanted to run a regression replay after a live run finished has no surface to call.
+
+**Replaces / subsumes:**
+
+- Nothing functional today. The CLI paths (`aiw eval capture --run-id ... --dataset ...` in [`ai_workflows/cli.py`](../ai_workflows/cli.py)) already cover the full capture + replay loop. No MCP consumer has asked.
+
+**Adds:**
+
+- Two new FastMCP tools in [`ai_workflows/mcp/server.py`](../ai_workflows/mcp/server.py), pydantic-typed I/O per KDR-008, routed through `_capture_cli` + `EvalRunner` the CLI already uses (no new dispatch helper — these are read-side + stub-adapter-replay-side calls that don't need [`_dispatch.py`](../ai_workflows/workflows/_dispatch.py)).
+- Corresponding schemas under [`ai_workflows/mcp/schemas.py`](../ai_workflows/mcp/schemas.py).
+- MCP smoke coverage (same always-run hermetic style as M4 T07's four-tool smoke).
+- An architecture.md §4.4 line acknowledging the dev-loop boundary (either documenting the intentional asymmetry, or — if promoted — folding the new tools into the §4.4 table).
+
+**Trigger to adopt** — any one of:
+
+- **A second host consumer** beyond Claude Code lands (a web agent, a scheduled MCP job, a skill that wants to replay after a user-driven run) — at that point the CLI-only hook forces a subprocess shell-out from inside an MCP tool, which is worse than exposing the surface natively.
+- **A nightly automation workflow** (see §14) gets built. If live-replay moves from "manual close-out ritual" to "scheduled automation that needs to be triggered from a CI-adjacent surface", doing it through MCP-tool calls from an orchestrator is cleaner than CLI-in-shell.
+- **Eval-as-gate semantics** emerge — e.g. a workflow run that won't close without a passing replay against its own fresh capture. That forces the harness into the inside-out call path.
+
+**Why not now:** M7 evals are a dev-loop concern — Builders capture, Auditors review, CI replays on PR. No inside-out consumer exists today, and the CLI covers every real workflow. Exposing the MCP surface without a consumer costs two tool surfaces + their test + their schema + their doc line, in exchange for nothing concrete. The CLI path stays authoritative; MCP parity is deferred until a real caller appears.
+
+**Related history:** surfaced in the 2026-04-21 M7 post-milestone deep drift-check — no audit issue filed, tracked here as a forward-looking cleanup option. Mirrors the [§12](#12-promote-read-only-mcp-tools-list_runs-cancel_run-to-_dispatch) shape from the M4 post-milestone drift-check.
+
+---
+
+## 16. Centralise env-var documentation in one reference table
+
+**Role:** Collect every `AIW_*` environment variable the project reads into a single discoverable table — either an `## Environment variables` section in [`design_docs/architecture.md`](architecture.md) (preferred — architecture.md is the grounding doc every Builder opens) or a standalone `design_docs/env_vars.md`. Today the env-vars are documented at their use sites (module docstrings, task files, test gates), which is accurate but non-discoverable.
+
+**Replaces / subsumes:**
+
+- The scattered references: `AIW_CAPTURE_EVALS` is documented in [`ai_workflows/evals/capture_callback.py`](../ai_workflows/evals/capture_callback.py) + [`ai_workflows/workflows/_dispatch.py`](../ai_workflows/workflows/_dispatch.py); `AIW_EVAL_LIVE` in [`ai_workflows/evals/runner.py`](../ai_workflows/evals/runner.py); `AIW_EVALS_ROOT` in [`ai_workflows/evals/storage.py`](../ai_workflows/evals/storage.py); `AIW_STORAGE_DB` + `AIW_CHECKPOINT_DB` in the primitives layer; `AIW_E2E` in the `tests/e2e/` gate plumbing; `GEMINI_API_KEY` in the provider tier config. Seven variables, zero single-reference point.
+
+**Adds:**
+
+- One markdown table: `Variable | Purpose | Read by | Default behaviour when unset | First introduced (milestone)`.
+- A convention note: new Builders who add an env-var are expected to update the table in the same PR.
+- Optional: a `tests/test_env_vars_documented.py` that greps for `os.environ[...]` / `os.getenv(...)` in `ai_workflows/**` and asserts each variable appears in the table. Low value today, high value once the table exists.
+
+**Trigger to adopt** — any one of:
+
+- **A third contributor joins the project.** The single-maintainer case today makes site-local docstrings sufficient; a second human without the author's mental model is the first person who actually needs a central reference.
+- **An env-var collision or footgun incident** — e.g. a Builder lands a new `AIW_FOO` that silently overrides an existing one, or a test leaks an env-var into a later test module. The postmortem would call for exactly this table.
+- **A packaging / distribution step** (container image, standalone binary, Claude Code skill packaging per [roadmap.md M9](roadmap.md)) — any external-facing artifact needs the env-var surface enumerated for the user reading a `docker run ... -e AIW_FOO=bar` line.
+
+**Why not now:** single-maintainer project with ~7 env-vars, all documented at their use sites. Grepping for `AIW_` across the repo finds every one. Adding a table now is ceremony without a consumer, and the table would silently rot unless a test enforces it. Deferred until a forcing function appears.
+
+**Related history:** surfaced in the 2026-04-21 M7 post-milestone deep drift-check — the `AIW_CAPTURE_EVALS` + `AIW_EVAL_LIVE` + `AIW_EVALS_ROOT` additions brought the total to ~7 env-vars spread across ~28 files. No audit issue filed.
+
+---
+
 ## Revisit cadence
 
 Re-read this file:

@@ -50,6 +50,44 @@ jobs:
             exit 1
           fi
 
+  # Deterministic eval replay — fires on PRs that touch the three
+  # directories the M7 harness guards. Uses dorny/paths-filter so the
+  # `changes` output drives the job skip/run decision (GitHub Actions'
+  # native `paths:` keyword is evaluated at workflow-file level, which
+  # would skip the whole CI run — we want the `test` / `secret-scan`
+  # jobs to always fire, and only gate this one job). Pushes to main
+  # always run the replay (no PR context to filter on).
+  # See `design_docs/phases/milestone_7_evals/task_05_ci_hookup_seed_fixtures.md`.
+  eval-replay:
+    name: Eval replay (deterministic)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect relevant changes
+        id: paths
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            relevant:
+              - 'ai_workflows/workflows/**'
+              - 'ai_workflows/graph/**'
+              - 'evals/**'
+      - name: Install uv
+        if: steps.paths.outputs.relevant == 'true' || github.event_name == 'push'
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        if: steps.paths.outputs.relevant == 'true' || github.event_name == 'push'
+        run: uv sync --all-extras
+      - name: Run planner eval suite
+        if: steps.paths.outputs.relevant == 'true' || github.event_name == 'push'
+        run: uv run aiw eval run planner
+      - name: Run slice_refactor eval suite
+        if: steps.paths.outputs.relevant == 'true' || github.event_name == 'push'
+        run: uv run aiw eval run slice_refactor
+
   # Manual-trigger-only end-to-end smoke test. Hits real Gemini via
   # LiteLLM (planner workflow) so we gate it behind `workflow_dispatch`
   # — per-PR runs would burn quota for no benefit. `AIW_E2E=1` flips
