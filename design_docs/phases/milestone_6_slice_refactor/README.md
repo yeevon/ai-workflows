@@ -53,8 +53,8 @@ Land under [issues/](issues/).
 
 ## Carry-over from prior milestones
 
-- [ ] **M4 T05 — in-flight `cancel_run` (MEDIUM, owner: M6 — natural fit: task 02 parallel slice-worker, or a dedicated cancellation task if the wiring grows).**
-  M4 ships `cancel_run` as a storage-level flip only ([architecture.md §8.7](../../architecture.md) — covers the "cancel a paused-at-gate run" case, which is the dominant planner use). M6 is the first milestone where a run's in-flight wall-clock time (parallel per-slice workers, minutes-not-seconds) makes mid-run abort a real UX requirement. Scope when M6 opens:
+- [ ] **M4 T05 — in-flight `cancel_run` (MEDIUM, owner: [task 02](task_02_parallel_slice_worker.md)).**
+  M4 ships `cancel_run` as a storage-level flip only ([architecture.md §8.7](../../architecture.md) — covers the "cancel a paused-at-gate run" case, which is the dominant planner use). M6 is the first milestone where a run's in-flight wall-clock time (parallel per-slice workers, minutes-not-seconds) makes mid-run abort a real UX requirement. [Task 02](task_02_parallel_slice_worker.md) owns the wiring because the compile flag + task-registry + subgraph-cancellation guards sit on the same code path as the parallel fan-out. Scope landed there:
   - MCP server holds a process-local `dict[run_id, asyncio.Task]` for active runs; `cancel_run` looks the task up and calls `task.cancel()` alongside the existing storage status flip.
   - Compiled graph runs with `durability="sync"` so the last-completed-step checkpoint is on disk before the `CancelledError` propagates.
   - Verify subgraph cancellation against [langgraph#5682](https://github.com/langchain-ai/langgraph/issues/5682) — the parent-cancels-but-subgraph-ReAct-keeps-running case; `slice_refactor` composes the `planner` sub-graph so this path is live.
