@@ -31,14 +31,20 @@ Harden the Qwen/Ollama provider path now that M5/M6 make it load-bearing. Health
 
 | # | Task |
 | --- | --- |
-| 01 | `OllamaHealthCheck` module (probe + periodic scheduler) |
-| 02 | `CircuitBreaker` primitive (N-failure trip + cooldown) |
-| 03 | Fallback `HumanGate` wiring (retry / fallback-tier / abort) |
-| 04 | Integration with `TieredNode` for `local_coder`-routed tiers |
-| 05 | End-to-end degraded-mode test (simulated outage) |
-| 06 | Milestone close-out |
+| 01 | [`OllamaHealthCheck` probe primitive](task_01_health_check.md) |
+| 02 | [`CircuitBreaker` primitive (N-failure trip + cooldown)](task_02_circuit_breaker.md) |
+| 03 | [Fallback `HumanGate` wiring (retry / fallback-tier / abort)](task_03_fallback_gate.md) |
+| 04 | [Integration with `TieredNode` + workflow fallback edges](task_04_tiered_node_integration.md) |
+| 05 | [Degraded-mode end-to-end test](task_05_degraded_mode_e2e.md) |
+| 06 | [Milestone close-out](task_06_milestone_closeout.md) |
 
-Per-task files generated once M7 closes (or if promoted earlier).
+Task files landed 2026-04-21 after M7 close. The README stub's periodic
+health-check language is **reframed at T01**: the primary mid-run
+health signal is per-call failure classified through the existing
+three-bucket taxonomy (KDR-006); the `probe_ollama` primitive is a
+one-shot diagnostic tool, not a scheduled poller. Periodic polling
+stays out of scope unless a future milestone surfaces an operational
+need — recorded at T01's *Out of scope* section.
 
 ## Issues
 
