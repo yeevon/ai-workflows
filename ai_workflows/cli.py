@@ -82,12 +82,11 @@ def _root() -> None:
     """ai-workflows CLI.
 
     Kept as an empty callback so Typer treats ``aiw`` as a
-    multi-command app. Commands removed by M1 Task 11 are being
-    reintroduced across M3: ``run`` (T04), ``resume`` (T05),
-    ``list-runs`` (T06). The T06 spec originally also paired
-    ``cost-report``; that half was dropped at reframe (2026-04-20) and
-    deferred to ``nice_to_have.md §9``. ``TODO(M4)`` pointers at the
-    bottom of this module name the MCP mirrors.
+    multi-command app. Commands revived across M3: ``run`` (T04),
+    ``resume`` (T05), ``list-runs`` (T06). The T06 spec originally
+    also paired ``cost-report``; that half was dropped at reframe
+    (2026-04-20) and deferred to ``nice_to_have.md §9``. The MCP
+    mirrors of these commands landed in M4 (`ai_workflows.mcp`).
     """
 
 
@@ -468,12 +467,6 @@ def _emit_list_runs_table(rows: list[dict[str, Any]]) -> None:
     typer.echo(_fmt(headers))
     for tup in formatted:
         typer.echo(_fmt(tup))
-
-
-# TODO(M4): mirror `run` / `resume` / `list-runs` as FastMCP tools
-#   under ``ai_workflows.mcp`` (architecture.md §4.4, KDR-002,
-#   KDR-008). `cost-report` is deferred to ``nice_to_have.md §9`` — see
-#   that entry for the triggers that would justify promoting it.
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation only

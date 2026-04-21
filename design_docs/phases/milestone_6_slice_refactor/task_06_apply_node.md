@@ -62,3 +62,7 @@ async def apply(state: SliceRefactorState, config: RunnableConfig) -> dict[str, 
 - [Task 04](task_04_aggregator.md) — `SliceAggregate` populated in state.
 - [Task 05](task_05_strict_review_gate.md) — gate routes to `apply` (approve) or END (reject).
 - M1 / M3 `Storage.write_artifact` helper already exists (verify signature in Builder's first read).
+
+## Carry-over from prior audits
+
+- [x] **T01-CARRY-DISPATCH-COMPLETE** (MEDIUM, from T01 Builder-phase scope review 2026-04-20): ✅ RESOLVED in T06 Builder — each workflow module publishes a `FINAL_STATE_KEY` constant (planner → `"plan"`, slice_refactor → `"applied_artifact_count"`). Dispatch's `_build_result_from_final` + `_build_resume_result_from_final` read the key via the new `_resolve_final_state_key` helper (defaults to `"plan"` for legacy modules, so the planner regression is preserved). Approved slice_refactor runs flip to `status="completed"` with `finished_at` auto-stamped by `SQLiteStorage.update_run_status`. Test coverage: `tests/workflows/test_slice_refactor_apply.py::test_dispatch_flips_status_completed_with_finished_at_for_slice_refactor` + `::test_dispatch_planner_completion_path_preserved` + `::test_final_state_key_defaults_to_plan_for_legacy_modules`.

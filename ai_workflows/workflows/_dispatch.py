@@ -14,6 +14,20 @@ Surfaces reformat / re-wrap this dict into whatever their transport
 wants (``typer.echo`` lines for the CLI, a :class:`RunWorkflowOutput`
 pydantic model for the MCP tool).
 
+``ainvoke`` is always called with ``durability="sync"`` so the
+last-completed-step checkpoint hits SQLite before a
+:class:`asyncio.CancelledError` can unwind the run (the M6 T02
+in-flight ``cancel_run`` → immediate resume path depends on this
+guarantee). The flag is a no-op for workflows that never get
+cancelled mid-graph (e.g. ``planner``, which spends virtually all
+of its wall time paused at a ``HumanGate``) — sync durability only
+changes behaviour when the task is actively computing across a
+checkpoint boundary. The T02 task spec placed ``durability`` on
+:meth:`StateGraph.compile`, but LangGraph exposes it on
+:meth:`CompiledStateGraph.ainvoke` instead (verified via
+``inspect.signature``); threading at the invoke boundary is the
+equivalent wiring.
+
 Placed in the ``workflows`` layer (not under ``mcp/``) because the
 helper is fundamentally workflow-running orchestration — both surfaces
 sit above it and neither owns it. Import-linter allows this: surfaces
@@ -40,6 +54,7 @@ Relationship to other modules
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import importlib
 import secrets
@@ -55,6 +70,7 @@ from ai_workflows.graph.cost_callback import CostTrackingCallback
 from ai_workflows.primitives.cost import CostTracker, TokenUsage
 from ai_workflows.primitives.retry import NonRetryable
 from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path
+from ai_workflows.primitives.tiers import TierConfig
 
 __all__ = [
     "ResumePreconditionError",
@@ -208,6 +224,41 @@ def _resolve_tier_registry(workflow: str, module: Any) -> dict:
     return helper()
 
 
+def _resolve_terminal_gate_id(module: Any) -> str | None:
+    """Return the ``TERMINAL_GATE_ID`` constant a workflow module exposes.
+
+    The constant names the gate id the workflow pauses at for its
+    terminal human approval (``"plan_review"`` for the planner,
+    ``"slice_refactor_review"`` for slice_refactor). Dispatch reads the
+    resumed response from ``state[f"gate_{TERMINAL_GATE_ID}_response"]``
+    when deciding approve/reject at resume time.
+
+    Returns ``None`` for workflows that don't publish the constant
+    (future workflows with no strict-review gate, or legacy workflows
+    written before the M6 T01-CARRY-DISPATCH-GATE convention). Dispatch
+    then falls back to the ``gate_response`` parameter the caller passed
+    — correct as long as the workflow has at most one terminal gate.
+    """
+    return getattr(module, "TERMINAL_GATE_ID", None)
+
+
+def _resolve_final_state_key(module: Any) -> str:
+    """Return the ``FINAL_STATE_KEY`` constant a workflow module exposes (T06).
+
+    Names the state key dispatch reads to decide whether a graph reached
+    its terminal artefact-persistence step. For the planner that key is
+    ``"plan"`` (the approved :class:`PlannerPlan` the artifact node
+    writes); for slice_refactor it is ``"applied_artifact_count"`` (the
+    count :func:`slice_refactor._apply` returns). Missing constants fall
+    back to ``"plan"`` so legacy workflows written before the M6
+    T01-CARRY-DISPATCH-COMPLETE convention still complete. Dispatch
+    checks ``state[FINAL_STATE_KEY] is not None`` — a ``0`` integer
+    (zero-success aggregate that the reviewer approved anyway for its
+    audit trail) still satisfies the check.
+    """
+    return getattr(module, "FINAL_STATE_KEY", "plan")
+
+
 def _build_initial_state(
     module: Any,
     run_id: str,
@@ -215,18 +266,58 @@ def _build_initial_state(
 ) -> dict[str, Any]:
     """Construct the workflow's initial state dict.
 
-    Looks up the workflow module's ``*Input`` schema by convention
-    (planner → ``PlannerInput``) and instantiates it from ``inputs``.
-    Matches the CLI's prior behaviour — the CLI formerly unpacked
-    ``goal`` / ``context`` / ``max_steps`` into those exact keys of
-    ``PlannerInput``.
+    Resolution order (M6 T01):
+
+    1. If the workflow module exposes a callable ``initial_state(run_id,
+       inputs) -> dict``, call it. This is the **convention hook** that
+       lets workflows whose initial state is not a simple ``PlannerInput``
+       participate in shared dispatch without dispatch knowing their
+       Input schema name.
+    2. Otherwise fall back to the legacy path: look up ``PlannerInput``
+       by name and instantiate from ``inputs`` — unchanged for the
+       planner workflow so M3's surface behaviour is identical.
+
+    The hook form lets slice_refactor (M6 T01) supply an initial state
+    whose ``input`` channel is a :class:`PlannerInput` constructed from a
+    caller-supplied :class:`SliceRefactorInput`, without dispatch
+    hardcoding either class name. Future workflows follow the same
+    pattern.
     """
+    hook = getattr(module, "initial_state", None)
+    if callable(hook):
+        return hook(run_id, inputs)
     input_cls = getattr(module, "PlannerInput", None)
     if input_cls is None:
         raise ValueError(f"workflow {module.__name__!r} exposes no Input schema")
     return {
         "run_id": run_id,
         "input": input_cls(**inputs),
+    }
+
+
+def _build_semaphores(
+    tier_registry: dict[str, TierConfig],
+) -> dict[str, asyncio.Semaphore]:
+    """Build one :class:`asyncio.Semaphore` per tier from the run's registry (M6 T07).
+
+    Each tier's ``TierConfig.max_concurrency`` bounds the number of
+    in-flight provider calls dispatched through :func:`tiered_node`'s
+    ``configurable["semaphores"]`` lookup. The semaphore is keyed by
+    tier name so every :class:`TieredNode` invocation against the same
+    tier — including all fan-out branches that share a tier under
+    :class:`langgraph.types.Send` — acquires the same lock. Implements
+    architecture.md §8.6 ("per-tier concurrency semaphore") at the one
+    seam where a run's tier registry is known: the dispatch boundary.
+
+    Semaphores are **per-run, process-local**: one fresh dict per
+    dispatched workflow. Two concurrent runs (e.g. two
+    ``aiw run slice_refactor`` invocations) see independent
+    semaphores, which matches the "process-local" clause in the spec
+    and avoids cross-run queueing that would misattribute latency.
+    """
+    return {
+        name: asyncio.Semaphore(config.max_concurrency)
+        for name, config in tier_registry.items()
     }
 
 
@@ -243,6 +334,13 @@ def _build_cfg(
     Lifts the helper formerly in :mod:`ai_workflows.cli`. ``thread_id``
     and ``run_id`` are kept identical per KDR-009 so the checkpointer's
     thread matches the Storage run id.
+
+    M6 T07 threads a per-tier :class:`asyncio.Semaphore` dict built
+    from the tier registry's ``max_concurrency`` budgets. The semaphore
+    dict rides ``configurable["semaphores"]`` so :func:`tiered_node`'s
+    existing acquisition path (`graph/tiered_node.py`) enforces the cap
+    at the provider-call boundary, independent of graph topology (spec
+    AC-1).
     """
     return {
         "configurable": {
@@ -252,6 +350,7 @@ def _build_cfg(
             "cost_callback": callback,
             "storage": storage,
             "workflow": workflow,
+            "semaphores": _build_semaphores(tier_registry),
         }
     }
 
@@ -327,6 +426,7 @@ async def run_workflow(
     base_registry = _resolve_tier_registry(workflow, workflow_module)
     tier_registry = _apply_tier_overrides(base_registry, tier_overrides)
     initial_state = _build_initial_state(workflow_module, run_id_resolved, inputs)
+    final_state_key = _resolve_final_state_key(workflow_module)
 
     storage = await SQLiteStorage.open(default_storage_path())
     checkpointer = await build_async_checkpointer()
@@ -348,7 +448,9 @@ async def run_workflow(
         await storage.create_run(run_id_resolved, workflow, budget_cap_usd)
 
         try:
-            final = await compiled.ainvoke(initial_state, cfg)
+            final = await compiled.ainvoke(
+                initial_state, cfg, durability="sync"
+            )
         except Exception as exc:  # noqa: BLE001 — surface-boundary catch
             error_msg = await _extract_error_message(compiled, cfg, exc)
             return {
@@ -363,6 +465,7 @@ async def run_workflow(
         return await _build_result_from_final(
             final=final,
             run_id=run_id_resolved,
+            final_state_key=final_state_key,
             tracker=tracker,
             storage=storage,
         )
@@ -374,20 +477,29 @@ async def _build_result_from_final(
     *,
     final: dict[str, Any],
     run_id: str,
+    final_state_key: str,
     tracker: CostTracker,
     storage: SQLiteStorage,
 ) -> dict[str, Any]:
     """Translate the graph's terminal state into the shared result dict.
 
-    Three branches:
+    Four branches:
 
     * ``__interrupt__`` in state → HumanGate pause. Stamp
       ``runs.total_cost_usd`` so ``aiw resume`` / ``resume_run`` can
       reseed the cost tracker, and return ``status="pending"`` +
       ``awaiting="gate"``.
-    * ``plan`` in state → terminal completion. Return
-      ``status="completed"`` with the plan dumped to a plain dict for
-      transport.
+    * ``state["hard_stop_failing_slice_ids"]`` populated → double-failure
+      hard-stop fired upstream of the aggregator (M6 T07,
+      architecture.md §8.2). Flip ``runs.status`` to ``"aborted"`` with
+      ``finished_at`` and return ``status="aborted"`` with a
+      descriptive ``error`` enumerating the failing slice ids.
+    * ``state[final_state_key]`` is not ``None`` → terminal completion.
+      ``final_state_key`` is the workflow's :data:`FINAL_STATE_KEY`
+      constant (``"plan"`` for planner, ``"applied_artifact_count"`` for
+      slice_refactor — M6 T06 resolves T01-CARRY-DISPATCH-COMPLETE).
+      Return ``status="completed"`` with the plan dumped to a plain
+      dict for transport when the workflow produces one.
     * Otherwise — the graph finished with neither outcome (usually a
       captured ``NonRetryable`` sitting in ``state["last_exception"]``).
       Return ``status="errored"`` with a descriptive error string so the
@@ -406,9 +518,34 @@ async def _build_result_from_final(
             "error": None,
         }
 
-    plan = final.get("plan")
-    if plan is not None:
-        plan_dump = plan.model_dump() if hasattr(plan, "model_dump") else dict(plan)
+    failing_ids = final.get("hard_stop_failing_slice_ids")
+    if failing_ids:
+        finished_at = datetime.now(UTC).isoformat()
+        await storage.update_run_status(
+            run_id,
+            "aborted",
+            finished_at=finished_at,
+            total_cost_usd=total,
+        )
+        return {
+            "run_id": run_id,
+            "status": "aborted",
+            "awaiting": None,
+            "plan": None,
+            "total_cost_usd": total,
+            "error": (
+                "hard-stop: double-failure threshold reached "
+                f"({len(failing_ids)} slices failed non-retryably: "
+                f"{', '.join(failing_ids)})"
+            ),
+        }
+
+    if final.get(final_state_key) is not None:
+        plan = final.get("plan")
+        plan_dump = (
+            plan.model_dump() if hasattr(plan, "model_dump")
+            else (dict(plan) if plan else None)
+        )
         return {
             "run_id": run_id,
             "status": "completed",
@@ -482,6 +619,8 @@ async def resume_run(
     workflow_module = _import_workflow_module(workflow)
     builder = workflows.get(workflow)
     tier_registry = _resolve_tier_registry(workflow, workflow_module)
+    terminal_gate_id = _resolve_terminal_gate_id(workflow_module)
+    final_state_key = _resolve_final_state_key(workflow_module)
 
     tracker = CostTracker()
     if stored_cost > 0:
@@ -513,7 +652,9 @@ async def resume_run(
         )
 
         try:
-            final = await compiled.ainvoke(Command(resume=gate_response), cfg)
+            final = await compiled.ainvoke(
+                Command(resume=gate_response), cfg, durability="sync"
+            )
         except Exception as exc:  # noqa: BLE001 — surface-boundary catch
             error_msg = await _extract_error_message(compiled, cfg, exc)
             return {
@@ -528,6 +669,8 @@ async def resume_run(
             final=final,
             run_id=run_id,
             gate_response=gate_response,
+            terminal_gate_id=terminal_gate_id,
+            final_state_key=final_state_key,
             tracker=tracker,
             storage=storage,
         )
@@ -540,6 +683,8 @@ async def _build_resume_result_from_final(
     final: dict[str, Any],
     run_id: str,
     gate_response: str,
+    terminal_gate_id: str | None,
+    final_state_key: str = "plan",
     tracker: CostTracker,
     storage: SQLiteStorage,
 ) -> dict[str, Any]:
@@ -549,15 +694,30 @@ async def _build_resume_result_from_final(
 
     * ``__interrupt__`` in state → another gate fired; stamp cost at
       pause and return ``status="pending"``.
-    * ``gate_plan_review_response == "rejected"`` → flip ``runs.status``
-      to ``gate_rejected`` with ``finished_at``; return
-      ``status="gate_rejected"``.
-    * ``plan`` present (response was approved) → flip ``runs.status``
-      to ``completed``; return ``status="completed"`` with the plan
-      dumped to a plain dict for transport.
+    * ``state[f"gate_{terminal_gate_id}_response"] == "rejected"`` →
+      flip ``runs.status`` to ``gate_rejected`` with ``finished_at``;
+      return ``status="gate_rejected"``.
+    * ``state[final_state_key]`` populated (approved path reached its
+      terminal artefact node) → flip ``runs.status`` to ``completed``;
+      return ``status="completed"`` with the plan dumped to a plain
+      dict when the workflow produces one.
     * Fallback — any ``last_exception`` captured by
       ``wrap_with_error_handler`` surfaces as ``status="errored"`` so
       a rare post-gate failure is reported rather than swallowed.
+
+    ``terminal_gate_id`` is discovered from the workflow module's
+    ``TERMINAL_GATE_ID`` constant (M6 T05 — resolves T01-CARRY-DISPATCH-GATE).
+    ``final_state_key`` is discovered from the workflow module's
+    ``FINAL_STATE_KEY`` constant (M6 T06 — resolves
+    T01-CARRY-DISPATCH-COMPLETE): ``"plan"`` for the planner,
+    ``"applied_artifact_count"`` for slice_refactor. Before these
+    conventions existed the function hardcoded the planner's ids; each
+    workflow now publishes its own constants so slice_refactor's
+    ``"slice_refactor_review"`` gate + ``"applied_artifact_count"``
+    completion signal and the planner's ``"plan_review"`` / ``"plan"``
+    pair share one dispatch path. Workflows that omit the constants fall
+    back to the caller-supplied ``gate_response`` and the ``"plan"``
+    default, keeping the contract backwards-compatible for pre-M6 code.
     """
     total = tracker.total(run_id)
 
@@ -571,11 +731,16 @@ async def _build_resume_result_from_final(
             "error": None,
         }
 
-    # Prefer the state-recorded response (HumanGate writes it through the
-    # ``gate_<id>_response`` key); fall back to the flag the caller
-    # passed if the gate node did not get a chance to persist it (e.g.
-    # graph errored before the gate's post-interrupt block ran).
-    response = final.get("gate_plan_review_response", gate_response)
+    # Prefer the state-recorded response for the workflow's terminal gate;
+    # fall back to the flag the caller passed if the gate node did not
+    # get a chance to persist it (e.g. graph errored before the gate's
+    # post-interrupt block ran) or the workflow omits TERMINAL_GATE_ID.
+    if terminal_gate_id is not None:
+        response = final.get(
+            f"gate_{terminal_gate_id}_response", gate_response
+        )
+    else:
+        response = gate_response
 
     if response == "rejected":
         finished_at = datetime.now(UTC).isoformat()
@@ -593,10 +758,15 @@ async def _build_resume_result_from_final(
             "error": None,
         }
 
-    plan = final.get("plan")
-    if plan is not None:
-        await storage.update_run_status(run_id, "completed", total_cost_usd=total)
-        plan_dump = plan.model_dump() if hasattr(plan, "model_dump") else dict(plan)
+    if final.get(final_state_key) is not None:
+        await storage.update_run_status(
+            run_id, "completed", total_cost_usd=total
+        )
+        plan = final.get("plan")
+        plan_dump = (
+            plan.model_dump() if hasattr(plan, "model_dump")
+            else (dict(plan) if plan else None)
+        )
         return {
             "run_id": run_id,
             "status": "completed",

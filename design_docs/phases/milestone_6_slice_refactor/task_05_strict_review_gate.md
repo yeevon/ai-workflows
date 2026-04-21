@@ -67,3 +67,7 @@ If the primitive does not already honour `strict_review=True` correctly, T05 own
 
 - [Task 04](task_04_aggregator.md) — `aggregate` node populates `SliceAggregate`.
 - [M3 Task 04](../milestone_3_first_workflow/task_04_human_gate.md) — `HumanGate` primitive already landed; T05 may extend the `strict_review=True` branch.
+
+## Carry-over from prior audits
+
+- [ ] **T01-CARRY-DISPATCH-GATE** (MEDIUM, from T01 Builder-phase scope review 2026-04-20): [`_dispatch._build_resume_result_from_final`](../../../ai_workflows/workflows/_dispatch.py) hardcodes `state["gate_plan_review_response"]` when deciding approve/reject — that's the planner's gate_id leaking into dispatch. T05's new `slice_refactor_review` gate writes to `state["gate_slice_refactor_review_response"]`. Dispatch needs to discover the relevant gate key (options: inspect the final state for any `gate_*_response` key, or have each workflow module expose a `RESUME_GATE_ID` constant). Scope here is the minimum change that makes the approve/reject flow work for slice_refactor's strict-review gate without regressing the planner's.

@@ -7,6 +7,798 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M6 Slice Refactor] - 2026-04-20
+
+### Changed — M6 Task 09: Milestone Close-out (2026-04-20)
+
+Docs-only close-out for M6. No code change; promotes every entry that
+had accumulated under `[Unreleased]` since M5 close-out into this dated
+section — M6 T01–T08. Pins the green-gate snapshot used to verify the
+milestone README's exit criteria and records both the live
+`AIW_E2E=1 uv run pytest tests/e2e/test_slice_refactor_smoke.py` run
+and the manual `aiw-mcp` two-gate MCP round-trip. The `[Unreleased]`
+section at the top of the file is left empty for M7.
+
+**Files touched:**
+
+- `design_docs/phases/milestone_6_slice_refactor/README.md` — Status
+  line flipped to `✅ Complete (2026-04-20)`; new **Outcome** section
+  summarising the nine landed tasks with per-task evidence; M4-T05
+  carry-over checkbox ticked `✅ RESOLVED (landed in task 02)`.
+- `design_docs/roadmap.md` — M6 row flipped to
+  `✅ complete (2026-04-20)`.
+- `README.md` (root) — status table updated (M6 → Complete); post-M6
+  narrative paragraph appended covering the fan-out + strict-review +
+  hard-stop + semaphore contracts; `What runs today` renamed `post-M6`;
+  new `slice_refactor` workflow bullet; CLI bullet now documents the
+  in-flight `cancel_run` path landed in M6 T02; e2e smoke bullet lists
+  the two new test files; gate snapshot updated to 475 passed / 3
+  skipped; `Next` pointer now points at M7 (eval harness).
+- `CHANGELOG.md` — this entry + promotion of M6 T01–T08 entries into
+  this new dated section.
+
+**Acceptance criteria satisfied:**
+
+- [x] Every exit criterion in the milestone README has a concrete
+  verification — see the Outcome section's per-task evidence list
+  pointing at test names, code paths, and issue-file links.
+- [x] `uv run pytest && uv run lint-imports && uv run ruff check`
+  green on the current tree (commit `e2af81f` + uncommitted
+  M6 T01–T08 working tree). Gate snapshot:
+  - `uv run pytest` → **475 passed, 3 skipped, 2 warnings** (three
+    skipped are all `AIW_E2E=1`-gated: `test_planner_smoke.py`,
+    `test_tier_override_smoke.py`, `test_slice_refactor_smoke.py`).
+  - `uv run lint-imports` → **3 kept, 0 broken**
+    (`primitives → graph → workflows → surfaces`).
+  - `uv run ruff check` → **All checks passed**.
+- [x] Live `AIW_E2E=1` `slice_refactor` smoke captured:
+  - Command:
+    `AIW_E2E=1 uv run pytest tests/e2e/test_slice_refactor_smoke.py -v -s --no-header`.
+  - Commit baseline: `e2af81f` (m6 kickoff) + uncommitted M6 T01–T08
+    working tree.
+  - Goal string used: `"Write three one-line unit tests for an add(a, b) function."`
+    (pinned in [`tests/e2e/test_slice_refactor_smoke.py`](tests/e2e/test_slice_refactor_smoke.py)).
+  - Result: **1 passed** in 129.97s (2m 10s). Approved slice count:
+    3 (one `slice_worker` invocation per planner step; three
+    `slice_result:<id>` artefacts landed in Storage). Per-call
+    breakdown from the captured log (run id
+    `e2e-slice-40b12463`): explorer (Qwen
+    `ollama/qwen2.5-coder:32b`) 58.3s / 116→158 tokens / `cost_usd=0.0`;
+    synth (Claude Code Opus) 9.7s / 6→434 tokens / `cost_usd=0.0`;
+    three slice workers (all Qwen, `max_concurrency=1` → sequential)
+    24.4s / 43.0s / 60.7s. Aggregate `total_cost_usd=0.0` — matches
+    M5 T06 posture (Claude Code Opus on the Max subscription reports
+    notional zero; Qwen local reports zero).
+- [x] Manual `aiw-mcp` two-gate round-trip captured (2026-04-20,
+  fresh Claude Code v2.1.116 session, `claude mcp list` showed
+  `ai-workflows: ✓ Connected (uv run aiw-mcp)`):
+  - **Call 1** — `run_workflow(workflow_id="slice_refactor",
+    inputs={"goal": "Write three one-line unit tests for an add(a, b) function.",
+    "max_steps": 3}, run_id="manual-m6-closeout")`:
+    ```json
+    {"run_id": "manual-m6-closeout", "status": "pending",
+     "awaiting": "gate", "plan": null, "total_cost_usd": 0,
+     "error": null}
+    ```
+  - **Call 2** — `resume_run(run_id="manual-m6-closeout",
+    gate_response="approved")` (planner gate):
+    ```json
+    {"run_id": "manual-m6-closeout", "status": "pending",
+     "plan": null, "total_cost_usd": 0, "error": null}
+    ```
+  - **Call 3** — `resume_run(run_id="manual-m6-closeout",
+    gate_response="approved")` (strict-review gate) →
+    `status="completed"` with a 3-step plan:
+    ```json
+    {"run_id": "manual-m6-closeout", "status": "completed",
+     "plan": {"goal": "Write three one-line unit tests for an add(a, b) function.",
+              "summary": "Produce three concise one-line unit tests …",
+              "steps": [{"index": 1, "title": "Assert positive-integer addition", …},
+                        {"index": 2, "title": "Assert negative-plus-zero addition", …},
+                        {"index": 3, "title": "Assert float addition", …}]},
+     "total_cost_usd": 0, "error": null}
+    ```
+  - **Call 4** — `list_runs(workflow="slice_refactor", limit=1)`:
+    ```json
+    {"run_id": "manual-m6-closeout", "workflow_id": "slice_refactor",
+     "status": "completed",
+     "started_at": "2026-04-21T04:38:34.358340+00:00",
+     "finished_at": "2026-04-21T04:40:50.819942+00:00",
+     "total_cost_usd": 0}
+    ```
+  - Wall-clock: ~2m 13s. Two-gate flow observed end-to-end: pending
+    (planner gate) → pending (strict-review gate) → completed. The
+    planner sub-graph's `PlannerPlan` is surfaced in the final
+    response's `plan` field alongside slice_refactor's
+    `applied_artifact_count` terminal state (the dispatch helper
+    returns whichever of the two completion signals the workflow
+    wrote) — expected behaviour; serves as a useful diagnostic in
+    the MCP response shape.
+- [x] README (milestone) and roadmap reflect ✅ status.
+- [x] M4-T05 carry-over item in the milestone README flipped to
+  `✅ RESOLVED (landed in task 02)`.
+- [x] CHANGELOG has a dated `## [M6 Slice Refactor] - 2026-04-20`
+  section; `[Unreleased]` preserved at the top (empty).
+- [x] Root README updated: status table, post-M6 narrative,
+  What-runs-today, Next → M7.
+
+### Added — M6 Task 08: E2E Smoke on Fixture Slice List (2026-04-20)
+
+Lands the two-tier end-to-end smoke for `slice_refactor` plus the
+human-in-the-loop manual walkthrough. Exercises the full
+`START → planner_subgraph → slice_list_normalize → slice_branch
+(fan-out) → aggregate → slice_refactor_review → apply → END` pipeline
+through the shared `_dispatch.run_workflow` / `_dispatch.resume_run`
+entry points — the same surface the `aiw run` CLI and the
+`run_workflow` MCP tool call.
+
+**Hermetic sibling (always runs):**
+`tests/workflows/test_slice_refactor_e2e.py` stubs the `LiteLLMAdapter`
+at the `graph.tiered_node` boundary and pins both workflow modules'
+tier registries onto the stubbed tiers so the planner sub-graph's
+`planner-synth` tier does not reach for the Claude Code subprocess.
+Three tests cover: (a) approve-at-both-gates → 3
+`slice_result:<id>` artefacts in Storage + `runs.status ==
+"completed"` + `total_cost_usd >= 0`; (b) approve-planner +
+reject-strict-review → 0 artefacts + `runs.status ==
+"gate_rejected"` + `finished_at` stamped; (c) KDR-003 filesystem
+regression grep against `ai_workflows/**/*.py`.
+
+**Live sibling (`AIW_E2E=1`-gated):**
+`tests/e2e/test_slice_refactor_smoke.py` skips cleanly with a readable
+reason unless `ollama` + Ollama daemon on `localhost:11434` + `claude`
+CLI are all present. Drives the real Qwen + Claude Code multi-tier
+path through `run_workflow` / `resume_run` directly (no `CliRunner`
+wrapper — the dispatch helpers are coroutines and the test is
+`asyncio.mark`-ed). Asserts `runs.status == "completed"`,
+`total_cost_usd >= 0` (Claude Code Opus on the Max subscription
+reports notional zero, matching the M5 T06 posture), at least one
+`slice_result:<id>` artefact landed (slice count may legitimately be
+<3 if the planner synthesised fewer steps than `max_steps`), and
+`TokenUsage.sub_models` shape when the Claude Code `modelUsage`
+payload returns sub-model rows (skip-if-empty per the M5 T06
+caveat). KDR-003 grep repeated here so the live invocation also
+fails loudly on a regression.
+
+**Manual walkthrough:**
+`design_docs/phases/milestone_6_slice_refactor/manual_smoke.md`
+mirrors the M5 `manual_smoke.md` shape. Walks a fresh Claude Code
+session through registering `aiw-mcp`, calling `run_workflow` with
+`workflow_id='slice_refactor'`, approving both gates, and observing
+the artefact count via `list_runs` + `get_artifact`. Includes a
+tier-override step (`slice-worker → planner-synth` to route every
+worker call through Claude Code Opus) and a troubleshooting section
+for the three common failure modes (Ollama timeout, unknown-tier
+error, zero-success approved aggregate).
+
+**Files touched:**
+
+- `tests/workflows/test_slice_refactor_e2e.py` (new, hermetic, always-run)
+- `tests/e2e/test_slice_refactor_smoke.py` (new, `AIW_E2E=1`-gated)
+- `design_docs/phases/milestone_6_slice_refactor/manual_smoke.md` (new)
+- `CHANGELOG.md`
+
+**ACs satisfied:** hermetic suite green (`uv run pytest
+tests/workflows/test_slice_refactor_e2e.py`); live suite skips cleanly
+without `AIW_E2E=1`; KDR-003 grep returns zero hits;
+`uv run lint-imports` kept 3/3; `uv run ruff check` clean. The
+live-suite green-once pass against real providers gets recorded in
+the T09 close-out entry per the T08 spec.
+
+**Deviations from spec:** none. The spec called for the hermetic suite
+to drive `build_slice_refactor()` through `_dispatch.run_workflow` and
+for the live suite to resume via `_dispatch.resume_workflow`; both
+dispatch helpers ship as `run_workflow` / `resume_run` (current
+names), so the tests use the current names. No spec-level deviation.
+
+### Added — M6 Task 07: Concurrency Semaphore + Double-Failure Hard-Stop (2026-04-20)
+
+Lands the two cross-cutting runtime contracts `slice_refactor`'s
+parallel fan-out is the first workflow to exercise:
+
+1. **Per-tier concurrency semaphore** (architecture.md §8.6). A new
+   `_build_semaphores(tier_registry)` helper in `_dispatch.py` builds one
+   `asyncio.Semaphore` per tier from `TierConfig.max_concurrency` at the
+   run boundary; the dict rides `config["configurable"]["semaphores"]`
+   into every `tiered_node` invocation in the run. `TieredNode` already
+   honoured `configurable["semaphores"]` at the provider-call boundary
+   (M2 T03), so the wiring is one-sided — dispatch now always populates
+   the key rather than leaving it to each workflow. Cap is enforced at
+   the call site, independent of graph topology: a fan-out of N branches
+   against a tier configured `max_concurrency=k` sees at most `k`
+   concurrent provider calls, with the remaining `N-k` queued on the
+   semaphore. Cap is per-run + process-local: two concurrent
+   `aiw run slice_refactor` invocations get independent semaphores.
+
+2. **Double-failure hard-stop** (architecture.md §8.2). A new
+   `_route_before_aggregate` conditional edge between the fan-in of
+   `slice_branch` and `aggregate` routes to a new `hard_stop` terminal
+   node when `len(state["slice_failures"]) >= HARD_STOP_FAILURE_THRESHOLD`
+   (== 2). `hard_stop` writes a single `artifacts` row with
+   `kind="hard_stop_metadata"` and a JSON payload
+   `{"failing_slice_ids": [...]}`, then returns the id list on a new
+   `hard_stop_failing_slice_ids` state key so dispatch can flip
+   `runs.status` to a new `"aborted"` terminal status with
+   `finished_at` stamped. Aggregator, strict-review gate, and `apply`
+   are skipped on this branch.
+
+**Why `slice_failures` length, not `_non_retryable_failures`.** The
+`_non_retryable_failures` state counter uses a `max` reducer (to tolerate
+parallel writes from the error-handler shim); under fan-out it
+undercounts every parallel failure to `1`. The `slice_failures` list is
+`operator.add`-reduced so its length is the exact cross-branch failure
+count at fan-in — the only reliable source for the hard-stop decision
+under parallelism. Documented in `_merge_non_retryable_failures`
+docstring; resolves the M6-T04-ISS-01 carry-over.
+
+**M6-T03-ISS-01 resolution (LOW, from T03 audit).** Stock
+`graph/validator_node.py` now escalates `RetryableSemantic` →
+`NonRetryable` when `state["_retry_counts"][node_name]` has been bumped
+`max_attempts - 1` times (i.e. this call is the last allowed attempt and
+it failed). Mirrors the T03 `_slice_worker_validator` bespoke escalation
+pattern and makes it the canonical `ValidatorNode` contract — so a
+validator wrapped with `wrap_with_error_handler(..., node_name="X_validator")`
+paired with a `retrying_edge(..., on_semantic="X")` no longer loops
+forever (the edge's own budget check keys off the `on_semantic` target
+while the error-handler bumps the counter under the failing node's own
+name; the in-validator escalation closes the gap at a lower blast
+radius than extending the edge's API).
+
+**Architecture drift check.** No new dependencies, no new primitives,
+no new graph-layer adapter — all three ACs satisfied by extending
+existing modules. Four-layer contract kept (3/3 via `lint-imports`).
+KDR-003 (no Anthropic API), KDR-006 (three-bucket taxonomy), KDR-009
+(Storage artefact row, not checkpointer) all honoured.
+
+**Files touched.**
+- [ai_workflows/workflows/_dispatch.py](ai_workflows/workflows/_dispatch.py) — new `_build_semaphores`; `_build_cfg` threads `"semaphores"` into `configurable`; `_build_result_from_final` adds the `hard_stop_failing_slice_ids` → `runs.status = "aborted"` branch with explicit `finished_at`.
+- [ai_workflows/workflows/slice_refactor.py](ai_workflows/workflows/slice_refactor.py) — new constants `HARD_STOP_FAILURE_THRESHOLD`, `HARD_STOP_METADATA_ARTIFACT_KIND`; new `_route_before_aggregate` edge; new `_hard_stop` node; `build_slice_refactor` adds the conditional edge + hard-stop → END edge; `_merge_non_retryable_failures` docstring pins the M6-T04-ISS-01 note; `SliceRefactorState` gains `hard_stop_failing_slice_ids: list[str]`.
+- [ai_workflows/graph/validator_node.py](ai_workflows/graph/validator_node.py) — stock validator escalates `RetryableSemantic` → `NonRetryable` at `max_attempts - 1` prior failures (M6-T03-ISS-01). Docstring pins the escalation contract + the `node_name` alignment requirement.
+- [tests/workflows/test_slice_refactor_concurrency.py](tests/workflows/test_slice_refactor_concurrency.py) — new; 9 tests covering semaphore structural shape, fan-out bound, per-tier isolation, no-fan-out planner regression, and `_build_cfg` wiring.
+- [tests/workflows/test_slice_refactor_hard_stop.py](tests/workflows/test_slice_refactor_hard_stop.py) — new; 17 tests covering the routing edge (empty / single / double / triple / ignores-successes / ignores-transient-counter), the `_hard_stop` node (metadata artefact, idempotency, order preservation), dispatch's `aborted` flip with `finished_at`, branch-order contract (hard-stop before completion), and the T02 `_ACTIVE_RUNS` registry presence.
+- [tests/graph/test_validator_node.py](tests/graph/test_validator_node.py) — 5 new tests for the M6-T03-ISS-01 escalation contract (last-attempt `NonRetryable`, pre-exhaustion `RetryableSemantic`, counter-key alignment, `max_attempts=1` edge, 3-attempt sequence).
+- [tests/workflows/test_slice_refactor_planner_subgraph.py](tests/workflows/test_slice_refactor_planner_subgraph.py) — shape guard updated to include `hard_stop` in the expected outer node set.
+
+**ACs satisfied.**
+- AC-1 (per-tier semaphore, process-local, shared across fan-out) — via `_build_semaphores` + existing `tiered_node` acquisition.
+- AC-2 (fan-out 5 vs `max_concurrency=2` sees peak 2) — `test_semaphore_bounds_parallel_calls_on_single_tier`.
+- AC-3 (two tiers each `max_concurrency=1` run concurrently) — `test_semaphore_is_per_tier_not_workflow_wide`.
+- AC-4 (conditional edge routes to `hard_stop`) — `test_route_sends_to_hard_stop_on_two_failures` + graph-structure test.
+- AC-5 (`runs.status = "aborted"` with `finished_at`) — `test_dispatch_flips_status_aborted_with_finished_at`.
+- AC-6 (fires on 2nd failure, not 3rd) — `test_route_sends_to_hard_stop_on_two_failures` + `_triple_failure` edge cases.
+- AC-7 (transient retries don't bump counter) — `test_route_ignores_transient_retry_counter` + `_ignores_non_retryable_failures_counter`.
+- AC-8 (in-flight cancellation) — path lives in T02's `_ACTIVE_RUNS` + `task.cancel`; re-pinned via registry-presence test (hard-stop itself runs post-fan-in, so siblings are already complete).
+- Hermetic tests green (472 passed, 2 skipped).
+- `uv run lint-imports` 3/3 kept.
+- `uv run ruff check` clean.
+
+**Carry-over tickets resolved.**
+- M6-T03-ISS-01 (LOW) — in-validator escalation documented and tested as canonical `ValidatorNode` contract.
+- M6-T04-ISS-01 (LOW) — `_merge_non_retryable_failures` docstring pins the under-fan-out undercount; hard-stop edge reads `slice_failures` length to sidestep it.
+
+### Added — M6 Task 06: `apply` Terminal Node + Completion Dispatch (2026-04-20)
+
+Replaces the T05-era ``_apply_stub`` in
+[ai_workflows/workflows/slice_refactor.py](ai_workflows/workflows/slice_refactor.py)
+with the real :func:`_apply` node. On the approve branch of the
+strict-review gate it writes one row per succeeded :class:`SliceResult`
+to the ``artifacts`` table via
+:meth:`SQLiteStorage.write_artifact` — keyed
+``(run_id, f"slice_result:{slice_id}")`` — and returns
+``{"applied_artifact_count": <int>}`` so dispatch can detect completion.
+No subprocess / filesystem / ``git apply`` invocation (milestone README
+non-goal). No schema migration, no change to the
+``write_artifact`` helper signature.
+
+**Namespaced ``kind`` (``slice_result:<slice_id>``) instead of a new
+helper kwarg.** The T06 spec's example signature
+(``write_artifact(..., slice_id=..., payload=...)``) would have required
+adding a ``slice_id`` column (or a generic ``metadata`` kwarg) and a
+migration. The namespaced-kind approach gives the same ``(run_id,
+slice_id)`` unique constraint via the existing
+``PRIMARY KEY (run_id, kind)`` — no migration, no signature change, same
+idempotency property. Documented as a deviation from the literal
+spec deliverable, with the spec's "extend with ``metadata``" guidance
+still applicable for any future artefact kind that needs orthogonal
+metadata (not just a slice id).
+
+**T01-CARRY-DISPATCH-COMPLETE resolution (MEDIUM, from T01 Builder-phase
+scope review).** :mod:`ai_workflows.workflows._dispatch`'s
+:func:`_build_result_from_final` + :func:`_build_resume_result_from_final`
+previously hardcoded ``state["plan"]`` as the completion signal. For
+slice_refactor, completion is driven by the ``apply`` node's terminal
+return. Each workflow module now publishes a module-level
+``FINAL_STATE_KEY`` constant, and dispatch reads
+``state[FINAL_STATE_KEY]`` via a new
+:func:`_resolve_final_state_key` helper. Planner publishes
+``FINAL_STATE_KEY = "plan"``; slice_refactor publishes
+``"applied_artifact_count"``. Workflows that omit the constant fall
+back to ``"plan"`` so legacy modules complete unchanged.
+
+**Idempotency.** Re-invoking ``apply`` on the same ``run_id`` (e.g.
+resume-after-crash) overwrites each row with byte-identical payload via
+the existing ``ON CONFLICT(run_id, kind) DO UPDATE`` clause — row count
+stays at N after the second call. Pinned by
+``test_apply_is_idempotent_on_reinvocation`` +
+``test_apply_reinvocation_with_same_payload_is_byte_identical``.
+
+**Files touched.**
+- [ai_workflows/workflows/slice_refactor.py](ai_workflows/workflows/slice_refactor.py) — replaced ``_apply_stub`` with :func:`_apply`; added ``FINAL_STATE_KEY`` + ``SLICE_RESULT_ARTIFACT_KIND`` constants; added ``applied_artifact_count`` to :class:`SliceRefactorState`.
+- [ai_workflows/workflows/planner.py](ai_workflows/workflows/planner.py) — added ``FINAL_STATE_KEY = "plan"`` constant + export (no behavioural change).
+- [ai_workflows/workflows/_dispatch.py](ai_workflows/workflows/_dispatch.py) — new :func:`_resolve_final_state_key` helper; threaded ``final_state_key`` into :func:`_build_result_from_final` + :func:`_build_resume_result_from_final` (both now check ``state[final_state_key] is not None`` to detect completion).
+- [tests/workflows/test_slice_refactor_apply.py](tests/workflows/test_slice_refactor_apply.py) — new; 16 tests covering all T06 ACs plus T01-CARRY-DISPATCH-COMPLETE resolution (planner regression + slice_refactor happy path + legacy-fallback + zero-count edge).
+- [design_docs/phases/milestone_6_slice_refactor/issues/task_01_issue.md](design_docs/phases/milestone_6_slice_refactor/issues/task_01_issue.md) — flipped ``T01-CARRY-DISPATCH-COMPLETE`` ``DEFERRED → ✅ RESOLVED`` in issue log + propagation footer.
+- [design_docs/phases/milestone_6_slice_refactor/task_06_apply_node.md](design_docs/phases/milestone_6_slice_refactor/task_06_apply_node.md) — ticked the carry-over checkbox with the resolution summary.
+
+**ACs satisfied.**
+- ✅ AC-1 one artefact row per succeeded slice via existing helper (no migration, no slice-specific kwarg)
+- ✅ AC-2 failed slices not written
+- ✅ AC-3 approve → ``runs.status = completed`` with ``finished_at``; reject → ``gate_rejected`` with ``finished_at``
+- ✅ AC-4 idempotent on re-invocation (pinned via ``(run_id, kind)`` PK)
+- ✅ AC-5 no subprocess / filesystem / ``git`` invocation (pinned via subprocess-spy test)
+- ✅ AC-6 hermetic tests green (441 passed, 2 skipped)
+- ✅ AC-7 lint-imports 3/3 contracts kept
+- ✅ AC-8 ruff clean
+- ✅ Carry-over T01-CARRY-DISPATCH-COMPLETE resolved + propagated
+
+Test suite growth: 425 → 441 passed (+16 new T06 tests).
+
+### Added — M6 Task 05: Strict-Review HumanGate Wiring (2026-04-20)
+
+Wires a ``HumanGate(strict_review=True)`` between T04's ``aggregate``
+node and T06's ``apply`` node in the ``slice_refactor`` workflow. Gate
+payload is derived from :class:`SliceAggregate` (successes + failures,
+failures listed first with ``last_error``); gate response is
+``"approved"`` / ``"rejected"`` (matches the existing codebase
+convention; the spec's ``approve`` / ``reject`` is a paraphrase).
+Approve routes to ``apply`` (a T05 stub; T06 replaces with the real
+artefact-persistence body); reject routes straight to ``END`` and
+dispatch's ``_build_resume_result_from_final`` flips
+``runs.status = gate_rejected``.
+
+**Primitive verification.** Confirmed the ``human_gate`` factory at
+[ai_workflows/graph/human_gate.py](ai_workflows/graph/human_gate.py)
+already honours ``strict_review=True`` correctly — the interrupt
+payload nulls both ``timeout_s`` and ``default_response_on_timeout``
+and the node never starts a timer. No primitive-layer changes
+needed; a T05 test pins this invariant so a regression here trips
+the suite.
+
+**T01-CARRY-DISPATCH-GATE resolution (MEDIUM, from T01 Builder-phase
+scope review).** :mod:`ai_workflows.workflows._dispatch` previously
+hardcoded ``state["gate_plan_review_response"]`` in
+:func:`_build_resume_result_from_final`, which would ignore
+``slice_refactor``'s ``"slice_refactor_review"`` gate at resume time.
+Resolution uses the lowest-blast-radius option from the carry-over
+note: each workflow module publishes a module-level
+``TERMINAL_GATE_ID`` constant, and dispatch reads
+``state[f"gate_{TERMINAL_GATE_ID}_response"]`` via a new
+:func:`_resolve_terminal_gate_id` helper. Workflows that omit the
+constant fall back to the caller-supplied ``gate_response`` so
+legacy paths are unaffected. Planner publishes
+``TERMINAL_GATE_ID = "plan_review"``; slice_refactor publishes
+``"slice_refactor_review"``.
+
+**Spec deviation — literal response values.** The T05 spec uses
+``approve`` / ``reject`` inline; the working codebase (planner,
+tests, ``_build_resume_result_from_final``) all use the past-tense
+``approved`` / ``rejected``. Chose the past-tense convention to
+avoid churn and keep dispatch's ``== "rejected"`` check unchanged.
+The T05 task file will be updated in the T05 issue file if the audit
+flags it; the spec reads as a paraphrase rather than a literal
+contract.
+
+**Files touched**
+
+* ``ai_workflows/workflows/slice_refactor.py`` — add
+  ``TERMINAL_GATE_ID`` constant, :func:`_render_review_prompt`,
+  :func:`_route_on_gate_response`, :func:`_apply_stub` (T06 replaces);
+  wire the ``slice_refactor_review`` ``HumanGate(strict_review=True)``
+  between ``aggregate`` and ``apply``; add conditional edges for
+  approve → ``apply`` / reject → ``END``; extend
+  ``SliceRefactorState`` with ``gate_slice_refactor_review_response``.
+* ``ai_workflows/workflows/planner.py`` — publish
+  ``TERMINAL_GATE_ID = "plan_review"`` so dispatch can discover it
+  uniformly.
+* ``ai_workflows/workflows/_dispatch.py`` — add
+  :func:`_resolve_terminal_gate_id`; thread ``terminal_gate_id``
+  through to :func:`_build_resume_result_from_final`; replace the
+  hardcoded ``gate_plan_review_response`` lookup with the
+  workflow-specific ``gate_{terminal_gate_id}_response`` lookup
+  (falls back to the caller's ``gate_response`` when the constant
+  is absent).
+* ``tests/workflows/test_slice_refactor_strict_gate.py`` — new
+  suite covering every T05 AC plus the T01-CARRY-DISPATCH-GATE
+  fix: primitive strict-review payload shape, structural gate/apply
+  nodes, prompt-formatter content, routing function approve/reject
+  + NonRetryable-on-invalid, end-to-end approve-through-apply,
+  reject-to-END, gate-audit-log rows for both outcomes, dispatch
+  reads slice_refactor gate key on reject, dispatch preserves
+  planner regression, dispatch falls back gracefully without
+  constant, interrupt payload ``gate_id`` matches
+  ``TERMINAL_GATE_ID``.
+* ``tests/workflows/test_slice_refactor_planner_subgraph.py`` —
+  extend ``test_build_slice_refactor_has_expected_outer_nodes`` to
+  include the new ``slice_refactor_review`` + ``apply`` nodes.
+
+**ACs satisfied (T05 1 / 6 listed; hermetic gates 7 / 8)**
+
+1. ✅ ``HumanGate(strict_review=True)`` wired between ``aggregate`` and
+   ``apply``.
+2. ✅ ``strict_review=True`` verified to null the timeout path (not
+   just push it to infinity).
+3. ✅ Approve → ``apply``; reject → END with
+   ``runs.status == "gate_rejected"`` via the dispatch fix.
+4. ✅ Gate payload is the full :class:`SliceAggregate` via
+   ``_render_review_prompt``; successes + failures both rendered.
+5. ✅ Gate audit log lands in Storage for both approve and reject.
+6. ✅ Hermetic tests green (425 passed, 2 skipped).
+7. ✅ ``uv run lint-imports`` — 3 / 3 contracts kept.
+8. ✅ ``uv run ruff check`` clean.
+
+**Test suite growth:** 409 → 425 passed.
+
+### Added — M6 Task 04: Aggregator Node (2026-04-20)
+
+Replaces T02/T03's ``_aggregate_placeholder`` with a real
+pure-function aggregator that composes validated per-slice outputs and
+exhausted-retry failures into a single :class:`SliceAggregate`. Adds
+the two new pydantic models (:class:`SliceFailure`,
+:class:`SliceAggregate`), extends both ``SliceRefactorState`` and
+``SliceBranchState`` with a reducer-backed ``slice_failures`` channel,
+and wires a new ``slice_branch_finalize`` sub-graph node that converts
+a branch's terminal ``last_exception`` into a :class:`SliceFailure`
+row so the aggregator has the failure record in state (not as an
+unhandled exception).
+
+**Graph shape changes.** Each per-slice sub-graph now terminates via
+``slice_branch_finalize → END`` rather than routing straight to END.
+The ``retrying_edge`` after ``slice_worker_validator`` re-targets
+``on_terminal`` from ``END`` to ``slice_branch_finalize`` so both the
+exhausted-retry path and the happy path flow through the same
+finalize node (the happy path is a no-op; the exhausted path emits
+exactly one :class:`SliceFailure`). The outer graph's ``aggregate``
+node is now the real :func:`_aggregate` synthesising
+``aggregate: SliceAggregate`` on the parent state.
+
+**Failure bucket classification.** :class:`SliceFailure.failure_bucket`
+is typed ``Literal["retryable_semantic", "non_retryable"]`` per spec.
+``RetryableTransient`` exhaustion collapses into ``non_retryable``
+because at exhaustion the effect is indistinguishable from a
+non-retryable classification (further retries are impossible).
+``RetryableSemantic`` is preserved for diagnostic clarity when a
+future workflow's validator does not self-escalate the way T03's
+does.
+
+**Partial-failure posture.** The aggregator runs even when every
+branch fails — the double-failure hard-stop
+(``_non_retryable_failures >= 2`` short-circuits before the
+aggregator) is T07's wiring per architecture.md §8.2. T04 faithfully
+captures partial state so T07 has something to route on.
+
+**Files touched**
+
+* ``ai_workflows/workflows/slice_refactor.py`` — add
+  :class:`SliceFailure` / :class:`SliceAggregate`; extend
+  ``SliceRefactorState`` with ``slice_failures`` + ``aggregate``
+  keys; extend ``SliceBranchState`` with ``slice_failures``; add
+  :func:`_slice_branch_finalize` node; re-wire the sub-graph's
+  terminal edge; replace the placeholder aggregator body with the
+  real :func:`_aggregate`; update module + state + builder
+  docstrings to reflect the T04 graph shape.
+* ``tests/workflows/test_slice_refactor_aggregator.py`` — new suite
+  covering T04 ACs: bare-typed regression guards for both models,
+  pure-function aggregator unit tests, sub-graph structural guard
+  for ``slice_branch_finalize``, end-to-end all-success /
+  all-failure / partial-failure shapes via the full compiled graph.
+* ``CHANGELOG.md`` — this entry.
+
+**ACs satisfied.** 1 (bare-typed :class:`SliceAggregate` +
+:class:`SliceFailure` co-located), 2 (pure sync function aggregator,
+no LLM, no validator pairing), 3 (``slice_failures`` populated via
+the ``slice_branch_finalize`` branch terminal), 4 (hermetic tests
+cover all-success / all-failure / partial-failure), 5 (``uv run
+lint-imports`` 3 / 3 kept), 6 (``uv run ruff check`` clean).
+
+**Test suite growth:** 398 → 409 passing (11 new T04 tests).
+
+### Added — M6 Task 03: Per-Slice Validator Wiring (2026-04-20)
+
+Pairs every slice-worker invocation with a ``ValidatorNode``-equivalent
+per KDR-004 by splitting T02's compound ``slice_worker`` closure into a
+per-slice sub-graph that runs
+``slice_worker → slice_worker_validator`` with a
+``retrying_edge`` self-loop for the three-bucket retry taxonomy
+(KDR-006). Reverts the M6-T02-ISS-01 inline-parse shortcut: the worker
+is now a plain :func:`tiered_node` that writes ``slice_worker_output``
+only, and a new bespoke ``_slice_worker_validator`` node parses the raw
+text into a :class:`SliceResult` and writes the one-element list that
+the parent graph's ``operator.add`` reducer concatenates at fan-in.
+
+**Graph shape changes.** The outer parent graph now shows
+``slice_branch`` (a compiled sub-graph node) in place of T02's compound
+``slice_worker`` node. Each :func:`Send` dispatch invokes a full
+worker→validator sub-graph with per-branch retry state, so a semantic
+retry on slice *i* re-runs slice *i* only — sibling branches never
+re-enter their workers (verified by
+``test_semantic_retry_reruns_only_failing_slice`` asserting per-slice
+call-counts). The validator is a bespoke shim (not the stock
+:func:`ai_workflows.graph.validator_node.validator_node`) because the
+reducer-backed ``slice_results`` channel requires list-wrapped writes,
+whereas the stock factory writes a bare pydantic instance into
+``output_key``.
+
+**Semantic-exhaustion escalation.** ``_slice_worker_validator`` reads
+``state['_retry_counts']['slice_worker_validator']`` before raising and
+escalates ``RetryableSemantic`` → ``NonRetryable`` once the final
+allowed attempt fails. The escalation lives in the validator (not the
+``retrying_edge``) because the stock edge keys its budget check off
+the ``on_semantic`` routing target (``slice_worker``), while
+``wrap_with_error_handler`` bumps the counter under the *failing*
+node's name (``slice_worker_validator``) — a latent pattern the
+planner has carried without exhaustion exposure. T03 owns the per-node
+escalation; T07 will decide the double-failure abort.
+
+**Parent-state channel scoping.** ``slice`` moved off
+:class:`SliceRefactorState` to :class:`SliceBranchState` only, and
+``run_id`` dropped from the :class:`Send` payload (it already flows
+into sub-graphs via ``config['configurable']``); both changes prevent
+``InvalidUpdateError`` collisions at fan-in, where the parent's scalar
+channels would otherwise receive N identical writes from N parallel
+branches. ``slice_worker_output`` was already T02-T03-scoped to the
+branch.
+
+**Files touched:** ``ai_workflows/workflows/slice_refactor.py``
+(sub-graph factory, new ``SliceBranchState``, ``_slice_worker_validator``,
+``SLICE_WORKER_RETRY_POLICY``, state-channel scoping fixes),
+``tests/workflows/test_slice_refactor_planner_subgraph.py`` (shape-guard
+node-name update + full worker stubbing for resume),
+``tests/workflows/test_slice_refactor_validator.py`` (new — 6 tests
+covering ACs 1–6),
+``design_docs/phases/milestone_6_slice_refactor/task_03_per_slice_validator.md``
+(carry-over tick).
+
+**ACs satisfied:** AC-1 validator pairing, AC-2 retrying_edge with
+``max_semantic_attempts=3``, AC-3 per-slice semantic retry, AC-4
+per-slice transient retry, AC-5 single-slice NonRetryable surface,
+AC-6 bare-typed schema re-audit, AC-7 hermetic tests green, AC-8
+lint-imports 3/3, AC-9 ruff clean. Carry-over M6-T02-ISS-01 (✅) —
+inline-parse shortcut reverted.
+
+**Test suite size:** 392 → 398 passed, 2 skipped.
+
+### Added — M6 Task 02: Parallel Slice-Worker Pattern (2026-04-20)
+
+Extends ``ai_workflows.workflows.slice_refactor`` with the parallel
+slice-worker fan-out pattern. The outer graph shape becomes
+``START → planner_subgraph → slice_list_normalize → (Send × N) slice_worker → aggregate → END``:
+a ``_fan_out_to_workers`` conditional edge emits one
+``langgraph.types.Send("slice_worker", {...})`` per ``SliceSpec``; each
+worker independently calls the ``slice-worker`` tier with its
+assigned slice and contributes a parsed ``SliceResult`` to
+``SliceRefactorState.slice_results`` via a
+``Annotated[list[SliceResult], operator.add]`` reducer (the only
+parallel-write-safe shape for list fan-in). ``aggregate`` is a
+placeholder in T02 — T03 introduces per-slice validation and T04
+wires strict review + apply.
+
+**SliceResult schema (KDR-004, ADR-0002).** ``SliceResult`` is a
+bare-typed pydantic model (``slice_id: str``, ``diff: str``,
+``notes: list[str]``) with ``extra="forbid"`` so the LiteLLM
+structured-output path accepts it as ``response_format``. The inline
+parse in ``_build_slice_worker_node`` uses
+``SliceResult.model_validate_json`` and wraps any failure in
+``NonRetryable`` so ``retrying_edge`` (KDR-006) does not re-invoke the
+worker on schema drift — parse failures are logic errors, not
+transient issues.
+
+**Inline parse in T02, validator refactor in T03 (deviation from
+spec).** T02 AC-2 requires ``slice_results`` populated after the
+worker fan-out. T03 owns the ``ValidatorNode`` that makes
+``schema+extract+extra_rule`` first-class per KDR-004. To satisfy T02
+without pre-empting T03, the composed worker node parses the
+``SliceResult`` inline in ``_build_slice_worker_node``'s inner
+coroutine and returns ``{"slice_results": [parsed]}`` directly. T03
+will refactor this into a ``TieredNode → ValidatorNode``
+``RetryingEdge`` two-node graph with ``ModelRetry`` surfacing on
+parse failure. This is documented in the module docstring and in
+``_build_slice_worker_node``'s inline docstring.
+
+**``durability="sync"`` threaded at invoke, not compile (spec
+correction).** The T02 spec said to pass ``durability="sync"`` on
+``StateGraph.compile``; LangGraph 1.x places the flag on
+``CompiledStateGraph.ainvoke`` instead (verified via
+``inspect.signature``). The flag is threaded through
+``ai_workflows.workflows._dispatch.run_workflow`` /
+``resume_run`` at their ``await compiled.ainvoke(...)`` sites so the
+last-completed-step checkpoint lands in SQLite before
+``asyncio.CancelledError`` unwinds. A regression test
+(``test_dispatch_threads_durability_sync_through_ainvoke`` in
+``tests/workflows/test_slice_refactor_fanout.py``) asserts via
+``inspect.signature`` that the flag stays on ``ainvoke`` if the
+LangGraph API drifts.
+
+**Parallel-safe retry-slot reducers.** Parallel workers all write
+``{"last_exception": None}`` on success; LangGraph's default
+last-writer-wins channel raises ``InvalidUpdateError`` on concurrent
+writes to a non-Annotated scalar. Added ``_merge_last_exception``
+(prefer non-None), ``_merge_retry_counts`` (shallow dict merge with
+max), and ``_merge_non_retryable_failures`` (max) reducers and
+``Annotated[...]`` the three channels in ``SliceRefactorState`` so
+the fan-out does not blow up with a cryptic state-channel error.
+The composed worker also omits ``slice_worker_output`` from its
+outer return dict — it is transient within the closure only — so the
+three parallel workers do not concurrently write the same
+non-Annotated string channel.
+
+**``ToolNode`` absence is deliberate (architecture.md §6).**
+M6 does not introduce tool-calling yet; slice workers are pure
+``TieredNode`` LLM calls, not agents with filesystem / shell tools.
+The module docstring spells out that ``langgraph.prebuilt.ToolNode``
+belongs at M7+ when apply-side tools land — introducing it now would
+be nice_to_have scope creep.
+
+**Carry-over from M4 T05: in-flight ``cancel_run`` wiring.** The
+MCP server's ``cancel_run`` tool now aborts an in-flight dispatch
+task via :meth:`asyncio.Task.cancel` before performing the M4
+storage-level status flip. A process-local ``_ACTIVE_RUNS``
+``dict[str, asyncio.Task]`` registry in
+``ai_workflows/mcp/server.py`` tracks dispatch tasks; the
+``run_workflow`` tool registers entries before awaiting and pops them
+in a ``finally`` block regardless of completion / failure /
+cancellation. If the ``run_id`` is not in the registry (already
+terminal, paused at a gate, or started in another process) the path
+falls through to the M4 storage-only behaviour cleanly — no
+``KeyError``. Authoritative state is still
+``SQLiteStorage.cancel_run``'s ``runs.status`` flip per
+``architecture.md §8.7``; the task cancel is a nicety that unwinds
+long-running dispatches faster.
+
+**Files touched:**
+``ai_workflows/workflows/slice_refactor.py``,
+``ai_workflows/workflows/_dispatch.py``,
+``ai_workflows/mcp/server.py``,
+``tests/workflows/test_slice_refactor_fanout.py`` (new, 9 tests),
+``tests/workflows/test_slice_refactor_planner_subgraph.py`` (T01
+shape test updated to expect four outer nodes),
+``tests/mcp/test_cancel_run_inflight.py`` (new, 5 tests — in-flight
+cancel, sub-graph propagation, unknown-run fallback, resume-refusal
+regression guard, cancel-then-immediate-resume race),
+``CHANGELOG.md``.
+
+**ACs satisfied:** AC-1 (``SliceResult`` model), AC-2
+(fan-out + Send + reducer + aggregate placeholder populates
+``slice_results``), AC-3 (slice-worker tier composed into the
+registry), AC-4 (``durability="sync"`` on invoke + regression
+guard), plus carry-over ACs (in-flight cancel wiring, ToolNode
+absence documented, spec-deviation notes in docstrings).
+
+### Added — M6 Task 01: Slice-Discovery Phase (2026-04-20)
+
+Stands up ``ai_workflows.workflows.slice_refactor`` as the M6 outer
+``StateGraph``. T01 wires the first phase only: the planner is composed
+as a sub-graph via ``build_planner().compile()`` attached with
+``graph.add_node("planner_subgraph", …)``; a pure-function
+``slice_list_normalize`` node maps the planner's ``PlannerPlan.steps``
+1:1 into ``SliceSpec`` rows on the outer state. No new LLM call is
+introduced — this is topology + state plumbing only. The outer graph
+shape is ``START → planner_subgraph → slice_list_normalize → END``;
+T02–T06 extend the shape with fan-out, validator, aggregator,
+strict-review gate, and apply.
+
+**Sub-graph checkpointer semantics (KDR-009).** The planner sub-graph
+is compiled *without* a checkpointer; LangGraph shares the parent
+graph's ``AsyncSqliteSaver`` with the sub-graph at run time so the
+planner's ``HumanGate`` interrupt persists across the sub-graph
+boundary. The outer ``SliceRefactorState`` declares every state key
+the planner sub-graph reads or writes (``run_id`` / ``input`` /
+``plan`` / ``explorer_report`` / gate-response slots / retry-taxonomy
+slots) so LangGraph's state-channel semantics propagate the sub-graph's
+writes onto the outer state once the sub-graph finishes.
+
+**Empty plan → ``NonRetryable`` (T01 AC-4).** The normalize node fails
+loud on ``plan.steps == []`` with ``NonRetryable`` — re-running the
+planner with a revision hint cannot produce more steps; the logic error
+is in reviewer approval of a zero-step plan, upstream of this node
+(KDR-006 three-bucket taxonomy).
+
+**Dispatch ``initial_state`` convention hook (deviation from spec,
+option B per plan-mode review).** T01 AC-5 claimed "no dispatch-layer
+changes required"; verification showed
+``_dispatch._build_initial_state`` hardcodes
+``getattr(module, "PlannerInput", None)``, which cannot dispatch any
+workflow that does not export ``PlannerInput`` under that exact name.
+Rather than bake a second hardcoded class-name path, T01 introduces a
+**convention**: a workflow module may expose
+``initial_state(run_id, inputs) -> dict`` and
+``_build_initial_state`` calls it when present, falling back to the
+legacy ``PlannerInput`` lookup otherwise (so the planner workflow's
+surface behaviour is unchanged). ``slice_refactor`` implements this
+hook to construct a ``PlannerInput`` for the sub-graph from a
+caller-supplied ``SliceRefactorInput``. Two sibling hardcodes
+(``_build_result_from_final``'s ``state["plan"]`` completion signal
+and ``_build_resume_result_from_final``'s
+``state["gate_plan_review_response"]``) are left in place and
+forward-deferred as carry-over to ``task_06_apply_node.md``
+(``T01-CARRY-DISPATCH-COMPLETE``) and ``task_05_strict_review_gate.md``
+(``T01-CARRY-DISPATCH-GATE``) respectively — each is fixable in the
+task that exposes it, rather than drive-by batched now.
+
+**Files touched:**
+
+- ``ai_workflows/workflows/slice_refactor.py`` (new) — module docstring
+  cites M6 T01 + architecture.md §4.3 + KDR-001/009/010 + relationship
+  to sibling modules. Exposes ``SliceRefactorInput`` (caller input
+  shape, bounded like ``PlannerInput``), ``SliceSpec`` (bare-typed per
+  KDR-010 / ADR-0002, ``extra="forbid"``), ``SliceRefactorState``
+  (``TypedDict`` declaring the planner sub-graph's state channels
+  alongside the T01-owned ``slice_list``), ``_slice_list_normalize``
+  (pure function; raises ``NonRetryable`` on missing or empty plan),
+  ``build_slice_refactor()`` (uncompiled ``StateGraph`` with the
+  ``planner_subgraph`` + ``slice_list_normalize`` nodes),
+  ``slice_refactor_tier_registry()`` (returns ``{}`` — T01 has no
+  workflow-owned LLM tiers), and ``initial_state(run_id, inputs)``
+  (the dispatch convention hook). Registers with the workflows registry
+  at import time.
+- ``ai_workflows/workflows/_dispatch.py`` — ``_build_initial_state``
+  extended with the ``initial_state`` hook resolution; legacy
+  ``PlannerInput`` fallback unchanged so the planner workflow's
+  behaviour is identical.
+- ``tests/workflows/test_slice_refactor_planner_subgraph.py`` (new) —
+  12 test cases covering every T01 AC: registry lookup, dispatch hook
+  shape, ``SliceRefactorInput`` bounds, pause-at-sub-graph-gate (with
+  a comment documenting the LangGraph state-channel semantic that
+  sub-graph writes do *not* merge onto the outer state until the
+  sub-graph finishes — so the plan is asserted post-resume, not
+  mid-interrupt), resume-clears-sub-graph-gate + populates
+  ``slice_list``, pure-function normalize happy-path + empty-plan
+  ``NonRetryable`` + missing-plan ``NonRetryable``, builder-shape +
+  ``AsyncSqliteSaver`` compile sanity, KDR-003 grep.
+- ``design_docs/phases/milestone_6_slice_refactor/task_05_strict_review_gate.md``
+  — appended ``Carry-over from prior audits`` section with
+  ``T01-CARRY-DISPATCH-GATE``.
+- ``design_docs/phases/milestone_6_slice_refactor/task_06_apply_node.md``
+  — appended ``Carry-over from prior audits`` section with
+  ``T01-CARRY-DISPATCH-COMPLETE``.
+- ``CHANGELOG.md`` — this entry.
+
+**Acceptance criteria satisfied:**
+
+- [x] AC-1 ``ai_workflows.workflows.slice_refactor`` exports
+  ``build_slice_refactor()``; compiles against ``AsyncSqliteSaver``
+  (``test_build_slice_refactor_compiles_against_async_sqlite_saver``).
+- [x] AC-2 Planner composed as sub-graph; the run pauses at the
+  planner's ``plan_review`` gate
+  (``test_slice_refactor_pauses_at_planner_subgraph_gate``) and
+  resumes cleanly into ``slice_list_normalize``
+  (``test_resume_clears_subgraph_gate_and_populates_slice_list``).
+- [x] AC-3 ``_slice_list_normalize`` maps ``plan.steps`` → ``SliceSpec``
+  1:1 (``test_slice_list_normalize_maps_steps_one_to_one`` +
+  field-for-field assertions inside
+  ``test_resume_clears_subgraph_gate_and_populates_slice_list``).
+- [x] AC-4 Empty plan raises ``NonRetryable``
+  (``test_slice_list_normalize_empty_plan_raises_nonretryable``).
+- [x] AC-5 ``slice_refactor`` registered + dispatch-path compatible
+  (``test_slice_refactor_registered_under_existing_dispatch`` +
+  ``test_initial_state_hook_constructs_planner_input_for_subgraph``;
+  dispatch convention documented above).
+- [x] AC-6 Hermetic tests green — 12 new, full suite 378 passed / 2
+  skipped.
+- [x] AC-7 ``uv run lint-imports`` 3 / 3 kept.
+- [x] AC-8 ``uv run ruff check`` clean.
+
+**Deviations from spec:** dispatch layer changed (see option-B note
+above — spec AC-5 said "no dispatch-layer changes required"; the
+one-hook extension is strictly additive and backwards-compatible with
+the planner). ``SliceRefactorState`` is defined as ``TypedDict(total=False)``
+declaring the planner's channels directly, rather than the spec's
+``planner_plan: PlannerPlan | None`` rename, because LangGraph
+sub-graph propagation only shares channels that match by name on both
+sides. The ``SliceRefactorInput`` class is added separately from
+``PlannerInput`` (spec did not require it) so slice-specific fields
+(``slice_count_cap``, etc.) can land in later tasks without breaking
+the planner's contract.
+
 ## [M5 Multi-Tier Planner] - 2026-04-20
 
 ### Changed — M5 Task 07: Milestone Close-out (2026-04-20)

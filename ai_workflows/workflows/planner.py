@@ -46,9 +46,38 @@ __all__ = [
     "PlannerPlan",
     "ExplorerReport",
     "PlannerState",
+    "TERMINAL_GATE_ID",
+    "FINAL_STATE_KEY",
     "build_planner",
     "planner_tier_registry",
 ]
+
+
+TERMINAL_GATE_ID = "plan_review"
+"""Gate id for the strict-review ``HumanGate`` this workflow pauses at.
+
+Exposed so :mod:`ai_workflows.workflows._dispatch` can discover the
+resumed-response state key (``f"gate_{TERMINAL_GATE_ID}_response"``)
+without hardcoding the planner's id (resolves T01-CARRY-DISPATCH-GATE
+from the M6 T01 Builder-phase scope review). ``slice_refactor``
+exposes the same symbol name with its own gate id
+(``"slice_refactor_review"``).
+"""
+
+
+FINAL_STATE_KEY = "plan"
+"""State key dispatch reads to detect a completed planner run (M6 T06).
+
+Co-defined with ``slice_refactor``'s own :data:`FINAL_STATE_KEY` so
+:mod:`ai_workflows.workflows._dispatch` can detect a completed run
+uniformly via ``state[FINAL_STATE_KEY] is not None``. For the planner
+this has always been ``"plan"`` — the constant formalises the convention
+rather than changing behaviour (resolves the planner half of
+``T01-CARRY-DISPATCH-COMPLETE`` from the M6 T01 audit). Workflows that
+omit the constant fall back to the ``"plan"`` default in dispatch, so
+the contract is backwards-compatible for any future workflow whose
+terminal signal is still a ``plan`` row.
+"""
 
 
 PLANNER_RETRY_POLICY = RetryPolicy(
