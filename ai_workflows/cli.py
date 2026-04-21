@@ -50,6 +50,7 @@ from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path
 from ai_workflows.workflows._dispatch import (
     _CROCKFORD,
     ResumePreconditionError,
+    UnknownTierError,
     UnknownWorkflowError,
     _generate_ulid,
 )
@@ -103,6 +104,34 @@ def version() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _parse_tier_overrides(entries: list[str]) -> dict[str, str]:
+    """Parse repeatable ``--tier-override`` flags into a ``{logical: replacement}`` map.
+
+    Each entry must match ``<logical>=<replacement>`` with non-empty
+    halves. M5 T04: surface-boundary parsing only — unknown tier names
+    are validated later, inside
+    :func:`ai_workflows.workflows._dispatch.run_workflow`, so a
+    repeated flag with an unknown tier yields the same
+    :class:`UnknownTierError` path the MCP surface hits.
+    ``typer.BadParameter`` is the Typer-native way to exit with code 2
+    and a readable message; matches Typer's own handling of missing
+    required options.
+    """
+    mapping: dict[str, str] = {}
+    for raw in entries:
+        if "=" not in raw:
+            raise typer.BadParameter(
+                f"--tier-override entry must be '<logical>=<replacement>' (got {raw!r})"
+            )
+        logical, replacement = raw.split("=", 1)
+        if not logical or not replacement:
+            raise typer.BadParameter(
+                f"--tier-override entry must have non-empty sides (got {raw!r})"
+            )
+        mapping[logical] = replacement
+    return mapping
+
+
 @app.command()
 def run(
     workflow: str = typer.Argument(
@@ -136,6 +165,15 @@ def run(
         "--run-id",
         help="Override the auto-generated run id.",
     ),
+    tier_override: list[str] = typer.Option(
+        [],
+        "--tier-override",
+        help=(
+            "Override a tier: --tier-override <logical>=<replacement>. "
+            "Repeatable. Example: "
+            "--tier-override planner-synth=planner-explorer."
+        ),
+    ),
 ) -> None:
     """Execute a workflow end-to-end. Pauses at ``HumanGate`` interrupts.
 
@@ -150,6 +188,7 @@ def run(
     # Route structured logs to stderr so the CLI's stdout stays the
     # machine-parseable surface (gate hint / plan JSON / cost total).
     configure_logging(level="INFO")
+    tier_overrides = _parse_tier_overrides(tier_override)
     asyncio.run(
         _run_async(
             workflow=workflow,
@@ -158,6 +197,7 @@ def run(
             max_steps=max_steps,
             budget_cap_usd=budget_cap_usd,
             run_id=run_id,
+            tier_overrides=tier_overrides,
         )
     )
 
@@ -170,6 +210,7 @@ async def _run_async(
     max_steps: int,
     budget_cap_usd: float | None,
     run_id: str | None,
+    tier_overrides: dict[str, str] | None = None,
 ) -> None:
     """Async body of ``aiw run``.
 
@@ -184,12 +225,16 @@ async def _run_async(
             inputs={"goal": goal, "context": context, "max_steps": max_steps},
             budget_cap_usd=budget_cap_usd,
             run_id=run_id,
+            tier_overrides=tier_overrides,
         )
     except UnknownWorkflowError as exc:
         typer.echo(
             f"unknown workflow {exc.workflow!r}; registered: {exc.registered}",
             err=True,
         )
+        raise typer.Exit(code=2) from None
+    except UnknownTierError as exc:
+        typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from None
 
     _emit_cli_run_result(result)

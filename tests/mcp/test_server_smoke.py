@@ -229,3 +229,24 @@ async def test_mcp_server_all_four_tools_end_to_end() -> None:
     # list_runs with status filter reflects the cancel.
     cancelled_only = await list_tool.fn(ListRunsInput(status="cancelled"))
     assert [s.run_id for s in cancelled_only] == ["smoke-run-2"]
+
+    # 7 — M5 T05: run_workflow with a tier_overrides payload to exercise
+    # the field once in the always-run smoke. The directory-local conftest
+    # pins both tiers to the same Gemini Flash model so the override is
+    # a no-op at the dispatch layer, but the run-to-gate + ToolError-free
+    # path proves the field is plumbed end-to-end.
+    _StubLiteLLMAdapter.script = [
+        (_valid_explorer_json(), 0.0012),
+        (_valid_plan_json(), 0.0021),
+    ]
+    override_run = await run_tool.fn(
+        RunWorkflowInput(
+            workflow_id="planner",
+            inputs=_planner_inputs(),
+            run_id="smoke-run-3",
+            tier_overrides={"planner-synth": "planner-explorer"},
+        )
+    )
+    assert override_run.status == "pending"
+    assert override_run.awaiting == "gate"
+    assert override_run.run_id == "smoke-run-3"

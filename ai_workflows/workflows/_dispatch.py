@@ -58,6 +58,7 @@ from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path
 
 __all__ = [
     "ResumePreconditionError",
+    "UnknownTierError",
     "UnknownWorkflowError",
     "resume_run",
     "run_workflow",
@@ -82,6 +83,59 @@ class UnknownWorkflowError(ValueError):
         self.workflow = workflow
         self.registered = registered
         super().__init__(f"unknown workflow {workflow!r}; registered: {registered}")
+
+
+class UnknownTierError(ValueError):
+    """Raised when a ``tier_overrides`` entry names a tier not in the registry.
+
+    M5 Task 04 / 05 introduce ``--tier-override <logical>=<replacement>``
+    on the CLI and ``tier_overrides: dict[str, str]`` on the MCP
+    ``run_workflow`` tool so a caller can repoint a workflow-declared
+    tier at another tier already in the registry (architecture.md §4.4 /
+    §8.4). Both names are validated against
+    ``<workflow>_tier_registry()`` at dispatch time. The CLI converts
+    this to ``typer.Exit(code=2)``; the MCP surface raises a matching
+    ``ToolError``. ``kind`` is either ``"logical"`` (left-hand side of
+    the ``=``, the tier being overridden) or ``"replacement"``
+    (right-hand side, the tier whose config the logical name now points
+    at) so error messages name the offending side.
+    """
+
+    def __init__(self, tier_name: str, kind: str, registered: list[str]) -> None:
+        self.tier_name = tier_name
+        self.kind = kind
+        self.registered = sorted(registered)
+        super().__init__(
+            f"unknown {kind} tier {tier_name!r}; registered: {self.registered}"
+        )
+
+
+def _apply_tier_overrides(
+    registry: dict[str, Any],
+    overrides: dict[str, str] | None,
+) -> dict[str, Any]:
+    """Return a new registry with each ``logical`` repointed at ``replacement``'s config.
+
+    Pure function — does not mutate ``registry``. Both sides of every
+    override are validated against ``registry``; the first unknown name
+    raises :class:`UnknownTierError` with the offending name and which
+    side it came from. An empty or ``None`` ``overrides`` returns a
+    shallow copy of ``registry`` (the idempotency guard T04's tests
+    pin: calling ``_apply_tier_overrides`` does not mutate the input
+    across runs).
+    """
+    new_registry = dict(registry)
+    if not overrides:
+        return new_registry
+    for logical, replacement in overrides.items():
+        if logical not in registry:
+            raise UnknownTierError(logical, "logical", list(registry.keys()))
+        if replacement not in registry:
+            raise UnknownTierError(
+                replacement, "replacement", list(registry.keys())
+            )
+        new_registry[logical] = registry[replacement]
+    return new_registry
 
 
 class ResumePreconditionError(ValueError):
@@ -231,6 +285,7 @@ async def run_workflow(
     inputs: dict[str, Any],
     budget_cap_usd: float | None = None,
     run_id: str | None = None,
+    tier_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Dispatch a workflow run end-to-end and return a surface-ready dict.
 
@@ -249,15 +304,28 @@ async def run_workflow(
     * ``error`` — descriptive error string when
       ``status == "errored"``; otherwise ``None``.
 
+    ``tier_overrides`` (M5 T04 / T05) is an optional
+    ``{logical: replacement}`` map applied against the workflow's
+    ``<workflow>_tier_registry()`` before the graph compile step: each
+    ``logical`` key gets repointed at ``registry[replacement]``'s
+    :class:`TierConfig` (route + concurrency + timeout). Unknown names
+    on either side raise :class:`UnknownTierError`; both surfaces
+    translate that to their own error shape at the boundary. The
+    overrides do not mutate the source registry — a fresh copy is
+    threaded into this run's ``config.configurable["tier_registry"]``
+    so repeated calls remain idempotent.
+
     Raises :class:`UnknownWorkflowError` if ``workflow`` is not
-    registered (surfaces convert this to their own error shape at the
-    boundary).
+    registered and :class:`UnknownTierError` if a ``tier_overrides``
+    entry references a tier not in the workflow's registry (surfaces
+    convert both to their own error shape at the boundary).
     """
     workflow_module = _import_workflow_module(workflow)
     builder = workflows.get(workflow)
 
     run_id_resolved = run_id or _generate_ulid()
-    tier_registry = _resolve_tier_registry(workflow, workflow_module)
+    base_registry = _resolve_tier_registry(workflow, workflow_module)
+    tier_registry = _apply_tier_overrides(base_registry, tier_overrides)
     initial_state = _build_initial_state(workflow_module, run_id_resolved, inputs)
 
     storage = await SQLiteStorage.open(default_storage_path())

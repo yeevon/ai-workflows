@@ -36,7 +36,7 @@ from ai_workflows.graph.retrying_edge import retrying_edge
 from ai_workflows.graph.tiered_node import tiered_node
 from ai_workflows.graph.validator_node import validator_node
 from ai_workflows.primitives.retry import RetryPolicy
-from ai_workflows.primitives.tiers import LiteLLMRoute, TierConfig
+from ai_workflows.primitives.tiers import ClaudeCodeRoute, LiteLLMRoute, TierConfig
 from ai_workflows.workflows import register
 
 __all__ = [
@@ -360,27 +360,39 @@ def build_planner() -> StateGraph:
 
 
 def planner_tier_registry() -> dict[str, TierConfig]:
-    """Return the two tiers this workflow calls (both Gemini Flash via LiteLLM).
+    """Return the two tiers this workflow calls.
 
-    Shared by the ``aiw run`` CLI (M3 Task 04) and the end-to-end smoke
-    test (M3 Task 07) so both paths use one definition. KDR-003 spirit:
-    this helper never reads ``GEMINI_API_KEY`` — the env-var read stays
-    at the ``LiteLLMAdapter`` boundary when a provider call actually
-    fires. ``max_concurrency`` + ``per_call_timeout_s`` match the values
-    the planner graph was exercised against in T03's tests.
+    M5 Task 01 repoints ``planner-explorer`` to local Qwen via Ollama
+    (``ollama/qwen2.5-coder:32b``) per architecture.md §4.3's two-phase
+    planner design — LiteLLM dispatches the Ollama HTTP call (KDR-007),
+    and the default ``api_base`` targets the daemon at
+    ``http://localhost:11434``. M5 Task 02 repoints ``planner-synth``
+    to Claude Code Opus via the OAuth subprocess driver
+    (``ClaudeCodeRoute(cli_model_flag="opus")``) — LiteLLM does not
+    cover OAuth-authenticated subprocess providers, so the Claude Code
+    path stays bespoke (KDR-007). ``max_concurrency=1`` on both tiers
+    reflects the underlying single-writer constraints (local model for
+    explorer, single OAuth session for synth); Opus + subprocess spawn
+    has a higher p95 than hosted Gemini so the synth timeout goes up
+    to 300 s. KDR-003 spirit: this helper never reads API keys — env
+    reads stay at the ``LiteLLMAdapter`` / CLI boundary when a provider
+    call actually fires.
     """
     return {
         "planner-explorer": TierConfig(
             name="planner-explorer",
-            route=LiteLLMRoute(model="gemini/gemini-2.5-flash"),
-            max_concurrency=2,
-            per_call_timeout_s=60,
+            route=LiteLLMRoute(
+                model="ollama/qwen2.5-coder:32b",
+                api_base="http://localhost:11434",
+            ),
+            max_concurrency=1,
+            per_call_timeout_s=180,
         ),
         "planner-synth": TierConfig(
             name="planner-synth",
-            route=LiteLLMRoute(model="gemini/gemini-2.5-flash"),
-            max_concurrency=2,
-            per_call_timeout_s=90,
+            route=ClaudeCodeRoute(cli_model_flag="opus"),
+            max_concurrency=1,
+            per_call_timeout_s=300,
         ),
     }
 

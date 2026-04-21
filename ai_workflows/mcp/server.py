@@ -48,6 +48,7 @@ from ai_workflows.mcp.schemas import (
 from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path
 from ai_workflows.workflows._dispatch import (
     ResumePreconditionError,
+    UnknownTierError,
     UnknownWorkflowError,
 )
 from ai_workflows.workflows._dispatch import (
@@ -81,10 +82,11 @@ def build_server() -> FastMCP:
 
         Mirrors ``aiw run`` by routing through
         :func:`ai_workflows.workflows._dispatch.run_workflow`. Unknown
-        workflow names surface as a :class:`fastmcp.exceptions.ToolError`
-        (JSON-RPC error response); in-band failures (budget breach,
-        validator exhaust) come back as ``status="errored"`` with a
-        descriptive ``error`` string in the output.
+        workflow names and unknown ``tier_overrides`` entries (M5 T05)
+        surface as a :class:`fastmcp.exceptions.ToolError` (JSON-RPC
+        error response); in-band failures (budget breach, validator
+        exhaust) come back as ``status="errored"`` with a descriptive
+        ``error`` string in the output.
         """
         try:
             result = await _dispatch_run_workflow(
@@ -92,8 +94,9 @@ def build_server() -> FastMCP:
                 inputs=payload.inputs,
                 budget_cap_usd=payload.budget_cap_usd,
                 run_id=payload.run_id,
+                tier_overrides=payload.tier_overrides,
             )
-        except UnknownWorkflowError as exc:
+        except (UnknownWorkflowError, UnknownTierError) as exc:
             raise ToolError(str(exc)) from None
         return RunWorkflowOutput(**result)
 

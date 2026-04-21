@@ -19,7 +19,7 @@ Update the existing e2e so, when both prerequisites are present, it runs against
 - Asserts:
   - `aiw run planner …` completes to the gate.
   - `aiw resume <run_id> --approve` completes to `completed`.
-  - `runs.total_cost_usd` is strictly positive (Claude Code + any Haiku sub-model); Qwen contributes 0.
+  - `runs.total_cost_usd` is non-negative and stamped (a NULL at resume is a bug). Claude Code Opus on the Max subscription reports notional 0 via `modelUsage` — the absolute dollar figure is informational, not billable. Matches the sibling `test_tier_override_smoke.py` posture and the M4 T08 CHANGELOG calibration note. Original T06 draft said "strictly positive"; T07's live run on 2026-04-20 falsified that claim and the spec was corrected in-place.
   - `TokenUsage.sub_models` on the Claude Code row is non-empty if the `modelUsage` JSON the CLI returned contained sub-models (skip the assertion if not — some Opus calls do not auto-spawn).
   - No `anthropic` env var read, no `anthropic` SDK import reachable (grep).
 

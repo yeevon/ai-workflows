@@ -53,15 +53,27 @@ class RunWorkflowInput(BaseModel):
     for the planner workflow). ``budget_cap_usd`` and ``run_id`` mirror
     the ``aiw run`` CLI flags.
 
-    Note: the ``tier_overrides`` field named in pre-M4 architecture notes
-    is intentionally absent; it lands at M5 T05 when the graph layer
-    begins consuming it.
+    ``tier_overrides`` (M5 T05) is the MCP-side mirror of the CLI's
+    ``--tier-override`` flag: an optional ``{logical: replacement}``
+    map swapped against the workflow's tier registry at invoke time
+    (architecture.md §4.4). Both names must already exist in
+    ``<workflow>_tier_registry()``; unknown names surface as a
+    ``ToolError``. ``None``-default keeps the JSON-RPC payload
+    backward-compatible with M4-era callers who never set the field.
     """
 
     workflow_id: str
     inputs: dict[str, Any]
     budget_cap_usd: float | None = None
     run_id: str | None = None
+    tier_overrides: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Optional {logical: replacement} map to swap tiers at invoke "
+            "time. Both names must already exist in the workflow's tier "
+            "registry."
+        ),
+    )
 
 
 class RunWorkflowOutput(BaseModel):
