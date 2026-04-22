@@ -19,14 +19,16 @@ This roadmap replaces the archived milestone plan at `archive/pre_langgraph_pivo
 | M6 | `slice_refactor` DAG | [phases/milestone_6_slice_refactor/](phases/milestone_6_slice_refactor/README.md) | ✅ complete (2026-04-20) |
 | M7 | Eval harness | [phases/milestone_7_evals/](phases/milestone_7_evals/README.md) | ✅ complete (2026-04-21) |
 | M8 | Ollama infrastructure | [phases/milestone_8_ollama/](phases/milestone_8_ollama/README.md) | ✅ complete (2026-04-21) |
-| M9 | Claude Code skill packaging | [phases/milestone_9_skill/](phases/milestone_9_skill/README.md) | optional |
+| M9 | Claude Code skill packaging | [phases/milestone_9_skill/](phases/milestone_9_skill/README.md) | ✅ complete (2026-04-21) |
 | M10 | Ollama fault-tolerance hardening | [phases/milestone_10_ollama_hardening/](phases/milestone_10_ollama_hardening/README.md) | planned |
+| M11 | MCP gate-review surface | [phases/milestone_11_gate_review/](phases/milestone_11_gate_review/README.md) | planned |
+| M12 | Tiered audit cascade | [phases/milestone_12_audit_cascade/](phases/milestone_12_audit_cascade/README.md) | planned |
 
 **Deferred (see [nice_to_have.md](nice_to_have.md)):** Langfuse, Instructor/pydantic-ai, LangSmith, Typer swap, Docker Compose, mkdocs, DeepAgents templates, standalone OTel. **No milestones for these until their trigger fires.**
 
 ---
 
-## M2–M9 summaries
+## M2–M12 summaries
 
 One-liners only; each gets a full `phases/` directory when the prior milestone closes clean.
 
@@ -39,6 +41,8 @@ One-liners only; each gets a full `phases/` directory when the prior milestone c
 - **M8 — Ollama infrastructure.** Health check, circuit breaker, fallback-to-Gemini gate. Needed once Qwen is load-bearing in M5/M6.
 - **M9 — Claude Code skill packaging (optional).** `.claude/skills/ai-workflows/SKILL.md` wrapping `aiw` or the MCP server. Packaging only — no logic.
 - **M10 — Ollama fault-tolerance hardening.** Closes the design-rationale and UX gaps in M8's fault-tolerance surface that were surfaced by the 2026-04-21 M8 deep-analysis pass: retroactive ADR for the `fallback_tier="planner-synth"` choice, RETRY-cooldown guidance in the gate prompt, invariant tests for the single-gate-per-run pattern and the `_mid_run_tier_overrides` Send-payload carry, documented process-local breaker scope, and five new `nice_to_have.md` entries (multi-process breaker, empirical tuning, second-level fallback chain, single-gate factory refactor, Gemini-tier breakers). Composes over existing KDRs — no new KDR.
+- **M11 — MCP gate-review surface.** Closes the M9 T04 live-smoke finding (ISS-02): at a plan-review gate pause the MCP `RunWorkflowOutput` / `ResumeRunOutput` return `plan: null`, so the operator and the Claude Code skill have nothing to review. M11 projects the in-flight draft plan (and any other gate-relevant state) into the MCP output at `status="pending", awaiting="gate"`, not only on terminal completion. Pure MCP-surface diff; no graph/workflow change. Precondition for M12's cascade-failure HumanGate escalation path (operator needs reviewable state to arbitrate). No new KDR — composes over KDR-002 + KDR-008.
+- **M12 — Tiered audit cascade.** Ships KDR-011 + [ADR-0004](adr/0004_tiered_audit_cascade.md): new `AuditCascadeNode` graph primitive + `auditor-sonnet`/`auditor-opus` TierConfigs + per-workflow `audit_cascade_enabled` opt-in + role-tagged `TokenUsage` telemetry + a `run_audit_cascade` MCP tool for standalone artefact audit. Auditor tiers route via the existing `ClaudeCodeSubprocess` over the OAuth CLI (`--model sonnet` / `--model opus`) — KDR-003 preserved, zero `anthropic` SDK surface. Cascade is inline, opt-in default-off, routes failure through `RetryingEdge` with the auditor's `failure_reasons` + `suggested_approach` re-rendered into the next primary prompt, and escalates to a strict `HumanGate` (M11-visible) on retry exhaustion. Depends on M11.
 
 ---
 

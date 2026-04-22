@@ -1,6 +1,6 @@
 # Task 04 — Milestone Close-out
 
-**Status:** 📝 Planned.
+**Status:** ✅ Complete (2026-04-21).
 **Grounding:** [milestone README](README.md) · [CLAUDE.md](../../../CLAUDE.md) close-out conventions · [M8 T06](../milestone_8_ollama/task_06_milestone_closeout.md) (pattern to mirror).
 
 ## What to Build
@@ -78,21 +78,21 @@ T06's shape. Record:
 
 ## Acceptance Criteria
 
-- [ ] Milestone README Status flipped to `✅ Complete` with a date.
-- [ ] Outcome section covers all four tasks (T01 / T02 / T03 / T04)
+- [x] Milestone README Status flipped to `✅ Complete` with a date.
+- [x] Outcome section covers all four tasks (T01 / T02 / T03 / T04)
       with explicit dispositions (especially T02's
       shipped-or-deferred).
-- [ ] `roadmap.md` M9 row reflects the complete status.
-- [ ] `CHANGELOG.md` has a dated `[M9 …]` section with a T04
+- [x] `roadmap.md` M9 row reflects the complete status.
+- [x] `CHANGELOG.md` has a dated `[M9 …]` section with a T04
       close-out entry at the top; `[Unreleased]` retained.
-- [ ] Root `README.md` milestone table updated; any M9-era links
+- [x] Root `README.md` milestone table updated; any M9-era links
       still resolve.
-- [ ] Manual smoke-test round-trip recorded in CHANGELOG with
+- [x] Manual smoke-test round-trip recorded in CHANGELOG with
       commit sha baseline.
-- [ ] Zero `ai_workflows.*` code diff across all M9 tasks
+- [x] Zero `ai_workflows.*` code diff across all M9 tasks
       (packaging-only invariant — audit with `git diff --stat`
       against the M8 T06 baseline commit).
-- [ ] `uv run pytest` + `uv run lint-imports` (4 contracts kept) +
+- [x] `uv run pytest` + `uv run lint-imports` (4 contracts kept) +
       `uv run ruff check` all clean.
 
 ## Dependencies

@@ -243,7 +243,9 @@ None of these have a non-test caller today. Every production code path (budget c
 
 **Why not now:** zero cost to leave in place; deletion is a separate refactor with its own reasoning and no forcing function. The T06 reframe plan itself flagged this as *"Candidate for a future simplification pass under a new KDR / nice_to_have trigger. Not this task's scope."*
 
-**Related history:** [`design_docs/phases/milestone_3_first_workflow/task_06_cli_list_cost.md`](phases/milestone_3_first_workflow/task_06_cli_list_cost.md) "Design drift and reframe" section.
+Additional reason as of 2026-04-21 (M9 post-close-out deep-analysis): [M12](phases/milestone_12_audit_cascade/README.md) plans a new `CostTracker.by_role(run_id)` aggregator over `TokenUsage` to split role-tagged ("author" / "auditor" / "verdict") cost for the tiered audit cascade (see [ADR-0004](adr/0004_tiered_audit_cascade.md)). That makes the rollup *idiom* — not the specific `by_tier` / `by_model` signatures — a near-term load-bearing pattern again. Pruning `by_tier` / `by_model` and then adding `by_role` alongside would be a two-step churn. Leave them for now; re-evaluate only after M12 lands and the consumer set is final.
+
+**Related history:** [`design_docs/phases/milestone_3_first_workflow/task_06_cli_list_cost.md`](phases/milestone_3_first_workflow/task_06_cli_list_cost.md) "Design drift and reframe" section. Additional context: [M9 deep analysis §6](phases/milestone_9_skill/deep_analysis.md).
 
 ---
 
@@ -377,6 +379,8 @@ None of these have a non-test caller today. Every production code path (budget c
 **Why not now:** single-maintainer project with ~7 env-vars, all documented at their use sites. Grepping for `AIW_` across the repo finds every one. Adding a table now is ceremony without a consumer, and the table would silently rot unless a test enforces it. Deferred until a forcing function appears.
 
 **Related history:** surfaced in the 2026-04-21 M7 post-milestone deep drift-check — the `AIW_CAPTURE_EVALS` + `AIW_EVAL_LIVE` + `AIW_EVALS_ROOT` additions brought the total to ~7 env-vars spread across ~28 files. No audit issue filed.
+
+Re-evaluated during the 2026-04-21 [M9 post-close-out deep-analysis](phases/milestone_9_skill/deep_analysis.md): [`skill_install.md §1`](phases/milestone_9_skill/skill_install.md) enumerates `GEMINI_API_KEY` + the `claude` CLI on PATH as external-facing prereqs — the skill-packaging sub-trigger in the list above fired *weakly*. Threshold judged **not met**: the skill doc is consumed in-repo (no `docker run -e` line, no standalone binary), the single-maintainer precondition still holds, and both prereqs are already discoverable at their use sites. The call flips if any of the stronger triggers above fire (second human contributor, env-var collision incident, or an external-facing distribution artefact like a container image or standalone binary).
 
 ---
 

@@ -7,6 +7,230 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M9 Claude Code Skill Packaging] - 2026-04-21
+
+### Changed — M9 Task 04: Milestone Close-out (2026-04-21)
+
+Flips M9 to ✅ Complete (2026-04-21). Docs-only sweep: promotes the
+M9 T01–T03 `[Unreleased]` entries into this dated section, refreshes
+the milestone README with an Outcome section + Spec-drift block
+(single LOW note from T03 on the `gate_reason` rewording), flips the
+roadmap M9 row from `optional` to `✅ complete (2026-04-21)`, and
+updates the root README (status table row + post-M9 narrative pointer).
+
+**Packaging-only invariant honoured.** Zero `ai_workflows/`,
+`migrations/`, `pyproject.toml` diff across all M9 tasks against the
+M8 T06 baseline commit `0e6db6e — m8 tasks 1-6 done (milestone close)
++ m10 planning`. Verified at close-out with
+`git diff --stat 0e6db6e -- ai_workflows/ migrations/ pyproject.toml`
+→ empty. Nine new tests under `tests/skill/` (5 shape + 4 doc-link),
+two new docs (`SKILL.md` + `skill_install.md`), one root README
+pointer — nothing else.
+
+**T02 disposition recorded.** 📝 Deferred (no trigger fired,
+2026-04-21). Spec-sanctioned skip path per T02 §*Trigger* ("If none
+fire at kickoff, skip this task and proceed to T03"). Schema check
+was performed anyway and pinned in
+[`task_02_plugin_manifest.md`](../../design_docs/phases/milestone_9_skill/task_02_plugin_manifest.md)
+so a future Builder starts with accurate facts — real Claude Code
+plugin manifests live at `.claude-plugin/plugin.json` (not the task
+spec's originally-guessed `.claude/plugins/<name>/plugin.json`) and
+carry only `name` / `description` / `author` fields. Re-open if
+marketplace distribution, second-host manifest install, or internal
+multi-machine distribution need ever voices.
+
+**Close-out-time live verification (2026-04-21):** The skill + MCP
+round-trip described in
+[`skill_install.md §4`](../../design_docs/phases/milestone_9_skill/skill_install.md)
+was walked end-to-end from a live Claude Code session against the
+registered `aiw-mcp` stdio server. Baseline commit for the
+verification: `d2df1fa — milestone 9 task creation` (HEAD at smoke
+time; M9 close-out doc edits not yet committed).
+
+Observed round-trip:
+
+1. Skill loaded successfully in Claude Code ("Successfully loaded
+   skill" UI signal).
+2. `run_workflow(workflow_id="planner", inputs={"goal": "Write a
+   release checklist"}, budget_cap_usd=0.5)` → response matched the
+   documented pending shape exactly:
+   `{run_id: "01KPSARVKS7YPGW8CHKPRABXC3", status: "pending",
+   awaiting: "gate", plan: null, total_cost_usd: 0, error: null}`.
+3. Operator approved at the plan-review gate.
+4. `resume_run(run_id, gate_response="approved")` → completed run
+   with the full ten-step release-checklist plan artefact returned
+   in the response.
+5. `test_skill_install_doc_links_resolve` and
+   `test_skill_md_shape.py` continue green (every relative link still
+   resolves; KDR-003 guardrail holds).
+
+The round-trip **passed**. The test-enforced doc-link + shape gates
+continue to protect the M9 surface post-close.
+
+**UX defect surfaced during the live smoke (logged as
+[`issues/task_04_issue.md` ISS-02 🔴 HIGH](../../design_docs/phases/milestone_9_skill/issues/task_04_issue.md)):**
+at the gate-pause step, the MCP `RunWorkflowOutput.plan` field is
+`null` by design (per
+[`ai_workflows/mcp/schemas.py:87-90`](../../ai_workflows/mcp/schemas.py#L87-L90):
+"`plan` is populated only on `'completed'`"), so the skill's primary
+surface cannot show the draft plan to the operator for an informed
+approve/reject decision. The operator observed: "paused for human
+gate review but there is nothing for me to check." Approving blind
+does complete the round-trip, but that defeats the purpose of a
+human-review gate. The `ai_workflows.mcp.server` module exposes zero
+`@mcp.resource()` either, so there is no sibling surface that could
+project the draft. Fix requires a code change (new MCP tool such as
+`get_run_state(run_id)`, a new MCP resource like
+`aiw://runs/<id>/state`, or resemanticising `plan` to project the
+in-flight view at gate pause) — **out of M9's packaging-only scope
+per KDR-002**. Forward-deferred disposition pending user decision —
+see ISS-02 recommendation for options.
+
+**Green-gate snapshot (2026-04-21):**
+`uv run pytest` → 596 passed, 5 skipped (4 pre-existing e2e smokes
+plus live-mode eval replay, all gated by `AIW_E2E=1` or
+`AIW_EVAL_LIVE=1`), 2 pre-existing `yoyo` deprecation warnings;
+`uv run lint-imports` → **4 contracts kept** (no new layer contract
+added at M9 — all M9 deliverables are docs + tests); `uv run ruff
+check` → clean.
+
+### Added — M9 Task 01: `.claude/skills/ai-workflows/SKILL.md` + Supporting Files (2026-04-21)
+
+Packaging-only skill file (KDR-002) that teaches Claude Code when and
+how to invoke ai-workflows through the M4 MCP server (primary) or the
+M3 `aiw` CLI (fallback). No orchestration logic, no new Python modules,
+no new runtime dependencies (`pyyaml` already present via existing
+deps). Four MCP tools documented with wire-shape examples
+(`run_workflow`, `resume_run`, `list_runs`, `cancel_run`); the three
+gate pauses callers will encounter are named (planner plan-review,
+slice_refactor strict-review, M8 Ollama fallback) with the
+cooldown-before-RETRY caveat surfaced inline; KDR-003 honoured — no
+reference to `ANTHROPIC_API_KEY` or the Anthropic HTTP API.
+
+**Files touched:**
+
+- `.claude/skills/ai-workflows/SKILL.md` — new. Frontmatter (`name`,
+  `description`) + five body sections (*When to use*, *Primary surface
+  — MCP*, *Fallback surface — CLI*, *Gate pauses*, *What this skill
+  does NOT do*).
+- `tests/skill/__init__.py` — new (package marker).
+- `tests/skill/test_skill_md_shape.py` — new. Five hermetic tests: file
+  exists, frontmatter shape, four MCP tool names present, every
+  currently-registered workflow (`planner`, `slice_refactor`) named in
+  the body, KDR-003 guardrail (no `ANTHROPIC_API_KEY` /
+  `anthropic.com/api` substrings).
+
+**Acceptance criteria satisfied:**
+
+1. ✅ SKILL.md exists with YAML frontmatter + five body sections.
+2. ✅ Every action resolves to an MCP tool call or `aiw` shell-out.
+3. ✅ `pyproject.toml` diff empty — no new runtime or dev dep.
+4. ✅ No new `ai_workflows.*` module. `uv run lint-imports` reports
+   **4 contracts kept**.
+5. ✅ `tests/skill/test_skill_md_shape.py` — 5 passed.
+6. ✅ `uv run pytest` (597 passed, 5 skipped) + `uv run lint-imports`
+   (4 kept) + `uv run ruff check` (clean).
+
+**Cycle 2 (2026-04-21):** Resolved M9-T01-ISS-01 🟢 LOW — rewrote the
+SKILL.md *Gate pauses* bullet on the Ollama fallback path to name the
+`status="pending"` + `awaiting="gate"` *response* signal as the
+operator cue and to relocate the reason detail to the LangGraph
+checkpointer (not `list_runs`, which only projects `RunSummary` rows).
+Paragraph rewrite only; no design or test change.
+
+### Added — M9 Task 03: Distribution / Install Docs (2026-04-21)
+
+User-facing install walk-through composing the T01 skill with the M4
+MCP server registration. Packaging-only (KDR-002); no code change, no
+new runtime dependency. T02 plugin manifest is deferred per its own
+spec so §3 *Install the skill* surfaces only Options A (in-repo) + B
+(user-level symlink) — Option C (plugin) is marked "not applicable at
+this revision" with a back-link to the T02 task file for the
+schema-check findings.
+
+**Files touched:**
+
+- `design_docs/phases/milestone_9_skill/skill_install.md` — new.
+  Five sections (Prerequisites → Install MCP → Install skill → E2E
+  smoke → Troubleshooting) per T03 spec. §4 pins exact JSON response
+  shapes for `run_workflow` + `resume_run`. §5 *Fallback gate fires
+  mid-run* aligned with the M9 T01 Cycle 2 correction — names the
+  `status="pending"` + `awaiting="gate"` response signal, locates the
+  reason in the LangGraph checkpointer (not `list_runs`), names the
+  `cooldown_s` wait before any RETRY-equivalent resume.
+- `README.md` — root-level single-line pointer added to §*MCP server*
+  section (no install-step duplication, per T03 AC-2).
+- `tests/skill/test_doc_links.py` — new. Four hermetic tests: doc
+  exists, every relative link resolves, root README links in, KDR-003
+  guardrail (no `ANTHROPIC_API_KEY` / `anthropic.com/api` substrings).
+
+**Acceptance criteria satisfied:**
+
+1. ✅ `skill_install.md` has all five sections.
+2. ✅ Root README links to the walk-through from one contextually
+   appropriate line.
+3. ✅ Every relative link in the walk-through resolves on disk
+   (test-enforced).
+4. ✅ No `ANTHROPIC_API_KEY` / `anthropic.com/api` substring in the
+   walk-through (KDR-003 guardrail, test-enforced).
+5. ✅ `pyproject.toml` diff empty. `uv run lint-imports` reports
+   4 contracts kept.
+6. ✅ `uv run pytest` (596 passed, 5 skipped) + `uv run lint-imports`
+   (4 kept) + `uv run ruff check` (clean).
+
+**Deviation from spec:** §5 *Fallback gate fires mid-run* reworded
+from the T03 spec's literal "the skill surfaces `gate_reason` to the
+user" — the MCP surface does not project a `gate_reason` field
+(`RunWorkflowOutput` / `ResumeRunOutput` in
+[`ai_workflows/mcp/schemas.py`](ai_workflows/mcp/schemas.py) only
+expose `status` / `awaiting` / `plan` / `total_cost_usd` / `error`).
+The walk-through accurately names `status="pending"` + `awaiting="gate"`
+as the operator signal and locates the failing-tier detail in the
+LangGraph checkpointer state, matching the M9 T01 Cycle 2 correction.
+
+### Deferred — M9 Task 02: Optional Plugin Manifest (2026-04-21)
+
+**Disposition:** Spec-sanctioned skip ("If none fire at kickoff, skip
+this task and proceed to T03" — T02 spec §*Trigger*).
+
+**Trigger check:** none of the three triggers fired in the current
+session — no stated intent to publish to the Claude Code plugin
+marketplace, no second host asking for manifest-based install, no
+internal multi-machine distribution need voiced.
+
+**Schema check (performed anyway, to leave facts for a future
+Builder):** Real Claude Code plugin manifests live at
+`.claude-plugin/plugin.json` (not `.claude/plugins/<name>/plugin.json`
+as the task spec originally guessed). Observed three first-party
+plugins under `~/.claude/plugins/marketplaces/claude-plugins-official/`;
+all three carried only `name`, `description`, `author` — no `version`,
+no `skills` array, no `mcp_servers` block. Skills live in a sibling
+`skills/` directory at the plugin root; MCP servers register through
+the `claude plugin marketplace` flow, not the manifest. The `claude
+plugin validate <path>` CLI is the authoritative shape check.
+
+**Files touched:**
+
+- `design_docs/phases/milestone_9_skill/task_02_plugin_manifest.md` —
+  status flipped to `📝 Deferred (no trigger — 2026-04-21)` and a
+  *Schema-check findings* section prepended so a future Builder starts
+  with accurate facts when a trigger eventually fires. Original
+  (known-wrong) *Deliverables* + *Tests* sections retained verbatim
+  for history.
+
+**Acceptance criteria disposition:**
+
+- AC-1 (schema check documented) ✅ — findings recorded in task file
+  + this entry.
+- AC-2–AC-6 — **not applicable** under the deferred disposition (no
+  manifest shipped).
+
+**Files not touched:** `.claude-plugin/`, `pyproject.toml`,
+`tests/skill/test_plugin_manifest.py`, any code under `ai_workflows/`.
+
+No new dependency, no new code, no test delta. `uv run pytest` +
+`uv run lint-imports` + `uv run ruff check` all still clean post-edit.
+
 ## [M8 Ollama Infrastructure] - 2026-04-21
 
 ### Changed — M8 Task 06: Milestone Close-out (2026-04-21)
