@@ -23,8 +23,8 @@ This roadmap replaces the archived milestone plan at `archive/pre_langgraph_pivo
 | M10 | Ollama fault-tolerance hardening | [phases/milestone_10_ollama_hardening/](phases/milestone_10_ollama_hardening/README.md) | planned |
 | M11 | MCP gate-review surface | [phases/milestone_11_gate_review/](phases/milestone_11_gate_review/README.md) | ✅ complete (2026-04-22) |
 | M12 | Tiered audit cascade | [phases/milestone_12_audit_cascade/](phases/milestone_12_audit_cascade/README.md) | planned |
-| M14 | MCP HTTP transport | [phases/milestone_14_mcp_http/](phases/milestone_14_mcp_http/README.md) | planned |
-| M13 | v0.1.0 release + PyPI packaging | [phases/milestone_13_v0_release/](phases/milestone_13_v0_release/README.md) | planned (depends on M11 + M14) |
+| M14 | MCP HTTP transport | [phases/milestone_14_mcp_http/](phases/milestone_14_mcp_http/README.md) | ✅ complete (2026-04-22) |
+| M13 | v0.1.0 release + PyPI packaging | [phases/milestone_13_v0_release/](phases/milestone_13_v0_release/README.md) | planned (depends on M11 + M14 — both complete; unblocked) |
 
 **Deferred (see [nice_to_have.md](nice_to_have.md)):** Langfuse, Instructor/pydantic-ai, LangSmith, Typer swap, Docker Compose, mkdocs, DeepAgents templates, standalone OTel. **No milestones for these until their trigger fires.**
 

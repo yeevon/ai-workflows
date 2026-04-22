@@ -1,6 +1,6 @@
 # Milestone 14 — MCP HTTP Transport
 
-**Status:** 📝 Planned (drafted 2026-04-22).
+**Status:** ✅ Complete (2026-04-22).
 **Grounding:** [architecture.md §4.4](../../architecture.md) · [roadmap.md](../../roadmap.md) · [ai_workflows/mcp/__main__.py](../../../ai_workflows/mcp/__main__.py) · [M11 README](../milestone_11_gate_review/README.md) (precondition — the HTTP transport projects the same gate-pause surface M11 shipped). · [M13 README](../milestone_13_v0_release/README.md) (downstream — M14 ships before the 0.1.0 release so the first published wheel covers both transports).
 
 ## Why this milestone exists
@@ -109,18 +109,43 @@ Per-task spec files land as each predecessor closes (same convention as M11 / M1
 - **M12 — none.** Audit cascade is orthogonal.
 - **M13 — M14 is a precondition** for the v0.1.0 release. The first published wheel should cover both transports so the Astro consumer has an install path that doesn't require a git clone. Without M14 in v0.1.0, the notes site would need to either `pip install` from a git tag or wait for a 0.1.x patch. M13's dependency section is updated in this milestone's T01 to name M14 alongside M11.
 
+## Outcome (2026-04-22)
+
+M14 closed in two tasks.
+
+- **T01 — HTTP transport flag + CORS middleware + tests + doc** (landed clean 2026-04-22, one-shot /clean-implement Cycle 1).
+  `aiw-mcp` grew a Typer-based entry point with `--transport {stdio,http}`, `--host`, `--port`, `--cors-origin` flags. Stdio default unchanged. The HTTP path attaches Starlette's `CORSMiddleware` via `server.run(transport="http", middleware=[Middleware(CORSMiddleware, ...)])` — a Risks §2-authorised amendment from the spec-prescribed `server.add_middleware(CORSMiddleware, ...)` (FastMCP 3.2.4's `add_middleware` takes a FastMCP-internal `Middleware` instance, not Starlette's class; the `middleware=` kwarg is the correct public accessor). Four hermetic tests in [`tests/mcp/test_http_transport.py`](../../../tests/mcp/test_http_transport.py) cover the `run_workflow` round-trip, CORS preflight with + without an allow-list, and loopback-default bind. [`skill_install.md §5`](../milestone_9_skill/skill_install.md) gained the HTTP-mode section; [architecture.md §4.4](../../architecture.md) gained the HTTP sub-bullet.
+
+- **T02 — milestone close-out** (this task). Folded in the four legit findings from the [deep-analysis pass](deep_analysis.md):
+  - [ADR-0005 — FastMCP HTTP middleware accessor](../../adr/0005_fastmcp_http_middleware_accessor.md) records the T01 accessor choice, three rejected alternatives (raw uvicorn, `server.add_middleware`, Starlette-first wrapping), and the revisit trigger (non-loopback deployment OR FastMCP removes the `middleware=` kwarg).
+  - Five new tests in [`tests/mcp/test_http_transport.py`](../../../tests/mcp/test_http_transport.py): `test_http_cli_default_transport_is_stdio` (stdio-default invariant — M14-DA-05), `test_http_run_workflow_schema_parity_with_stdio` (KDR-008 parity guard — M14-DA-SP), and three HTTP round-trip tests for `list_runs`, `cancel_run`, `resume_run` (M14-DA-LR).
+  - [architecture.md §4.4](../../architecture.md) sub-bullet now cites ADR-0005.
+  - Zero runtime-code diff in `ai_workflows/` at T02.
+
+**Green-gate snapshot at close-out.**
+
+- `uv run pytest` — 607 passed + 5 new T02 tests = **612 passed, 5 skipped**.
+- `uv run lint-imports` — **4 contracts kept** (no new layer contract at M14; surface-only milestone).
+- `uv run ruff check` — clean.
+
+**Deep-analysis propagation.** The local-only / solo-use invariant ([project memory `project_local_only_deployment.md`]) grounded the deep-analysis re-grading. Four findings graded legit and absorbed at T02 (M14-DA-04, -05, -SP, -LR). Moot findings (M14-DA-01 / -02 / -03 / -07 / -08) stay recorded in [deep_analysis.md](deep_analysis.md) with explicit re-open triggers — **no carry-over to future milestones, no `nice_to_have.md` entries, no new milestone**. M14-DA-06 (`--cors-origin` + `--transport stdio` UX guard) and the hosting-adjacent `nice_to_have.md §17` entry were dropped entirely per operator direction (hosting-adjacent polish is not of interest for any pending project).
+
+**No-surface-change invariant honoured.** KDR-002 (stdio-primary skill packaging) preserved — `.claude/skills/ai-workflows/SKILL.md` byte-identical at M14. KDR-008 (MCP schemas are public contract) preserved and now actively guarded by the new schema-parity test. KDR-009 (LangGraph-owned checkpointing) unaffected. No new KDR. No new dependency (Starlette was already transitive via FastMCP + uvicorn).
+
+**What's next.** M13 (v0.1.0 release) is now unblocked — both of M13's prerequisites (M11 gate-pause projection, M14 HTTP transport) are complete. The first published wheel can now cover both transports + the reviewable gate-pause surface that the packaged skill relies on.
+
 ## Carry-over from prior milestones
 
-- *None.* M11 T02 (close-out) runs in parallel with M14 T01; no forward-deferrals from prior milestones target M14.
+- *None.* M11 T02 (close-out) ran in parallel with M14 T01; no forward-deferrals from prior milestones targeted M14.
 
 ## Propagation status
 
-Filled in at audit time. Anticipated forward-deferrals:
-
-- **Auth / bearer-token surface.** `nice_to_have.md` candidate. Trigger: "a second process on the host is hostile" OR "the notes site moves off localhost" OR "a second HTTP consumer lands that requires per-client identity". Not ready to promote at M14.
-- **TLS termination recipe.** User-level deployment doc, not a milestone. If a consumer hits the need, add as a `nice_to_have.md` entry with the specific trigger.
-- **Rate limiting / concurrency control.** `nice_to_have.md` candidate. Trigger: "observed overload from a single-origin consumer" OR "a second consumer increases load multiplicatively". Solo-use default is to skip.
+- **All four legit deep-analysis findings absorbed in T02** — ADR-0005 + 5 tests. Zero forward-deferrals.
+- **Moot findings** (M14-DA-01 / -02 / -03 / -07 / -08) stay recorded in [deep_analysis.md §Findings re-graded and relocated](deep_analysis.md) with explicit re-open triggers. None propagated.
+- **No new `nice_to_have.md` entries** generated by M14. M14-DA-06 (CORS + stdio UX guard) and the §17 hosting-polish proposal were dropped entirely per operator direction.
+- **No new milestone generated.** M13 is the next load-bearing milestone.
 
 ## Issues
 
-Land under [issues/](issues/) after each task's first audit.
+- [T01 audit issue file](issues/task_01_issue.md) — PASS, Cycle 1, clean.
+- T02 audit issue file — land after audit phase.

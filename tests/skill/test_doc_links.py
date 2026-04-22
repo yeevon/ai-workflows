@@ -76,6 +76,29 @@ def test_root_readme_links_skill_install() -> None:
     )
 
 
+def test_skill_install_doc_covers_http_mode() -> None:
+    """M14 T01: skill_install.md §5 documents the HTTP transport.
+
+    Pins the §5 heading slug + the three flags that form the public
+    surface so the walk-through cannot silently rot. Matches on the
+    flag tokens (``--transport http``, ``--cors-origin``, ``--host``)
+    rather than exact prose so wording can evolve without a test edit.
+    """
+    body = _read(DOC_PATH)
+    assert "## 5. HTTP mode for external hosts" in body, (
+        "skill_install.md must carry the §5 heading 'HTTP mode for external hosts'"
+    )
+
+    heading_idx = body.index("## 5. HTTP mode for external hosts")
+    next_heading_idx = body.index("\n## 6.", heading_idx)
+    section = body[heading_idx:next_heading_idx]
+
+    for token in ("--transport http", "--cors-origin", "--host"):
+        assert token in section, (
+            f"skill_install.md §5 must reference '{token}' (M14 T01 exit criterion 8)"
+        )
+
+
 def test_skill_install_doc_forbids_anthropic_api() -> None:
     """KDR-003 guardrail on the install doc.
 

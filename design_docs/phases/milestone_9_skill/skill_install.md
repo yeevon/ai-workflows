@@ -120,7 +120,67 @@ Expected chain:
 
 Round-trip verified — the skill + MCP composed surface is live.
 
-## 5. Troubleshooting
+## 5. HTTP mode for external hosts
+
+MCP over **stdio** is the right transport for Claude Code / Cursor / Zed
+— every one of those hosts launches `aiw-mcp` as a subprocess and speaks
+JSON-RPC over pipes. §2's `claude mcp add … -- uv run aiw-mcp` flow is
+unchanged by M14 and remains the primary skill surface.
+
+Some consumers cannot spawn subprocesses — browser-origin JS runtimes
+(Astro / React / Vue / vanilla `fetch`) are the driving example. M14 T01
+adds a streamable-**HTTP** transport on the same FastMCP server so those
+consumers can invoke the exact schema every stdio host sees.
+
+### Invocation
+
+```bash
+aiw-mcp                                       # stdio (unchanged default)
+aiw-mcp --transport stdio                     # stdio (explicit)
+aiw-mcp --transport http                      # streamable-HTTP on 127.0.0.1:8000
+aiw-mcp --transport http --port 8099          # custom port
+aiw-mcp --transport http \
+        --cors-origin http://localhost:4321   # permit one browser origin
+```
+
+Every existing MCP schema (`run_workflow`, `resume_run`, `list_runs`,
+`cancel_run`, and the M11 gate-pause projection) round-trips identically
+across transports — FastMCP serialises the same pydantic models over
+stdio or HTTP.
+
+### Threat model
+
+- **Loopback bind is the default.** `--host 127.0.0.1` means the
+  listener is unreachable from outside the machine. Pass `--host 0.0.0.0`
+  **only if you own every process on the host** — there is no
+  authentication at M14, so any process on any routable interface that
+  can speak streamable-HTTP can invoke every tool.
+- **No auth, no TLS.** The driving use case is a local-only personal
+  tool on loopback. Adding bearer tokens, OAuth, or TLS is out of scope
+  at M14; a future milestone will gate-promote one of those surfaces
+  once a second consumer lands.
+- **CORS is opt-in, exact-match.** Without `--cors-origin`, no
+  `Access-Control-Allow-Origin` header is emitted — browsers will
+  block any cross-origin request. Each `--cors-origin` flag is
+  repeatable and matched verbatim; there is no wildcard or regex.
+
+### Reference consumer
+
+An example browser-origin consumer is the Astro-based CS-300 notes
+site that drives the question-generation workflow over HTTP. The notes
+repo is out of scope here; the invariant is that any consumer that can
+speak streamable-HTTP and send JSON-RPC frames gets the same schema
+every stdio host gets.
+
+### Cross-reference
+
+See the milestone overview at
+[design_docs/phases/milestone_14_mcp_http/README.md](../milestone_14_mcp_http/README.md)
+for the full scope (goals, non-goals, exit criteria) and
+[task_01_http_transport.md](../milestone_14_mcp_http/task_01_http_transport.md)
+for the implementing task.
+
+## 6. Troubleshooting
 
 ### Skill not discovered
 

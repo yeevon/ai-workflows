@@ -7,6 +7,164 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M14 MCP HTTP Transport] - 2026-04-22
+
+### Changed — M14 Task 02: Milestone Close-out (2026-04-22)
+
+Flips M14 to ✅ Complete (2026-04-22). Folds in the four legit findings
+from the 2026-04-22 M14 deep-analysis pass (rebased against the
+local-only / solo-use invariant). Zero runtime-code diff in
+`ai_workflows/` at T02 — all deliverables land under `tests/`,
+`design_docs/adr/`, `design_docs/`, and root-level docs.
+
+**Deep-analysis carry-over absorbed (four legit findings):**
+
+- **M14-DA-04 — ADR-0005.** New
+  [`design_docs/adr/0005_fastmcp_http_middleware_accessor.md`](design_docs/adr/0005_fastmcp_http_middleware_accessor.md)
+  records the T01 accessor choice
+  (`server.run(transport="http", middleware=[Middleware(CORSMiddleware, ...)])`)
+  against three rejected alternatives (raw uvicorn with re-derived
+  config; `server.add_middleware(CORSMiddleware, ...)` — fails at
+  runtime in FastMCP 3.2.4; Starlette-first wrapping). Revisit
+  trigger: non-loopback deployment OR FastMCP removes the
+  `middleware=` kwarg.
+- **M14-DA-05 — stdio-default invariant test.**
+  `test_http_cli_default_transport_is_stdio` in
+  `tests/mcp/test_http_transport.py` pins the Typer `--transport`
+  default to `"stdio"` at signature level. Protects zero-flag MCP-host
+  registrations (Claude Code / Cursor / Zed) against a regression
+  that flips the default.
+- **M14-DA-SP — HTTP/stdio schema-parity test.**
+  `test_http_run_workflow_schema_parity_with_stdio` in
+  `tests/mcp/test_http_transport.py` drives `run_workflow` over both
+  transports with the same stubbed tier adapter and asserts the
+  returned dicts are equal modulo `{"run_id"}` + volatile
+  `gate_context` timestamps. Pins KDR-008 (MCP schemas are the public
+  contract) at the transport layer.
+- **M14-DA-LR — HTTP round-trip tests for the three remaining tools.**
+  `test_http_list_runs_roundtrip`, `test_http_cancel_run_roundtrip`,
+  `test_http_resume_run_roundtrip_returns_envelope` in
+  `tests/mcp/test_http_transport.py` exercise the HTTP envelope shape
+  for `list_runs`, `cancel_run`, `resume_run`. Complements T01's
+  `run_workflow`-only HTTP coverage.
+
+**Files touched (T02):**
+
+- `design_docs/adr/0005_fastmcp_http_middleware_accessor.md` (new).
+- `design_docs/architecture.md` — §4.4 sub-bullet now cites ADR-0005
+  (one-line edit; no new KDR, no new row in §9).
+- `design_docs/phases/milestone_14_mcp_http/README.md` — Status
+  flipped to `✅ Complete (2026-04-22)` + Outcome section + Propagation
+  status filled.
+- `design_docs/roadmap.md` — M14 row flipped; M13 dependency line
+  re-graded to "unblocked".
+- `tests/mcp/test_http_transport.py` — 5 new tests (see above).
+- `CHANGELOG.md` — this dated section (promoted from `[Unreleased]`
+  and extended with the T02 close-out entry).
+- Root `README.md` — milestone-table M14 row flipped; `## Next`
+  narrative trimmed (M14 exits the planned list, M13 dependency line
+  re-graded).
+
+**Green-gate snapshot at close-out.**
+
+- `uv run pytest` — 607 (post-T01) + 5 new T02 tests = **612 passed, 5 skipped**.
+- `uv run lint-imports` — **4 contracts kept, 0 broken** (no new layer
+  contract at M14; surface-only milestone).
+- `uv run ruff check` — clean.
+
+**Manual HTTP smoke at close-out (commit baseline `cdb2b03`, working
+tree pre-commit).** Fresh shell → `uv run aiw-mcp --transport http
+--port 18999 --cors-origin http://localhost:4321` launched in the
+background; OS bound the loopback listener on TCP/18999.
+
+1. **CORS preflight** — `curl -i -X OPTIONS http://127.0.0.1:18999/mcp/
+   -H "Origin: http://localhost:4321"
+   -H "Access-Control-Request-Method: POST"
+   -H "Access-Control-Request-Headers: content-type"` → HTTP/1.1 200 OK
+   with `access-control-allow-origin: http://localhost:4321`,
+   `access-control-allow-methods: GET, POST, OPTIONS`,
+   `access-control-allow-headers: content-type`,
+   `vary: Origin`, `server: uvicorn`. **Pass.**
+2. **`fastmcp.Client` round-trip** — async client connected to
+   `http://127.0.0.1:18999/mcp/`; `list_tools()` returned
+   `['cancel_run', 'list_runs', 'resume_run', 'run_workflow']` (all
+   four M4 MCP tools exposed over HTTP); `call_tool("list_runs",
+   {"payload": {}})` returned a list (len=7 against the dev storage
+   db) with the `RunSummary` envelope intact. **Pass.**
+
+Smoke confirms (a) the Typer CLI wires `--transport http` / `--host` /
+`--port` / `--cors-origin` into the HTTP path end-to-end, (b) the CORS
+middleware attaches and echoes the allow-listed origin, and (c) the
+FastMCP streamable-HTTP wire serialises all four tool schemas the
+stdio wire exposes. No runtime errors, no schema drift against stdio.
+
+**Moot findings (not absorbed, not carried forward).** Under the
+local-only / solo-use invariant
+([project memory `project_local_only_deployment.md`]),
+deep-analysis findings M14-DA-01 / -02 / -03 / -07 / -08 stay
+recorded in
+[`deep_analysis.md`](design_docs/phases/milestone_14_mcp_http/deep_analysis.md)
+with explicit re-open triggers. No `nice_to_have.md` entries
+generated. No new milestone. M14-DA-06 (`--cors-origin` + `--transport
+stdio` UX guard) and the hosting-adjacent §17 `nice_to_have.md`
+proposal were dropped entirely per operator direction.
+
+**Invariants preserved.** KDR-002 (skill packaging stdio-primary) —
+`.claude/skills/ai-workflows/SKILL.md` byte-identical at M14.
+KDR-008 (MCP schemas are public contract) — preserved and now
+actively regression-guarded by M14-DA-SP.
+KDR-009 (LangGraph-owned checkpointing) — unaffected. No new
+dependency (Starlette was already transitive via FastMCP + uvicorn).
+
+### Added — M14 Task 01: MCP HTTP Transport (2026-04-22)
+
+Adds the `aiw-mcp --transport http` path alongside the existing stdio
+default. Enables browser-origin consumers (Astro / React / Vue / any
+JS runtime without subprocess access) to invoke the MCP surface over
+streamable-HTTP. Loopback bind default; optional permissive CORS for
+configured origins. No schema change, no new dependency, no new layer
+contract — FastMCP 3.2.4 already bundles the HTTP-transport stack.
+
+**Files touched:**
+
+- `ai_workflows/mcp/__main__.py` — Typer-based entry point with
+  `--transport`, `--host`, `--port`, `--cors-origin` flags. Console
+  script `aiw-mcp` still resolves to `ai_workflows.mcp.__main__:main`;
+  `main` is now a thin wrapper that delegates to Typer for flag
+  parsing.
+- `tests/mcp/test_http_transport.py` — new 4-test hermetic suite:
+  run+serve round-trip via `fastmcp.Client`, CORS preflight with an
+  allow-listed origin, CORS preflight with no allow-list (ACAO
+  absent), and loopback-default bind (signature-level pin + live
+  loopback probe).
+- `tests/skill/test_doc_links.py` — new
+  `test_skill_install_doc_covers_http_mode` asserting the §5 heading
+  plus the three flag tokens.
+- `design_docs/phases/milestone_9_skill/skill_install.md` — new §5
+  "HTTP mode for external hosts" (invocation, threat-model, Astro
+  reference, M14 cross-link). Old §5 Troubleshooting renumbered §6.
+- `design_docs/architecture.md` — §4.4 sub-bullet citing M14 HTTP
+  transport.
+
+**Deviation from spec.** The task spec prescribed
+`server.add_middleware(CORSMiddleware, ...)` to attach CORS. FastMCP
+3.2.4's `add_middleware` takes a FastMCP-internal `Middleware`
+instance (not the Starlette class); the correct accessor is the
+`middleware=[Middleware(CORSMiddleware, ...)]` kwarg passed through
+`server.run(transport="http", ...)` → `run_http_async` →
+`http_app(middleware=...)`. Task Risks §2 authorises the Builder to
+pick the correct accessor at implementation time; recorded in
+`_run_http`'s docstring. ADR-0005 (landed at T02) captures the
+rationale against the three rejected alternatives.
+
+**ACs satisfied:** every item in
+[`task_01_http_transport.md §Acceptance Criteria`](design_docs/phases/milestone_14_mcp_http/task_01_http_transport.md).
+
+**No schema change.** `ai_workflows/mcp/schemas.py` byte-identical.
+`ai_workflows/mcp/server.py` byte-identical. `.claude/skills/` byte-
+identical. The HTTP path reuses `build_server()` without a second
+factory (exit criterion 6).
+
 ## [M11 MCP Gate-Review Surface] - 2026-04-22
 
 ### Changed — M11 Task 02: Milestone Close-out (2026-04-22)
