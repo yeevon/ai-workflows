@@ -1,7 +1,7 @@
 # Milestone 13 — v0.1.0 release + PyPI packaging
 
 **Status:** 📝 Planned (drafted 2026-04-21).
-**Grounding:** [roadmap.md](../../roadmap.md) · [architecture.md §6](../../architecture.md) · [pyproject.toml](../../../pyproject.toml) · [M11 README](../milestone_11_gate_review/README.md) (precondition).
+**Grounding:** [roadmap.md](../../roadmap.md) · [architecture.md §6](../../architecture.md) · [pyproject.toml](../../../pyproject.toml) · [M11 README](../milestone_11_gate_review/README.md) (precondition) · [M14 README](../milestone_14_mcp_http/README.md) (precondition).
 
 ## Why this milestone exists
 
@@ -57,7 +57,7 @@ works from a clean machine that has `uv`, `GEMINI_API_KEY`, and the `claude` CLI
 10. **CHANGELOG `[0.1.0]` release section.** `CHANGELOG.md` gets a `## [0.1.0] — 2026-MM-DD` header above the Keep-a-Changelog template, listing the M1–M9 surfaces as one bulleted inventory under `### Added` (not per-milestone — the release-notes audience does not map to milestones). `## [Unreleased]` stays in place above it for post-0.1.0 work. On `main`, the per-milestone `[M1..M9]` detail blocks the `design` branch carries under `## [Unreleased]` history are *pruned* — the `[0.1.0]` block is the user-facing summary.
 11. **First PyPI publish.** `uv publish --token $PYPI_TOKEN` (from a one-shot token, not long-lived credentials) succeeds against pypi.org from the **`main` branch** for the `0.1.0` wheel. A second smoke — `uvx --from ai-workflows==0.1.0 aiw version` against the real PyPI-hosted package — verifies the published artefact resolves. Observation + commit sha baseline recorded in the T07 CHANGELOG close-out block (on both branches).
 12. **Gates green on both branches.** `uv run pytest` + `uv run lint-imports` (4 contracts kept — M12's new contract lands at M12 T02, not here) + `uv run ruff check` all clean on both `design` and `main` at T08 close-out. The `design` branch retains its full test surface; `main` retains the same code tests (four-layer package is identical) — only non-code artefacts differ between branches.
-13. **M11 landed before T06.** The first-time-user gate-review UX (ISS-02 closure) must be in place before the first PyPI upload. If M11 is still open when M13 reaches T06 (release smoke), the milestone **stops and waits** rather than shipping a broken first-install experience. See §*Dependencies* for rationale.
+13. **M11 + M14 landed before T06.** Two preconditions before the first PyPI upload: (a) the first-time-user gate-review UX (M11 ISS-02 closure) must be in place so the published skill does not hand operators a `plan: null` gate pause; (b) the MCP HTTP transport ([M14](../milestone_14_mcp_http/README.md)) must ship so the first wheel covers browser-origin consumers without requiring a git clone. If either is still open when M13 reaches T06 (release smoke), the milestone **stops and waits**. See §*Dependencies* for rationale.
 
 ## Non-goals
 
@@ -100,6 +100,7 @@ Per-task spec files land as each predecessor closes (same convention as M10 / M1
 ## Dependencies
 
 - **M11 (hard).** A first-time PyPI install that walks the skill's gate-pause flow lands on `plan: null` and a non-reviewable gate — the defect ISS-02 named. Shipping `0.1.0` before M11 would publish a broken first-impression UX for the primary documented install path. **If M11 has not landed by T06 kickoff, M13 T06 stops and waits.** T01–T05 can run in parallel with M11 because they touch no `ai_workflows.mcp/` surface.
+- **M14 (hard).** The [MCP HTTP transport](../milestone_14_mcp_http/README.md) is a precondition for the v0.1.0 release so the first wheel covers both stdio (Claude Code / Cursor / Zed) and streamable-HTTP (Astro / browser-origin) consumers. Shipping `0.1.0` with stdio-only would force browser-origin integrators to `pip install` from a git tag or wait for a 0.1.x patch — a worse first-impression than delaying the release by one milestone. **If M14 has not landed by T06 kickoff, M13 T06 stops and waits.** T01–T05 can run in parallel with M14 because they touch no `ai_workflows.mcp/` surface either.
 - **M10 — none.** Ollama hardening is independent; degraded M8 behaviour is functional and falls back correctly. A post-0.1.0 0.2.x release absorbs M10.
 - **M12 — none.** Audit cascade is a quality layer above the 0.1.0 contract.
 

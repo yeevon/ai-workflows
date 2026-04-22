@@ -1,6 +1,6 @@
 # Milestone 11 — MCP Gate-Review Surface
 
-**Status:** 📝 Planned (drafted 2026-04-21).
+**Status:** ✅ Complete (2026-04-22).
 **Grounding:** [architecture.md §4.4](../../architecture.md) · [roadmap.md](../../roadmap.md) · [M9 T04 issue file (ISS-02)](../milestone_9_skill/issues/task_04_issue.md) · [ADR-0004](../../adr/0004_tiered_audit_cascade.md) (M12 precondition).
 
 ## Why this milestone exists
@@ -62,14 +62,43 @@ No new MCP tool. No new resource. The existing `RunWorkflowOutput` / `ResumeRunO
 
 Per-task spec files land when the milestone is promoted from `📝 Planned` to active. T01 is spec'd below; T02 is written at T01's close-out so the scope stays calibrated against landed surface.
 
+## Outcome
+
+T01 landed 2026-04-22 (implementation commit `f3b3a6a`, SHA-stamp commit `9d03f8d`). T02 closed 2026-04-22 as a docs-only sweep. Every exit criterion from the milestone README was met by T01; T02 promoted the `[Unreleased]` block to a dated CHANGELOG section and refreshed the milestone-table surfaces.
+
+**T01 surface changes** (pure MCP-wire, additive per KDR-008):
+
+- `RunWorkflowOutput.plan` and `ResumeRunOutput.plan` are non-null at `status="pending", awaiting="gate"` — populated by `_dump_plan(final.get("plan"))` on the interrupt branches of `_build_result_from_final` / `_build_resume_result_from_final`.
+- Both output models gained `gate_context: dict[str, Any] | None` carrying `{gate_prompt, gate_id, workflow_id, checkpoint_ts}` at gate pauses; `None` on non-gate paths. Read from `final["__interrupt__"][0].value` — no new state channel, no new storage read.
+- `ResumeRunOutput` gained `awaiting: Literal["gate"] | None` mirroring the run-side field so both models expose the same pause signal.
+- Both `status` Literal unions grew `"aborted"` (Issue C absorption) — closes the pre-existing pydantic-validation latent bug on the Ollama-fallback ABORT and §8.2 double-failure hard-stop return paths.
+- `gate_rejected` branch (Gap 1 absorption) now surfaces the last-draft plan for audit review; `gate_context` stays `None` because the gate has already resolved.
+- `.claude/skills/ai-workflows/SKILL.md` pending-flow rewritten — skill instructions name `plan` and `gate_context.gate_prompt` verbatim so the M9 T04 *"nothing for me to check"* observation cannot recur.
+- `design_docs/phases/milestone_9_skill/skill_install.md §4 Smoke` updated to match the new expected output at gate pause.
+
+**Test delta** (+6 hermetic tests — suite 596 → 602 passed, 5 skipped, 4 contracts kept):
+
+- `tests/mcp/test_gate_pause_projection.py` — 4 tests (plan+gate_context population at pause, rejected-branch last-draft-plan projection, completed-terminal path unaffected, non-gate paths return `gate_context=None`).
+- `tests/mcp/test_aborted_status_roundtrip.py` — 1 test (pydantic round-trip of `"aborted"` on both output models; locks the Issue C fix).
+- `tests/skill/test_skill_md_shape.py` — 1 test (`test_skill_names_plan_and_gate_prompt_in_pending_flow`) keeping the skill text honest against the new MCP surface.
+- `tests/mcp/test_resume_run.py` — rejected-branch assertion flipped (`plan is not None` now per Gap 1).
+
+**Propagation:** M9 T04 ISS-02 flipped `OPEN → ✅ RESOLVED (M11 T01 f3b3a6a)` on all five pointers in the ISS-02 issue file (status line, ISS-02 subsection heading, ISS-02 body, `## Issue log` table row, `## Propagation status` footer).
+
+**Close-out live smoke (2026-04-22, commit `9d03f8d`).** Fresh Claude Code session → `ai-workflows` skill invoked `run_workflow` (workflow=`planner`, goal=`Write a release checklist for the ai-workflows v0 release`). MCP run id `01KPV309SAX702CR8XER1S4WM5`. Gate pause returned **non-null `plan`** (full 10-step plan rendered inline, operator confirmed reviewable) and **non-null `gate_prompt`** (*"Approve plan for: 'Write a release checklist...'? 10 steps."*). Operator replied `approved`; `resume_run` returned `status="completed"` with the plan materialised. **Pass** — closes the M9 T04 live-smoke *"nothing for me to check"* observation. This is the exact round-trip the milestone README exit criterion 7 required.
+
+**Green-gate snapshot at close-out (commit baseline `9d03f8d`).** `uv run pytest` — 602 passed, 5 skipped; `uv run lint-imports` — 4 contracts kept (no new contract at M11 per the MCP-surface-only scope); `uv run ruff check` — clean.
+
+**Scope invariant honoured.** T01 touched only `ai_workflows/mcp/schemas.py`, `ai_workflows/workflows/_dispatch.py`, `.claude/skills/ai-workflows/SKILL.md`, `design_docs/`, and `tests/`. Zero `ai_workflows/graph/`, `ai_workflows/primitives/`, `migrations/`, or `pyproject.toml` diff across the milestone — MCP-surface-only per the milestone README's non-goals.
+
 ## Carry-over from prior milestones
 
-- **[M9 T04 ISS-02 🔴 HIGH](../milestone_9_skill/issues/task_04_issue.md)** — propagated here as the driver of T01. When T01 lands, the M9 T04 issue file flips ISS-02 → `RESOLVED (M11 T01 sha)` with a back-link.
+- **[M9 T04 ISS-02 🔴 HIGH](../milestone_9_skill/issues/task_04_issue.md)** — propagated here as the driver of T01. ✅ **RESOLVED (M11 T01 `f3b3a6a`)** — issue file updated on all five pointers.
 
 ## Propagation status
 
-Filled in at audit time. The only forward-deferral candidate is a generic state-projection surface (new tool or resource) if a second trigger fires post-M11 — at that point either a `nice_to_have.md` entry or an M13+ milestone, not an M11-internal deliverable.
+Closed clean. No forward-deferrals. A generic state-projection surface (new tool or resource) remains a future consideration only if a second trigger fires post-M11 — at that point either a `nice_to_have.md` entry or an M14+ milestone, not an M11 internal.
 
 ## Issues
 
-Land under [issues/](issues/) after each task's first audit.
+T01 closed through a clean-implement loop (2 cycles). Issue file at [issues/task_01_issue.md](issues/task_01_issue.md) — final status `✅ PASS`.

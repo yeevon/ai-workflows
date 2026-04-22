@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M11 MCP Gate-Review Surface] - 2026-04-22
+
+### Changed — M11 Task 02: Milestone Close-out (2026-04-22)
+
+Flips M11 to ✅ Complete (2026-04-22). Docs-only sweep: promotes the
+M11 T01 `[Unreleased]` entry into this dated section, flips the
+milestone README to `✅ Complete (2026-04-22)` with an Outcome
+section, flips the `roadmap.md` M11 row, and refreshes the root
+`README.md` milestone table + post-M11 narrative + **Next** section
+to drop M11 from the planned list.
+
+**Close-out live smoke (2026-04-22, commit baseline `9d03f8d`).**
+Fresh Claude Code session → `ai-workflows` skill invoked
+`run_workflow` (workflow=`planner`,
+goal=`Write a release checklist for the ai-workflows v0 release`).
+MCP run id `01KPV309SAX702CR8XER1S4WM5`. Gate pause returned
+**non-null `plan`** (full 10-step plan rendered inline — operator
+confirmed reviewable) and **non-null `gate_prompt`** (*"Approve plan
+for: 'Write a release checklist...'? 10 steps."*). Operator replied
+`approved`; `resume_run` returned `status="completed"` with the
+plan materialised. **Pass** — closes the M9 T04 live-smoke
+*"nothing for me to check"* observation that originally scoped M11,
+and satisfies milestone README exit criterion 7 literally.
+
+**Green-gate snapshot at close-out (commit baseline `9d03f8d`):**
+
+- `uv run pytest` — 602 passed, 5 skipped.
+- `uv run lint-imports` — **4 contracts kept** (no new layer
+  contract added at M11; MCP-surface-only milestone).
+- `uv run ruff check` — clean.
+
+**MCP-surface-only scope honoured.** Zero `ai_workflows/workflows/`,
+`ai_workflows/graph/`, `ai_workflows/primitives/`, `migrations/`, or
+`pyproject.toml` diff across M11. T01 touched only
+`ai_workflows/mcp/schemas.py`, `ai_workflows/workflows/_dispatch.py`
+(the MCP result-projection helpers; no workflow logic change),
+`.claude/skills/ai-workflows/SKILL.md`, `design_docs/`, and
+`tests/`. T02 is docs-only.
+
+**Files touched (T02):**
+
+- `design_docs/phases/milestone_11_gate_review/README.md` — Status
+  flip + Outcome section with the six blocks required by the
+  milestone close-out convention (deliverables, test delta,
+  propagation, live smoke, gate snapshot, scope invariant).
+- `design_docs/phases/milestone_11_gate_review/task_02_milestone_closeout.md`
+  (new, Status ✅ Complete).
+- `design_docs/roadmap.md` — M11 row flipped `planned` → `✅ complete
+  (2026-04-22)`.
+- `CHANGELOG.md` — `[Unreleased]` T01 block promoted to
+  `[M11 MCP Gate-Review Surface] - 2026-04-22`; fresh empty
+  `[Unreleased]` skeleton retained at the top; this T02 entry added
+  at the top of the dated section.
+- `README.md` (root) — M11 row in milestone table flipped to
+  "Complete (2026-04-22)"; post-M11 narrative paragraph updated to
+  reference the milestone close; **Next** section refreshed to drop
+  M11 from the planned list.
+
+**Driver:** [M9 T04 live smoke](design_docs/phases/milestone_9_skill/issues/task_04_issue.md#iss-02)
+→ [M11 T01](design_docs/phases/milestone_11_gate_review/task_01_gate_pause_projection.md)
+→ this close-out.
+
+**Next unblocked:** M12 (the cascade-failure `HumanGate` escalation
+path has a reviewable MCP surface now) and M13 (v0.1.0 release — M11
+was the hard precondition for the first-impression skill UX of any
+published wheel, per M13 README dependency block).
+
 ### Changed — M11 Task 01: MCP gate-pause projection (2026-04-22)
 
 Closes M9 T04 ISS-02 — the operator now has something to review at a
