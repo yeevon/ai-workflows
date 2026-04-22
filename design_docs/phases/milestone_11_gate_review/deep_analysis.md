@@ -43,7 +43,7 @@ No HIGH drift. No MEDIUM drift. One LOW doc-accuracy drift — see §3 below.
 | M6 (slice_refactor DAG) | `slice_refactor` already writes the plan into state; M11 surfaces it at the `planner_review` pause AND at the strict-review `slice_refactor_review` pause (verified by `test_resume_run_regate_projects_plan_and_gate_context`). The double-failure hard-stop and in-flight `cancel_run` paths are untouched — the new `"aborted"` literal on `status` absorbs the pre-existing M6/M8 abort path that `RunWorkflowOutput` / `ResumeRunOutput` already emitted at the wire level. | Aligned. |
 | M7 (evals) | M7 `EvalRunner` / `CaptureCallback` paths unchanged. The schema field growth flows through pydantic `model_dump()` without reshaping captured fixtures. | Aligned. |
 | M8 (Ollama circuit breaker + fallback gate) | The Ollama fallback gate now surfaces a populated `plan` + `gate_context` at its pause (it's a `HumanGate` internally). The skill text in [`SKILL.md:103-122`](../../../.claude/skills/ai-workflows/SKILL.md) retained M9's fallback-gate paragraph, which now accurately describes the wire shape the operator will see. | Aligned. |
-| M9 (skill packaging) | **M11 T01 is the closure for M9 T04 ISS-02.** The skill text was rewritten to surface `plan` + `gate_context.gate_prompt` verbatim in the pending-flow section, closing the *"paused for human gate review but there is nothing for me to check"* operator observation. [M9 T04 issue file](../milestone_9_skill/issues/task_04_issue.md) ISS-02 flipped `DEFERRED → RESOLVED (M11 T01 <sha>)` on all five pointers (status line, subsection heading, detail block, Issue-log row, Propagation-status footer). | Aligned. |
+| M9 (skill packaging) | **M11 T01 is the closure for M9 T04 ISS-02.** The skill text was rewritten to surface `plan` + `gate_context.gate_prompt` verbatim in the pending-flow section, closing the *"paused for human gate review but there is nothing for me to check"* operator observation. [M9 T04 issue file](../milestone_9_skill/issues/task_04_issue.md) ISS-02 flipped `DEFERRED → RESOLVED (M11 T01 f3b3a6a)` on all five pointers (status line, subsection heading, detail block, Issue-log row, Propagation-status footer). | Aligned. |
 
 No alignment breaks. M11 T01 is a faithful additive projection.
 
@@ -85,7 +85,7 @@ The architecture.md line was drafted *before* T01 started and the pre-existing M
 
 ## 4. Unresolved issue disposition
 
-Every M11 T01 audit issue carries a RESOLVED or CLOSED status per §3.1 above. [M9 T04 ISS-02](../milestone_9_skill/issues/task_04_issue.md) flipped `DEFERRED → RESOLVED (M11 T01 <sha>)` on all five pointers in the Cycle 2 Builder pass (literal `<sha>` placeholder — stamp-on-commit per the spec AC-15 shape).
+Every M11 T01 audit issue carries a RESOLVED or CLOSED status per §3.1 above. [M9 T04 ISS-02](../milestone_9_skill/issues/task_04_issue.md) flipped `DEFERRED → RESOLVED (M11 T01 f3b3a6a)` on all five pointers in the Cycle 2 Builder pass (stamped at commit `f3b3a6a` per the spec AC-15 shape).
 
 **No open HIGH/MEDIUM. No forward-deferrals from M11 T01 to any future milestone.** The architecture.md drift finding in §3.2 is a one-word edit that should ride the same commit as T01's landing; it does not warrant a new issue file entry (the audit loop is closed, and the deep-analysis pass is the appropriate surface).
 
@@ -135,7 +135,7 @@ Concrete edits. All minor; none warrant a new milestone or task.
 
 - **[architecture.md §4.4 line 106](../../architecture.md#L106)** — one-word doc fix (§3.2 / §7.1). Lands with this deep-analysis commit.
 - **[README.md](../../../README.md)** — post-M9 narrative + M11 row update. Lands with this deep-analysis commit. M11 row stays "Planned" until T02 close-out.
-- **[M9 T04 issue file](../milestone_9_skill/issues/task_04_issue.md)** — already flipped (ISS-02 ✅ RESOLVED with `<sha>` placeholder). Commit-making turn stamps the actual SHA across both issue files + the CHANGELOG Cycle 2 block in a single-pass find-and-replace.
+- **[M9 T04 issue file](../milestone_9_skill/issues/task_04_issue.md)** — ISS-02 ✅ RESOLVED via M11 T01 (commit `f3b3a6a`). All five pointers stamped.
 - **[M11 T01 issue file](issues/task_01_issue.md)** — closed ✅ PASS Cycle 2/10, CLEAN. No further updates.
 - **[M12 README](../milestone_12_audit_cascade/README.md)** — no carry-over from this analysis. M12's dependency on M11 is already captured; the M11 T01 `gate_context` dict shape satisfies M12's forward-compat needs (§5).
 - **[M11 T02 spec file]** — not yet authored (per the [M11 README task-order](README.md), T02 is written at T01's close-out). When authored, T02 should carry the live-smoke re-run from the [M11 README exit-criterion 7](README.md#L35) and the milestone-level README + roadmap promotion.

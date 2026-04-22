@@ -42,7 +42,7 @@ No HIGH drift. No MEDIUM drift.
 | 12 | Five (itemised as 4 + 1 + 1 = 6) new tests land and pass | ✅ `tests/mcp/test_gate_pause_projection.py` → 4 tests; `tests/mcp/test_aborted_status_roundtrip.py` → 1 test; `tests/skill/test_skill_md_shape.py::test_skill_names_plan_and_gate_prompt_in_pending_flow` → 1 test. 6 total, all green. *(Spec header says "Five new tests" but itemises 4+1+1=6 — the itemisation is authoritative; see LOW-01 below for the scoreboard mismatch.)* |
 | 13 | `uv run pytest` + `uv run lint-imports` (4 contracts kept) + `uv run ruff check` all clean | ✅ Re-run locally at audit time: **pytest 602 passed, 5 skipped, 2 pre-existing yoyo warnings, 18.41s**; **lint-imports 4 contracts kept, 0 broken**; **ruff clean**. |
 | 14 | CHANGELOG entry under `[Unreleased]` lists files + ACs + ISS-02 driver + `"aborted"` latent-bug absorption note | ✅ [CHANGELOG.md:10-86](../../../../CHANGELOG.md#L10-L86). Dated `2026-04-22`. Names the Issue C absorption verbatim ("pre-existing latent bug, absorbed into this task as Issue C"); names ISS-02 as driver with back-link; itemises every file touched; explicitly notes the final AC (ISS-02 flip) lands at audit close. |
-| 15 | M9 T04 issue file ISS-02 flipped `OPEN` → `RESOLVED (M11 T01 <sha>)` with back-link; propagation footer updated | ✅ **Cycle 2:** M9 T04 issue file updated on all five pointers (status line, ISS-02 subsection heading, detail-block status, Issue-log row, Propagation-status footer) — each now reads `✅ RESOLVED (M11 T01 <sha>)` with back-link to this issue file. The literal `<sha>` placeholder is the documented stamp-on-commit shape per spec (the commit-making turn substitutes the actual SHA). Back-propagation block added to this file's `## Propagation status` footer. |
+| 15 | M9 T04 issue file ISS-02 flipped `OPEN` → `RESOLVED (M11 T01 <sha>)` with back-link; propagation footer updated | ✅ **Cycle 2:** M9 T04 issue file updated on all five pointers (status line, ISS-02 subsection heading, detail-block status, Issue-log row, Propagation-status footer) — each now reads `✅ RESOLVED (M11 T01 f3b3a6a)` with back-link to this issue file. SHA stamped at commit per spec AC-15 shape. Back-propagation block added to this file's `## Propagation status` footer. |
 
 ## 🔴 HIGH
 
@@ -133,7 +133,7 @@ The landed `_extract_gate_context` helper does the fallback — `payload.get("pr
 
 | ID | Severity | Status | Owner / Next touch |
 | --- | --- | --- | --- |
-| M11-T01-ISS-01 | 🟡 MEDIUM | ✅ RESOLVED (Cycle 2) | M9 T04 issue file flipped on all five pointers with `<sha>` placeholder — commit-making turn stamps the actual SHA |
+| M11-T01-ISS-01 | 🟡 MEDIUM | ✅ RESOLVED (Cycle 2) | M9 T04 issue file flipped on all five pointers; SHA `f3b3a6a` stamped at commit |
 | M11-T01-ISS-02 | 🟢 LOW | ✅ RESOLVED (Cycle 2) | Spec AC-12 bullet: `"Five new tests"` → `"Six new tests"` landed |
 | M11-T01-ISS-03 | 🟢 LOW | ✅ RESOLVED (Cycle 2) | `_extract_gate_context` now emits `_LOG.warning(...)` on both defensive branches; docstring updated |
 | M11-T01-ISS-04 | 🟢 LOW | CLOSED (note only) | No action; Builder-discretion landing spot |
@@ -144,11 +144,11 @@ The landed `_extract_gate_context` helper does the fallback — `payload.get("pr
 
 ## Propagation status
 
-- **M9 T04 ISS-02 — ✅ RESOLVED via M11 T01 (`<sha>`).** Cycle 2 Builder flipped all five pointers in [`design_docs/phases/milestone_9_skill/issues/task_04_issue.md`](../../milestone_9_skill/issues/task_04_issue.md):
-  - Status-line paragraph: now states *"ISS-02 ✅ RESOLVED (M11 T01 `<sha>`) on 2026-04-22"* with a link to this issue file.
+- **M9 T04 ISS-02 — ✅ RESOLVED via M11 T01 (`f3b3a6a`).** Cycle 2 Builder flipped all five pointers in [`design_docs/phases/milestone_9_skill/issues/task_04_issue.md`](../../milestone_9_skill/issues/task_04_issue.md):
+  - Status-line paragraph: now states *"ISS-02 ✅ RESOLVED (M11 T01 `f3b3a6a`) on 2026-04-22"* with a link to this issue file.
   - ISS-02 subsection heading: appended ` — ✅ RESOLVED`.
-  - ISS-02 detail block: `Status` rewritten to *"✅ **RESOLVED (M11 T01 `<sha>`)** (2026-04-22)"* with the M11 T01 verdict summary; old `Discovered` line renamed to `Originally deferred`.
-  - `## Issue log` table row for `M9-T04-ISS-02`: Status column flipped to *"✅ RESOLVED (M11 T01 `<sha>`)"*.
+  - ISS-02 detail block: `Status` rewritten to *"✅ **RESOLVED (M11 T01 `f3b3a6a`)** (2026-04-22)"* with the M11 T01 verdict summary; old `Discovered` line renamed to `Originally deferred`.
+  - `## Issue log` table row for `M9-T04-ISS-02`: Status column flipped to *"✅ RESOLVED (M11 T01 `f3b3a6a`)"*.
   - `## Propagation status` footer entry for ISS-02: rewritten as resolved-via-M11 T01 with back-link.
   The literal `<sha>` placeholder is the spec AC-15 shape (*"flipped `OPEN → RESOLVED (M11 T01 <sha>)`"*) — the commit-making turn substitutes the actual commit SHA across both issue files + the CHANGELOG in a single-pass find-and-replace.
 - **No forward-deferral targets from this audit.** All three Cycle 1 OPEN issues closed in-milestone during Cycle 2. ISS-04 was a CLOSED Builder-discretion note from Cycle 1.

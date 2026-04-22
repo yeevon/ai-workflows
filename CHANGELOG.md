@@ -79,12 +79,10 @@ this task. One hermetic pydantic round-trip test
 **ACs satisfied:** every item in
 [`task_01_gate_pause_projection.md` §Acceptance Criteria](design_docs/phases/milestone_11_gate_review/task_01_gate_pause_projection.md),
 including the final propagation row — M9 T04 ISS-02 flipped
-`DEFERRED` → `✅ RESOLVED (M11 T01 <sha>)` in
+`DEFERRED` → `✅ RESOLVED (M11 T01 f3b3a6a)` in
 [`design_docs/phases/milestone_9_skill/issues/task_04_issue.md`](design_docs/phases/milestone_9_skill/issues/task_04_issue.md)
 on all five pointers (status line, ISS-02 subsection heading, ISS-02
 body, `## Issue log` table row, `## Propagation status` footer).
-`<sha>` is the placeholder the commit-making turn replaces with the
-actual landing SHA.
 
 **Cycle 2 edits (post-Cycle-1 audit):**
 
