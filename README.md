@@ -60,7 +60,7 @@ M10's `ai_workflows/workflows/` + `primitives/` scope); M12 depends
 on M11.
 
 **M11 closed 2026-04-22** (T01 implementation `f3b3a6a`, T02
-close-out `<sha>`). The MCP gate-pause projection closes
+close-out `732c8e7`). The MCP gate-pause projection closes
 [M9 T04 ISS-02](design_docs/phases/milestone_9_skill/issues/task_04_issue.md)
 — at `status="pending"` + `awaiting="gate"` the
 `RunWorkflowOutput` / `ResumeRunOutput` now carry the in-flight
