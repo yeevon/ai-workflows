@@ -108,3 +108,38 @@ def test_skill_md_forbids_anthropic_api() -> None:
     assert "anthropic.com/api" not in body, (
         "SKILL.md must never reference the Anthropic public HTTP API (KDR-003)"
     )
+
+
+def test_skill_names_plan_and_gate_prompt_in_pending_flow() -> None:
+    """M11 T01 (Gap 2) — pending-flow section must name the reviewable fields.
+
+    The M9 T04 live smoke surfaced that the skill told the operator
+    *"nothing to check"* because the MCP response at gate pause had
+    ``plan: null``. M11 T01 added ``plan`` + ``gate_context`` to the
+    pause response and rewrote the skill's pending-flow section to
+    surface both to the user. This test locks the contract: the
+    rewrite cannot silently regress to the pre-M11 wording that
+    ignored the new fields.
+
+    Asserted on the whole body rather than a grepped sub-section so
+    the test stays robust against cosmetic heading changes.
+    """
+    body = _read_skill_md()
+    assert "gate_context" in body, (
+        "SKILL.md must name the M11 gate_context field so the skill "
+        "surfaces the gate prompt to the user at pause"
+    )
+    assert "gate_context.gate_prompt" in body or "gate_prompt" in body, (
+        "SKILL.md must reference the gate_prompt subfield in the "
+        "pending-flow instructions"
+    )
+    assert '"status": "pending"' in body or "'status': 'pending'" in body, (
+        "SKILL.md must show an example of the status='pending' response"
+    )
+    pending_idx = body.find('"pending"')
+    assert pending_idx >= 0, "SKILL.md should include a pending-status example"
+    tail = body[pending_idx:]
+    assert "plan" in tail and "gate_context" in tail, (
+        "SKILL.md must show `plan` and `gate_context` as populated in "
+        "the pending-status example, not null"
+    )

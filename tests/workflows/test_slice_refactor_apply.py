@@ -409,6 +409,7 @@ async def test_dispatch_flips_status_completed_with_finished_at_for_slice_refact
     result = await _build_resume_result_from_final(
         final=final,
         run_id="run-dispatch-slice-done",
+        workflow="slice_refactor",
         gate_response="approved",
         terminal_gate_id="slice_refactor_review",
         final_state_key="applied_artifact_count",
@@ -416,6 +417,9 @@ async def test_dispatch_flips_status_completed_with_finished_at_for_slice_refact
         storage=storage,
     )
     assert result["status"] == "completed"
+    # slice_refactor's final_state_key is ``applied_artifact_count``; the
+    # workflow doesn't produce a pydantic ``plan`` artefact, so the M11-era
+    # ``_dump_plan`` sees ``None`` and the field stays null here.
     assert result["plan"] is None
     row = await storage.get_run("run-dispatch-slice-done")
     assert row is not None
@@ -440,6 +444,7 @@ async def test_dispatch_flips_status_completed_for_zero_artifact_count(
     result = await _build_resume_result_from_final(
         final=final,
         run_id="run-dispatch-zero",
+        workflow="slice_refactor",
         gate_response="approved",
         terminal_gate_id="slice_refactor_review",
         final_state_key="applied_artifact_count",
@@ -480,6 +485,7 @@ async def test_dispatch_planner_completion_path_preserved(
     result = await _build_resume_result_from_final(
         final=final,
         run_id="run-dispatch-planner-done",
+        workflow="planner",
         gate_response="approved",
         terminal_gate_id="plan_review",
         final_state_key="plan",
@@ -516,6 +522,7 @@ async def test_dispatch_reject_path_flips_gate_rejected_with_finished_at(
     result = await _build_resume_result_from_final(
         final=final,
         run_id="run-dispatch-reject",
+        workflow="slice_refactor",
         gate_response="rejected",
         terminal_gate_id="slice_refactor_review",
         final_state_key="applied_artifact_count",

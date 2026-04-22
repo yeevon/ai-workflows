@@ -7,6 +7,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M11 Task 01: MCP gate-pause projection (2026-04-22)
+
+Closes M9 T04 ISS-02 — the operator now has something to review at a
+`HumanGate` pause. Additive change at the MCP surface: no checkpoint
+format change (KDR-009), no new tool, no new resource, no workflow
+change. The existing `RunWorkflowOutput` / `ResumeRunOutput` models
+grow their `plan` population rule to include gate pauses and
+gate-rejected terminals, gain a new `gate_context` forward-compat
+projection field, and (pre-existing latent bug, absorbed into this
+task as Issue C) grow their `status` Literal unions to accept
+`"aborted"`.
+
+**Projection surface at a gate pause:**
+
+- `run_workflow` / `resume_run` responses at `status="pending",
+  awaiting="gate"` now carry `plan` (in-flight draft, `model_dump()`
+  of the pydantic plan) and `gate_context`
+  `{gate_prompt, gate_id, workflow_id, checkpoint_ts}`.
+- `gate_prompt` / `gate_id` are read from the LangGraph interrupt
+  payload (`final["__interrupt__"][0].value`) — no new storage read,
+  no new state channel. `checkpoint_ts` is stamped at projection time
+  (ISO-8601, TZ-aware) — operator triage signal, not the checkpointer's
+  own timestamp.
+- `gate_rejected` branch (Gap 1 in the T01 spec): now returns the
+  last-draft `plan` for audit review; `gate_context` stays `None`
+  because the gate has already resolved.
+- `ResumeRunOutput` gains an `awaiting: Literal["gate"] | None`
+  field mirroring `RunWorkflowOutput.awaiting` so both models expose
+  the same pause signal on their `"pending"` returns.
+
+**Latent bug absorbed (Issue C).** `_dispatch.py` returns
+`status="aborted"` on two pre-existing paths (ollama-fallback ABORT
+and §8.2 double-failure hard-stop), but neither output-model Literal
+union listed `"aborted"` pre-M11 — any real abort path would have
+raised `pydantic.ValidationError` at the MCP boundary before the
+client ever saw the status. `RunWorkflowOutput.status` and
+`ResumeRunOutput.status` Literal unions grew `"aborted"` as part of
+this task. One hermetic pydantic round-trip test
+(`tests/mcp/test_aborted_status_roundtrip.py`) locks the fix.
+
+**Files touched:**
+
+- `ai_workflows/mcp/schemas.py` — `RunWorkflowOutput.status` gains
+  `"aborted"`; both output models gain `gate_context`; `ResumeRunOutput`
+  gains `awaiting`; class docstrings rewritten (no `"only on
+  completed"` text).
+- `ai_workflows/workflows/_dispatch.py` — new module-level
+  `_dump_plan` / `_extract_gate_context` helpers; `_build_result_from_final`
+  / `_build_resume_result_from_final` grow `workflow: str` kwarg and
+  project `plan` + `gate_context` on interrupt branches; rejected
+  branch now preserves last-draft plan; all branches key `gate_context`
+  (`None` on non-gate paths); run-side + resume-side exception
+  branches key `gate_context=None` (and resume-side `awaiting=None`).
+- `.claude/skills/ai-workflows/SKILL.md` — pending-flow example shows
+  populated `plan` + `gate_context`; instructions name both fields
+  verbatim so the skill never tells the operator "nothing to check"
+  again.
+- `design_docs/phases/milestone_9_skill/skill_install.md` — §4 Smoke
+  walkthrough expected-output snippets updated.
+- `design_docs/phases/milestone_11_gate_review/task_01_gate_pause_projection.md`
+  — amended 2026-04-22 to fix 5 source-drift inaccuracies (A–E) and
+  absorb 2 evaluation gaps before Builder pickup.
+- `tests/mcp/test_gate_pause_projection.py` (new, 4 tests).
+- `tests/mcp/test_aborted_status_roundtrip.py` (new, 1 test).
+- `tests/mcp/test_resume_run.py` — rejected-branch assertion updated
+  for Gap 1 (`plan is not None` now).
+- `tests/skill/test_skill_md_shape.py` — new
+  `test_skill_names_plan_and_gate_prompt_in_pending_flow` (Gap 2).
+
+**ACs satisfied:** every item in
+[`task_01_gate_pause_projection.md` §Acceptance Criteria](design_docs/phases/milestone_11_gate_review/task_01_gate_pause_projection.md),
+including the final propagation row — M9 T04 ISS-02 flipped
+`DEFERRED` → `✅ RESOLVED (M11 T01 <sha>)` in
+[`design_docs/phases/milestone_9_skill/issues/task_04_issue.md`](design_docs/phases/milestone_9_skill/issues/task_04_issue.md)
+on all five pointers (status line, ISS-02 subsection heading, ISS-02
+body, `## Issue log` table row, `## Propagation status` footer).
+`<sha>` is the placeholder the commit-making turn replaces with the
+actual landing SHA.
+
+**Cycle 2 edits (post-Cycle-1 audit):**
+
+- `ai_workflows/workflows/_dispatch.py` — import `structlog`, add
+  module-level `_LOG = structlog.get_logger(__name__)`, emit
+  `mcp_gate_context_malformed_payload` / `mcp_gate_context_missing_interrupt`
+  warnings in `_extract_gate_context` defensive branches per task spec
+  (closes Cycle 1 audit ISS-03).
+- `design_docs/phases/milestone_11_gate_review/task_01_gate_pause_projection.md`
+  — AC text `"Five new tests"` → `"Six new tests"` (matches the
+  itemisation 4 + 1 + 1; closes Cycle 1 audit ISS-02).
+- `design_docs/phases/milestone_9_skill/issues/task_04_issue.md` —
+  ISS-02 flipped to RESOLVED on all five pointers (closes Cycle 1
+  audit ISS-01).
+
+**Driver:** [M9 T04 issue file — ISS-02](design_docs/phases/milestone_9_skill/issues/task_04_issue.md)
+(live smoke surfaced `plan: null` + missing gate prompt at pause).
+
 ## [M9 Claude Code Skill Packaging] - 2026-04-21
 
 ### Changed — M9 Task 04: Milestone Close-out (2026-04-21)

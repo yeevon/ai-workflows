@@ -80,21 +80,29 @@ Expected chain:
 2. Claude Code calls `run_workflow` on the MCP server with
    `workflow_id="planner"` and `inputs={"goal": "Write a release checklist"}`.
    Expected response shape (the `planner` pauses at its plan-review
-   `HumanGate`):
+   `HumanGate`; M11 T01 populated `plan` + `gate_context` at the
+   pause so the operator has something to review):
 
    ```json
    {
      "run_id": "<ulid>",
      "status": "pending",
      "awaiting": "gate",
-     "plan": null,
+     "plan": {"goal": "Write a release checklist", "steps": [{"index": 1, "title": "..."}]},
      "total_cost_usd": 0.0012,
-     "error": null
+     "error": null,
+     "gate_context": {
+       "gate_prompt": "Approve plan for: 'Write a release checklist'? 4 steps.",
+       "gate_id": "plan_review",
+       "workflow_id": "planner",
+       "checkpoint_ts": "2026-04-22T14:03:11.240515+00:00"
+     }
    }
    ```
 
-3. Claude Code surfaces the draft plan to the user and asks for an
-   approval.
+3. Claude Code surfaces the draft `plan` (verbatim) and the
+   `gate_context.gate_prompt` to the user and asks for an approval
+   or rejection.
 4. On approval, Claude Code calls `resume_run` with the same `run_id`
    and `gate_response="approved"`. Expected response:
 
@@ -102,9 +110,11 @@ Expected chain:
    {
      "run_id": "<same-ulid>",
      "status": "completed",
+     "awaiting": null,
      "plan": {"...": "...populated artifact..."},
      "total_cost_usd": 0.0023,
-     "error": null
+     "error": null,
+     "gate_context": null
    }
    ```
 

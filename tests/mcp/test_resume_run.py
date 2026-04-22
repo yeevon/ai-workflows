@@ -191,7 +191,12 @@ async def test_resume_run_rejected_flips_row_and_returns_gate_rejected(
     )
 
     assert result.status == "gate_rejected"
-    assert result.plan is None
+    # M11 T01 (Gap 1): the rejected branch now preserves the last-draft plan
+    # for audit review; pre-M11 this was ``None``. See
+    # tests/mcp/test_gate_pause_projection.py::test_gate_rejected_preserves_last_draft_plan
+    # for the M11 contract; here we only pin that the existing flip + cost
+    # assertions still hold.
+    assert result.plan is not None
     assert result.error is None
     assert result.total_cost_usd == pytest.approx(0.0033)
 

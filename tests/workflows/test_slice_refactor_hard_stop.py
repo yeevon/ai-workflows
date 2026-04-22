@@ -289,6 +289,7 @@ async def test_dispatch_flips_status_aborted_with_finished_at(
     result = await _build_result_from_final(
         final=final,
         run_id="run-hard-stop-dispatch",
+        workflow="slice_refactor",
         final_state_key="applied_artifact_count",
         tracker=tracker,
         storage=storage,
@@ -327,6 +328,7 @@ async def test_dispatch_hard_stop_short_circuits_before_completion_check(
     result = await _build_result_from_final(
         final=final,
         run_id="run-hs-contract",
+        workflow="slice_refactor",
         final_state_key="applied_artifact_count",
         tracker=tracker,
         storage=storage,
@@ -350,6 +352,7 @@ async def test_dispatch_ignores_empty_failing_ids_list(tmp_path: Path) -> None:
     result = await _build_result_from_final(
         final=final,
         run_id="run-hs-empty",
+        workflow="slice_refactor",
         final_state_key="applied_artifact_count",
         tracker=tracker,
         storage=storage,

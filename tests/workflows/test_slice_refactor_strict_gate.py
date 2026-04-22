@@ -598,6 +598,7 @@ async def test_dispatch_result_reads_slice_refactor_gate_key_on_reject(
     result = await _build_resume_result_from_final(
         final=final,
         run_id="run-dispatch-reject",
+        workflow="slice_refactor",
         gate_response="rejected",
         terminal_gate_id="slice_refactor_review",
         tracker=tracker,
@@ -625,6 +626,7 @@ async def test_dispatch_result_preserves_planner_gate_behaviour(
     result = await _build_resume_result_from_final(
         final=final,
         run_id="run-planner-reject",
+        workflow="planner",
         gate_response="rejected",
         terminal_gate_id="plan_review",
         tracker=tracker,
@@ -646,6 +648,7 @@ async def test_dispatch_result_falls_back_to_gate_response_when_no_constant(
     result = await _build_resume_result_from_final(
         final={},
         run_id="run-no-constant",
+        workflow="planner",
         gate_response="rejected",
         terminal_gate_id=None,
         tracker=tracker,

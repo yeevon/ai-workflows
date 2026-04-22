@@ -47,13 +47,22 @@ Response when the run pauses at a `HumanGate`:
   "run_id": "<ulid>",
   "status": "pending",
   "awaiting": "gate",
-  "plan": null,
+  "plan": {"goal": "...", "steps": [{"index": 1, "title": "...", "...": "..."}]},
   "total_cost_usd": 0.0012,
-  "error": null
+  "error": null,
+  "gate_context": {
+    "gate_prompt": "Approve plan for: 'Write a release checklist'? 4 steps.",
+    "gate_id": "plan_review",
+    "workflow_id": "planner",
+    "checkpoint_ts": "2026-04-22T14:03:11.240515+00:00"
+  }
 }
 ```
 
-Surface the pending status to the user and ask how to resume.
+Read the `plan` and `gate_context.gate_prompt` from the response.
+Surface the **plan body** to the user verbatim, quote the gate
+prompt, and ask for `approved` or `rejected`. Pass their choice as
+`gate_response` to `resume_run`.
 
 ### `resume_run(run_id, gate_response)`
 

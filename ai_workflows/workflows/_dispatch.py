@@ -63,6 +63,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+import structlog
 from langgraph.types import Command
 
 from ai_workflows import workflows
@@ -82,6 +83,8 @@ __all__ = [
     "resume_run",
     "run_workflow",
 ]
+
+_LOG = structlog.get_logger(__name__)
 
 
 # Crockford base32 (excludes I, L, O, U so run ids can be read aloud). Kept as
@@ -478,15 +481,22 @@ async def run_workflow(
     * ``run_id`` — resolved run id (auto-generated ULID if caller passed
       ``None``).
     * ``status`` — ``"pending"`` (HumanGate interrupt), ``"completed"``
-      (terminal plan artifact), or ``"errored"`` (budget breach or a
-      downstream exception the graph's error handler captured).
+      (terminal plan artifact), ``"aborted"`` (ollama-fallback ABORT or
+      double-failure slice hard-stop), or ``"errored"`` (budget breach
+      or a downstream exception the graph's error handler captured).
     * ``awaiting`` — ``"gate"`` when ``status == "pending"``; otherwise
       ``None``.
     * ``plan`` — ``dict`` (``model_dump()`` of the pydantic plan) when
-      ``status == "completed"``; otherwise ``None``.
+      ``status == "completed"`` (terminal artefact) or when
+      ``status == "pending"`` and ``awaiting == "gate"`` (in-flight
+      draft, M11 T01); otherwise ``None``.
     * ``total_cost_usd`` — rolled-up per-run cost (may be ``0.0``).
     * ``error`` — descriptive error string when
-      ``status == "errored"``; otherwise ``None``.
+      ``status == "errored"`` / ``"aborted"``; otherwise ``None``.
+    * ``gate_context`` — dict (M11 T01) populated iff
+      ``status == "pending"`` and ``awaiting == "gate"`` with
+      ``{gate_prompt, gate_id, workflow_id, checkpoint_ts}``;
+      otherwise ``None``.
 
     ``tier_overrides`` (M5 T04 / T05) is an optional
     ``{logical: replacement}`` map applied against the workflow's
@@ -551,11 +561,13 @@ async def run_workflow(
                 "plan": None,
                 "total_cost_usd": tracker.total(run_id_resolved),
                 "error": error_msg,
+                "gate_context": None,
             }
 
         return await _build_result_from_final(
             final=final,
             run_id=run_id_resolved,
+            workflow=workflow,
             final_state_key=final_state_key,
             tracker=tracker,
             storage=storage,
@@ -564,10 +576,82 @@ async def run_workflow(
         await checkpointer.conn.close()
 
 
+def _dump_plan(plan: Any) -> dict[str, Any] | None:
+    """Serialise an in-flight or terminal plan for transport.
+
+    Accepts a pydantic model (``.model_dump()``), a mapping
+    (``dict(plan)``), or ``None``. Returns ``None`` when the plan is
+    unset so the MCP output field stays strictly-optional. Shared
+    between :func:`_build_result_from_final` and
+    :func:`_build_resume_result_from_final` so the pending / completed /
+    gate_rejected branches cannot drift in what they emit — surfaces in
+    M11 T01 when the interrupt branches started dumping the draft plan
+    alongside the existing terminal dumps.
+    """
+    if plan is None:
+        return None
+    if hasattr(plan, "model_dump"):
+        return plan.model_dump()
+    return dict(plan)
+
+
+def _extract_gate_context(
+    final: dict[str, Any], *, workflow: str
+) -> dict[str, Any]:
+    """Project the :class:`HumanGate` interrupt payload into a review dict.
+
+    M11 T01: at a gate pause, the MCP output needs a minimum
+    gate-review surface so the operator (or a skill acting on their
+    behalf) has something to approve against. The prompt is not
+    written to a state channel — :mod:`ai_workflows.graph.human_gate`
+    emits it via ``langgraph.types.interrupt(payload)``, and the
+    payload surfaces in ``final["__interrupt__"][0].value`` as a
+    dict with keys ``{gate_id, prompt, strict_review, timeout_s,
+    default_response_on_timeout}``.
+
+    Defensive ``.get(...)`` everywhere so a malformed or missing
+    payload (would be unexpected; the HumanGate always stamps both
+    keys) degrades to a stub string rather than an exception and
+    emits a ``structlog`` warning so the operator can correlate the
+    degraded projection with the run state. ``checkpoint_ts`` is
+    stamped at projection time — not the checkpointer's own
+    timestamp (LangGraph owns that). The field's operator-triage
+    value is "when did the MCP client see this", which
+    projection-time gives exactly.
+    """
+    interrupts = final.get("__interrupt__") or ()
+    payload: dict[str, Any]
+    if interrupts:
+        head = interrupts[0]
+        raw = getattr(head, "value", None)
+        if isinstance(raw, dict):
+            payload = raw
+        else:
+            _LOG.warning(
+                "mcp_gate_context_malformed_payload",
+                workflow=workflow,
+                payload_type=type(raw).__name__,
+            )
+            payload = {}
+    else:
+        _LOG.warning(
+            "mcp_gate_context_missing_interrupt",
+            workflow=workflow,
+        )
+        payload = {}
+    return {
+        "gate_prompt": payload.get("prompt", "<gate prompt not recorded>"),
+        "gate_id": payload.get("gate_id", "<unknown>"),
+        "workflow_id": workflow,
+        "checkpoint_ts": datetime.now(UTC).isoformat(),
+    }
+
+
 async def _build_result_from_final(
     *,
     final: dict[str, Any],
     run_id: str,
+    workflow: str,
     final_state_key: str,
     tracker: CostTracker,
     storage: SQLiteStorage,
@@ -578,8 +662,9 @@ async def _build_result_from_final(
 
     * ``__interrupt__`` in state → HumanGate pause. Stamp
       ``runs.total_cost_usd`` so ``aiw resume`` / ``resume_run`` can
-      reseed the cost tracker, and return ``status="pending"`` +
-      ``awaiting="gate"``.
+      reseed the cost tracker, project the in-flight draft ``plan``
+      and a ``gate_context`` review payload (M11 T01), and return
+      ``status="pending"`` + ``awaiting="gate"``.
     * ``state["hard_stop_failing_slice_ids"]`` populated → double-failure
       hard-stop fired upstream of the aggregator (M6 T07,
       architecture.md §8.2). Flip ``runs.status`` to ``"aborted"`` with
@@ -595,6 +680,10 @@ async def _build_result_from_final(
       captured ``NonRetryable`` sitting in ``state["last_exception"]``).
       Return ``status="errored"`` with a descriptive error string so the
       surface can print it instead of silently returning zero output.
+
+    ``workflow`` is the registered workflow name; threaded through so
+    the gate-pause branch can stamp it into ``gate_context.workflow_id``
+    without a second registry lookup (M11 T01).
     """
     total = tracker.total(run_id)
 
@@ -604,9 +693,10 @@ async def _build_result_from_final(
             "run_id": run_id,
             "status": "pending",
             "awaiting": "gate",
-            "plan": None,
+            "plan": _dump_plan(final.get("plan")),
             "total_cost_usd": total,
             "error": None,
+            "gate_context": _extract_gate_context(final, workflow=workflow),
         }
 
     if final.get("ollama_fallback_aborted"):
@@ -632,6 +722,7 @@ async def _build_result_from_final(
                 "ollama_fallback: operator aborted run at the "
                 "circuit-breaker gate"
             ),
+            "gate_context": None,
         }
 
     failing_ids = final.get("hard_stop_failing_slice_ids")
@@ -654,21 +745,18 @@ async def _build_result_from_final(
                 f"({len(failing_ids)} slices failed non-retryably: "
                 f"{', '.join(failing_ids)})"
             ),
+            "gate_context": None,
         }
 
     if final.get(final_state_key) is not None:
-        plan = final.get("plan")
-        plan_dump = (
-            plan.model_dump() if hasattr(plan, "model_dump")
-            else (dict(plan) if plan else None)
-        )
         return {
             "run_id": run_id,
             "status": "completed",
             "awaiting": None,
-            "plan": plan_dump,
+            "plan": _dump_plan(final.get("plan")),
             "total_cost_usd": total,
             "error": None,
+            "gate_context": None,
         }
 
     last = final.get("last_exception")
@@ -680,6 +768,7 @@ async def _build_result_from_final(
             "plan": None,
             "total_cost_usd": total,
             "error": str(last) if not isinstance(last, NonRetryable) else str(last),
+            "gate_context": None,
         }
     return {
         "run_id": run_id,
@@ -688,6 +777,7 @@ async def _build_result_from_final(
         "plan": None,
         "total_cost_usd": total,
         "error": "workflow ended without plan or gate interrupt",
+        "gate_context": None,
     }
 
 
@@ -781,14 +871,17 @@ async def resume_run(
             return {
                 "run_id": run_id,
                 "status": "errored",
+                "awaiting": None,
                 "plan": None,
                 "total_cost_usd": tracker.total(run_id),
                 "error": error_msg,
+                "gate_context": None,
             }
 
         return await _build_resume_result_from_final(
             final=final,
             run_id=run_id,
+            workflow=workflow,
             gate_response=gate_response,
             terminal_gate_id=terminal_gate_id,
             final_state_key=final_state_key,
@@ -803,6 +896,7 @@ async def _build_resume_result_from_final(
     *,
     final: dict[str, Any],
     run_id: str,
+    workflow: str,
     gate_response: str,
     terminal_gate_id: str | None,
     final_state_key: str = "plan",
@@ -814,10 +908,13 @@ async def _build_resume_result_from_final(
     Four branches (mirrors the pre-refactor ``cli._emit_resume_final``):
 
     * ``__interrupt__`` in state → another gate fired; stamp cost at
-      pause and return ``status="pending"``.
+      pause, project the re-gated draft ``plan`` and a ``gate_context``
+      review payload (M11 T01), and return ``status="pending"`` +
+      ``awaiting="gate"``.
     * ``state[f"gate_{terminal_gate_id}_response"] == "rejected"`` →
       flip ``runs.status`` to ``gate_rejected`` with ``finished_at``;
-      return ``status="gate_rejected"``.
+      return ``status="gate_rejected"`` with the last-draft ``plan``
+      projected for audit (M11 T01).
     * ``state[final_state_key]`` populated (approved path reached its
       terminal artefact node) → flip ``runs.status`` to ``completed``;
       return ``status="completed"`` with the plan dumped to a plain
@@ -839,6 +936,10 @@ async def _build_resume_result_from_final(
     pair share one dispatch path. Workflows that omit the constants fall
     back to the caller-supplied ``gate_response`` and the ``"plan"``
     default, keeping the contract backwards-compatible for pre-M6 code.
+
+    ``workflow`` is the registered workflow name; threaded through so
+    the interrupt branch can stamp it into ``gate_context.workflow_id``
+    without a second registry lookup (M11 T01).
     """
     total = tracker.total(run_id)
 
@@ -847,9 +948,11 @@ async def _build_resume_result_from_final(
         return {
             "run_id": run_id,
             "status": "pending",
-            "plan": None,
+            "awaiting": "gate",
+            "plan": _dump_plan(final.get("plan")),
             "total_cost_usd": total,
             "error": None,
+            "gate_context": _extract_gate_context(final, workflow=workflow),
         }
 
     if final.get("ollama_fallback_aborted"):
@@ -867,12 +970,14 @@ async def _build_resume_result_from_final(
         return {
             "run_id": run_id,
             "status": "aborted",
+            "awaiting": None,
             "plan": None,
             "total_cost_usd": total,
             "error": (
                 "ollama_fallback: operator aborted run at the "
                 "circuit-breaker gate"
             ),
+            "gate_context": None,
         }
 
     # Prefer the state-recorded response for the workflow's terminal gate;
@@ -897,26 +1002,28 @@ async def _build_resume_result_from_final(
         return {
             "run_id": run_id,
             "status": "gate_rejected",
-            "plan": None,
+            "awaiting": None,
+            # M11 T01: project the last-draft plan for audit review.
+            # ``gate_context`` stays ``None`` — the gate has already
+            # resolved, no pending prompt to surface.
+            "plan": _dump_plan(final.get("plan")),
             "total_cost_usd": total,
             "error": None,
+            "gate_context": None,
         }
 
     if final.get(final_state_key) is not None:
         await storage.update_run_status(
             run_id, "completed", total_cost_usd=total
         )
-        plan = final.get("plan")
-        plan_dump = (
-            plan.model_dump() if hasattr(plan, "model_dump")
-            else (dict(plan) if plan else None)
-        )
         return {
             "run_id": run_id,
             "status": "completed",
-            "plan": plan_dump,
+            "awaiting": None,
+            "plan": _dump_plan(final.get("plan")),
             "total_cost_usd": total,
             "error": None,
+            "gate_context": None,
         }
 
     last = final.get("last_exception")
@@ -924,14 +1031,18 @@ async def _build_resume_result_from_final(
         return {
             "run_id": run_id,
             "status": "errored",
+            "awaiting": None,
             "plan": None,
             "total_cost_usd": total,
             "error": str(last),
+            "gate_context": None,
         }
     return {
         "run_id": run_id,
         "status": "errored",
+        "awaiting": None,
         "plan": None,
         "total_cost_usd": total,
         "error": "resume produced no plan and no interrupt",
+        "gate_context": None,
     }

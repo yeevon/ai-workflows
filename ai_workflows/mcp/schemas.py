@@ -79,22 +79,51 @@ class RunWorkflowInput(BaseModel):
 class RunWorkflowOutput(BaseModel):
     """Response from the ``run_workflow`` tool.
 
-    ``status`` is the run's state post-dispatch: ``"pending"`` when the
-    graph yielded at a :class:`HumanGate` interrupt (``awaiting='gate'``),
-    ``"completed"`` when the graph reached its terminal artifact node, or
-    ``"errored"`` for a dispatch-level failure (budget breach, validator
-    exhaust, etc.). ``plan`` is populated only on ``"completed"``;
-    ``error`` carries a descriptive message on ``"errored"`` so MCP
-    clients see the reason in-band rather than through a raw Python
-    exception (M4 T02 AC).
+    ``status`` is the run's state post-dispatch:
+
+    * ``"pending"`` — the graph yielded at a :class:`HumanGate` interrupt
+      (``awaiting='gate'``). ``plan`` carries the in-flight draft for
+      the operator to review; ``gate_context`` carries the gate prompt,
+      id, workflow id, and a projection-time ISO-8601 timestamp.
+    * ``"completed"`` — the graph reached its terminal artifact node.
+      ``plan`` carries the final artefact.
+    * ``"aborted"`` — the Ollama-fallback circuit-breaker gate resolved
+      to ABORT (M8 T04) or the double-failure slice hard-stop fired
+      (M6 T07 / architecture.md §8.2). ``plan`` is ``None``; ``error``
+      carries the distinguishing message.
+    * ``"errored"`` — a dispatch-level failure (budget breach, validator
+      exhaust, uncaught graph exception). ``plan`` is ``None``; ``error``
+      carries a descriptive message so MCP clients see the reason
+      in-band rather than through a raw Python exception (M4 T02 AC).
+
+    ``gate_context`` (M11 T01) is populated iff ``status="pending"`` and
+    ``awaiting="gate"`` — see the field's ``description`` for the dict
+    shape. The schema's public contract (KDR-008): additive field
+    growth is non-breaking; a pre-M11 caller that ignored the field
+    keeps working, and an M11-aware caller that reads it gets the
+    gate-review payload.
     """
 
     run_id: str
-    status: Literal["pending", "completed", "errored"]
+    status: Literal["pending", "completed", "aborted", "errored"]
     awaiting: Literal["gate"] | None = None
     plan: dict[str, Any] | None = None
     total_cost_usd: float | None = None
     error: str | None = None
+    gate_context: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Populated iff status='pending' and awaiting='gate'. Keys "
+            "at M11: 'gate_prompt' (str, the prompt the HumanGate "
+            "recorded), 'gate_id' (str, the gate identifier), "
+            "'workflow_id' (str), 'checkpoint_ts' (str, ISO-8601 "
+            "stamp at projection time — not the checkpointer's own "
+            "timestamp). Forward-compat: M12 will extend this dict "
+            "with cascade-transcript keys (audit_verdict, "
+            "audit_reasons, suggested_approach) without a schema "
+            "break."
+        ),
+    )
 
 
 class ResumeRunInput(BaseModel):
@@ -107,19 +136,57 @@ class ResumeRunInput(BaseModel):
 class ResumeRunOutput(BaseModel):
     """Response from the ``resume_run`` tool.
 
-    ``status`` can be ``"completed"`` (approved → plan persisted),
-    ``"gate_rejected"`` (rejected by the caller at the gate),
-    ``"pending"`` (another gate fired post-resume), or ``"errored"``.
-    ``error`` carries a descriptive message on ``"errored"`` so MCP
-    clients see the reason in-band (M4 T03 AC, parallel to the T02
-    ``RunWorkflowOutput.error`` pattern).
+    ``status``:
+
+    * ``"pending"`` — another gate fired post-resume
+      (``awaiting="gate"``). ``plan`` carries the re-gated draft;
+      ``gate_context`` carries the new gate's prompt, id, workflow
+      id, and projection-time ISO-8601 timestamp.
+    * ``"completed"`` — approved → plan persisted to the artifact
+      store. ``plan`` carries the final artefact.
+    * ``"gate_rejected"`` — caller rejected at the gate. ``plan``
+      carries the last-draft plan (for audit review);
+      ``gate_context`` is ``None`` because the gate has already
+      resolved.
+    * ``"aborted"`` — the Ollama-fallback gate resolved to ABORT on
+      the resume path (M8 T04). ``plan`` is ``None``; ``error``
+      carries the distinguishing message.
+    * ``"errored"`` — a post-gate fault (M4 T03 AC, parallel to
+      ``RunWorkflowOutput.error``). ``plan`` is ``None``; ``error``
+      carries a descriptive message so MCP clients see the reason
+      in-band.
+
+    ``awaiting`` (added in M11 T01) mirrors :attr:`RunWorkflowOutput.awaiting`:
+    populated iff ``status="pending"``; ``None`` elsewhere. Before M11
+    a resumed re-gate returned ``status="pending"`` without a key for
+    the caller to tell what was being awaited — now the same signal
+    exists on both output models.
+
+    ``gate_context`` (M11 T01) is populated iff ``status="pending"`` and
+    ``awaiting="gate"``; see the field's ``description`` for the dict
+    shape. Forward-compat surface for M12's audit-cascade transcript.
     """
 
     run_id: str
-    status: Literal["pending", "completed", "gate_rejected", "errored"]
+    status: Literal["pending", "completed", "gate_rejected", "aborted", "errored"]
+    awaiting: Literal["gate"] | None = None
     plan: dict[str, Any] | None = None
     total_cost_usd: float | None = None
     error: str | None = None
+    gate_context: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Populated iff status='pending' and awaiting='gate'. Keys "
+            "at M11: 'gate_prompt' (str, the prompt the HumanGate "
+            "recorded), 'gate_id' (str, the gate identifier), "
+            "'workflow_id' (str), 'checkpoint_ts' (str, ISO-8601 "
+            "stamp at projection time — not the checkpointer's own "
+            "timestamp). Forward-compat: M12 will extend this dict "
+            "with cascade-transcript keys (audit_verdict, "
+            "audit_reasons, suggested_approach) without a schema "
+            "break."
+        ),
+    )
 
 
 class RunSummary(BaseModel):

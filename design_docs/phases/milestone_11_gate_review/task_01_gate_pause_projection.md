@@ -172,7 +172,7 @@ Under `## [Unreleased]`, add a `### Changed — M11 Task 01: MCP gate-pause proj
 - [ ] `workflow: str` threaded through both `_build_*_from_final` helpers.
 - [ ] `.claude/skills/ai-workflows/SKILL.md` updated to name `plan` and `gate_context.gate_prompt` in the pending-flow section. Skill-text test green.
 - [ ] `skill_install.md §4 Smoke` expected-output snippet refreshed; existing link tests stay green.
-- [ ] Five new tests land and pass (four in `tests/mcp/test_gate_pause_projection.py`, one in `tests/mcp/test_aborted_status_roundtrip.py`, plus one skill-text test under `tests/skill/`).
+- [ ] Six new tests land and pass (four in `tests/mcp/test_gate_pause_projection.py`, one in `tests/mcp/test_aborted_status_roundtrip.py`, plus one skill-text test under `tests/skill/`).
 - [ ] `uv run pytest` + `uv run lint-imports` (4 contracts kept — no new layer contract) + `uv run ruff check` all clean.
 - [ ] CHANGELOG entry under `[Unreleased]` lists files + ACs + ISS-02 driver + the `status="aborted"` latent-bug absorption note.
 - [ ] [M9 T04 issue file ISS-02](../milestone_9_skill/issues/task_04_issue.md) flipped `OPEN` → `RESOLVED (M11 T01 <sha>)` with back-link; propagation footer updated.

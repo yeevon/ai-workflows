@@ -315,7 +315,13 @@ async def test_slice_refactor_e2e_approve_path_writes_three_artefacts(
     # slice_refactor_review strict-review gate — the fan-out completed
     # and the aggregator staged the SliceAggregate payload.
     assert second["status"] == "pending", second
-    assert second["plan"] is None
+    # M11 T01: the re-gate pause projects the last-known planner ``plan``
+    # so the operator has something to review (slice_refactor composes the
+    # planner sub-graph and the planner artefact rides along). Shape
+    # coverage lives in tests/mcp/test_gate_pause_projection.py.
+    assert second["plan"] is not None
+    assert second["gate_context"] is not None
+    assert second["gate_context"]["gate_id"] == "slice_refactor_review"
 
     third = await resume_run(run_id=run_id, gate_response="approved")
     assert third["status"] == "completed", third
@@ -371,7 +377,10 @@ async def test_slice_refactor_e2e_reject_outer_gate_writes_no_artefacts(
 
     third = await resume_run(run_id=run_id, gate_response="rejected")
     assert third["status"] == "gate_rejected", third
-    assert third["plan"] is None
+    # M11 T01 Gap 1: rejected terminals now carry the last-draft plan for
+    # audit. slice_refactor's plan channel is populated by the composed
+    # planner sub-graph, so the rejected dict surfaces that plan here.
+    assert third["plan"] is not None
     assert third["error"] is None
 
     storage = await SQLiteStorage.open(tmp_path / "storage.sqlite")

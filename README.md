@@ -20,7 +20,7 @@ Composable AI workflow framework for a solo developer using a **Claude** as the 
 | **M8 — Ollama infrastructure** | Complete (2026-04-21) |
 | **M9 — Claude Code skill packaging** | Complete (2026-04-21) |
 | M10 — Ollama fault-tolerance hardening | Planned (see roadmap) |
-| M11 — MCP gate-review surface | Planned (see roadmap) |
+| M11 — MCP gate-review surface | **T01 landed (2026-04-22);** close-out (T02) pending |
 | M12 — Tiered audit cascade | Planned (see roadmap) |
 | M13 — v0.1.0 release + PyPI packaging | Planned (see roadmap) |
 
@@ -58,7 +58,33 @@ M11 can land in parallel (pure MCP-surface diff, no conflict with
 M10's `ai_workflows/workflows/` + `primitives/` scope); M12 depends
 on M11.
 
-## What runs today (post-M9)
+**M11 T01 landed 2026-04-22.** The MCP gate-pause projection
+closes [M9 T04 ISS-02](design_docs/phases/milestone_9_skill/issues/task_04_issue.md)
+— at `status="pending"` + `awaiting="gate"` the
+`RunWorkflowOutput` / `ResumeRunOutput` now carry the in-flight
+draft `plan` plus a `gate_context` projection
+(`{gate_prompt, gate_id, workflow_id, checkpoint_ts}`) instead of
+`plan: null`. The terminal `gate_rejected` branch now surfaces the
+last-draft plan for audit review (Gap 1 absorption). Both output
+models gained `"aborted"` on their `status` Literals, closing a
+pre-existing latent pydantic-validation bug on the Ollama-fallback /
+slice-hard-stop path (Issue C absorption). `.claude/skills/ai-workflows/SKILL.md`
+pending-flow rewritten so the skill surfaces the plan + gate prompt
+verbatim. Six new hermetic tests (four in
+[`tests/mcp/test_gate_pause_projection.py`](tests/mcp/test_gate_pause_projection.py),
+one in [`tests/mcp/test_aborted_status_roundtrip.py`](tests/mcp/test_aborted_status_roundtrip.py),
+one in [`tests/skill/test_skill_md_shape.py`](tests/skill/test_skill_md_shape.py));
+full suite moved to 602 passed / 5 skipped, 4 contracts kept.
+Additive at the MCP wire per KDR-008; no new dependency, no checkpoint
+change (KDR-009), no new KDR. `gate_context` is shaped for M12
+forward-compat — the audit-cascade transcript keys
+(`audit_verdict`, `audit_reasons`, `suggested_approach`) will extend
+the same dict without a schema break. M11 T02 (milestone close-out
+including live-smoke re-run) pending. See the
+[M11 T01 deep analysis](design_docs/phases/milestone_11_gate_review/deep_analysis.md)
+for the full drift + alignment pass.
+
+## What runs today (post-M11 T01)
 
 - **`aiw-mcp` MCP server** (FastMCP, stdio transport) — four tools exposed per [architecture.md §4.4](design_docs/architecture.md): `run_workflow`, `resume_run`, `list_runs`, `cancel_run`. Schema-first pydantic I/O (auto-derived by FastMCP per KDR-008). CLI and MCP route through one shared dispatch helper [`ai_workflows/workflows/_dispatch.py`](ai_workflows/workflows/_dispatch.py) so both surfaces stay in lockstep. Register with Claude Code via `claude mcp add ai-workflows --scope user -- uv run aiw-mcp` — full walkthrough in [design_docs/phases/milestone_4_mcp/mcp_setup.md](design_docs/phases/milestone_4_mcp/mcp_setup.md). `cancel_run` performs both the Storage-level status flip and (per M6 T02) looks the active run up in a process-local `_ACTIVE_RUNS: dict[run_id, asyncio.Task]` registry and calls `task.cancel()` — satisfies [architecture.md §8.7](design_docs/architecture.md) for the in-flight-abort case that the parallel slice_refactor fan-out made a UX requirement.
 - **`aiw` CLI** (Typer) with five working commands — `aiw run planner --goal '<goal>' [--run-id …] [--budget-usd …] [--tier-override logical=replacement …]`, `aiw resume <run_id> [--approve / --reject]`, `aiw list-runs [--workflow / --status / --limit]`, `aiw eval capture --run-id <id> --dataset <name>`, `aiw eval run <workflow> [--live] [--dataset …] [--fail-fast]`. `--tier-override` is repeatable (M5 T04) and validates both sides against the workflow's tier registry; unknown names exit with code 2. `aiw eval` is the M7 harness surface — `capture` reconstructs fixtures from a completed run's checkpointed LangGraph state (zero provider calls); `run` dispatches `EvalRunner` with deterministic mode by default, `--live` double-gated on `AIW_EVAL_LIVE=1` + `AIW_E2E=1`. `aiw version` still works; `cost-report` was deferred at M3 T06 reframe (see [architecture.md §4.4](design_docs/architecture.md) and [nice_to_have.md §9](design_docs/nice_to_have.md)). See [ai_workflows/cli.py](ai_workflows/cli.py).
@@ -153,7 +179,7 @@ uv run lint-imports   # four-layer import contract
 uv run ruff check     # style + basic correctness
 ```
 
-Post-M9 snapshot: 596 passed, 5 skipped (the four e2e smokes — `test_planner_smoke.py`, `test_tier_override_smoke.py`, `test_slice_refactor_smoke.py`, `test_ollama_outage_smoke.py` — gated by `AIW_E2E=1`, plus the live-mode eval replay suite gated by `AIW_EVAL_LIVE=1 + AIW_E2E=1`), 4 contracts kept, ruff clean. The +9 tests vs post-M8 come from M9's hermetic `tests/skill/` suite — five shape tests on `SKILL.md` + four doc-link tests on `skill_install.md`.
+Post-M11-T01 snapshot: 602 passed, 5 skipped (the four e2e smokes — `test_planner_smoke.py`, `test_tier_override_smoke.py`, `test_slice_refactor_smoke.py`, `test_ollama_outage_smoke.py` — gated by `AIW_E2E=1`, plus the live-mode eval replay suite gated by `AIW_EVAL_LIVE=1 + AIW_E2E=1`), 4 contracts kept, ruff clean. The +6 tests vs post-M9 come from M11 T01's gate-pause projection suite — four in `tests/mcp/test_gate_pause_projection.py`, one in `tests/mcp/test_aborted_status_roundtrip.py`, one skill-text test in `tests/skill/test_skill_md_shape.py`.
 
 ### Workflow conventions
 

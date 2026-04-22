@@ -151,7 +151,11 @@ async def test_run_workflow_pauses_at_gate_and_stamps_cost(tmp_path: Path) -> No
     assert result.run_id == "run-t02-gate"
     assert result.status == "pending"
     assert result.awaiting == "gate"
-    assert result.plan is None
+    # M11 T01 flipped this from ``plan is None`` — pause now surfaces the
+    # in-flight draft for operator review. Shape coverage lives in
+    # tests/mcp/test_gate_pause_projection.py; here we only re-pin the
+    # M4-era cost + status contract.
+    assert result.plan is not None
     assert result.total_cost_usd is not None
     assert result.total_cost_usd == pytest.approx(0.0033)
     assert result.error is None
