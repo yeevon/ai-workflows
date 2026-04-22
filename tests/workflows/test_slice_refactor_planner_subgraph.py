@@ -433,6 +433,11 @@ def test_build_slice_refactor_has_expected_outer_nodes() -> None:
         "slice_refactor_review",
         "apply",
         "hard_stop",
+        # M8 T04 fallback-gate surface — four new parent-level nodes.
+        "ollama_fallback_stamp",
+        "ollama_fallback",
+        "ollama_fallback_dispatch",
+        "slice_refactor_ollama_abort",
     }
 
 

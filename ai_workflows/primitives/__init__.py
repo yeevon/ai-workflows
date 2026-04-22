@@ -24,4 +24,19 @@ package is allowed to import from :mod:`ai_workflows.graph`,
 depend on them, never the other way around. M1 Task 12 installs the
 four-layer contract (primitives → graph → workflows → surfaces) that
 enforces this rule.
+
+Re-exports (additive):
+    M8 Task 02 lifts the :class:`CircuitBreaker` state machine into the
+    top-level primitives namespace so call-sites can write
+    ``from ai_workflows.primitives import CircuitBreaker``. Older
+    primitives (``CostTracker``, ``SQLiteStorage``, …) continue to be
+    imported from their submodules directly.
 """
+
+from ai_workflows.primitives.circuit_breaker import (
+    CircuitBreaker,
+    CircuitOpen,
+    CircuitState,
+)
+
+__all__ = ["CircuitBreaker", "CircuitOpen", "CircuitState"]

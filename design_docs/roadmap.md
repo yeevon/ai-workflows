@@ -18,8 +18,9 @@ This roadmap replaces the archived milestone plan at `archive/pre_langgraph_pivo
 | M5 | Multi-tier `planner` | [phases/milestone_5_multitier_planner/](phases/milestone_5_multitier_planner/README.md) | ✅ complete (2026-04-20) |
 | M6 | `slice_refactor` DAG | [phases/milestone_6_slice_refactor/](phases/milestone_6_slice_refactor/README.md) | ✅ complete (2026-04-20) |
 | M7 | Eval harness | [phases/milestone_7_evals/](phases/milestone_7_evals/README.md) | ✅ complete (2026-04-21) |
-| M8 | Ollama infrastructure | [phases/milestone_8_ollama/](phases/milestone_8_ollama/README.md) | planned |
+| M8 | Ollama infrastructure | [phases/milestone_8_ollama/](phases/milestone_8_ollama/README.md) | ✅ complete (2026-04-21) |
 | M9 | Claude Code skill packaging | [phases/milestone_9_skill/](phases/milestone_9_skill/README.md) | optional |
+| M10 | Ollama fault-tolerance hardening | [phases/milestone_10_ollama_hardening/](phases/milestone_10_ollama_hardening/README.md) | planned |
 
 **Deferred (see [nice_to_have.md](nice_to_have.md)):** Langfuse, Instructor/pydantic-ai, LangSmith, Typer swap, Docker Compose, mkdocs, DeepAgents templates, standalone OTel. **No milestones for these until their trigger fires.**
 
@@ -37,6 +38,7 @@ One-liners only; each gets a full `phases/` directory when the prior milestone c
 - **M7 — Eval harness.** Prompt-regression guard. Captures input/expected pairs per workflow; replay on PR. Fulfils KDR-004's "prompting is a contract" promise.
 - **M8 — Ollama infrastructure.** Health check, circuit breaker, fallback-to-Gemini gate. Needed once Qwen is load-bearing in M5/M6.
 - **M9 — Claude Code skill packaging (optional).** `.claude/skills/ai-workflows/SKILL.md` wrapping `aiw` or the MCP server. Packaging only — no logic.
+- **M10 — Ollama fault-tolerance hardening.** Closes the design-rationale and UX gaps in M8's fault-tolerance surface that were surfaced by the 2026-04-21 M8 deep-analysis pass: retroactive ADR for the `fallback_tier="planner-synth"` choice, RETRY-cooldown guidance in the gate prompt, invariant tests for the single-gate-per-run pattern and the `_mid_run_tier_overrides` Send-payload carry, documented process-local breaker scope, and five new `nice_to_have.md` entries (multi-process breaker, empirical tuning, second-level fallback chain, single-gate factory refactor, Gemini-tier breakers). Composes over existing KDRs — no new KDR.
 
 ---
 

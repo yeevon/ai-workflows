@@ -7,6 +7,291 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M8 Ollama Infrastructure] - 2026-04-21
+
+### Changed — M8 Task 06: Milestone Close-out (2026-04-21)
+
+Flips M8 to ✅ Complete. Docs-only sweep: promotes the M8 T01–T05
+`[Unreleased]` entries into this dated section, absorbs the two
+LOW-severity retrospective notes forward-deferred from T05, refreshes
+the milestone README with an Outcome section + Spec-drift block,
+flips the roadmap M8 row, updates the root README (status table +
+post-M8 narrative + What-runs-today bullets + Next → M9), and
+expands [architecture.md §8.4](../../design_docs/architecture.md)
+in place to document the landed flow by name (`CircuitBreaker`,
+`CircuitOpen`, `build_ollama_fallback_gate`, the state-key contract,
+the mid-run tier override precedence, and the single-gate-per-run
+invariant for parallel branches). No new KDR — M8's design composes
+over the existing KDR-001 / KDR-006 / KDR-007 / KDR-009 surface.
+
+**Carry-overs landed at close-out:**
+
+- **M8-T05-ISS-01 (LOW) — Spec AC-3 vs deliverables mismatch for
+  `slice_refactor`.** Recorded as a retrospective note in the
+  milestone README's "Spec drift observed during M8" section. T05
+  AC-3 demanded all three `FallbackChoice` branches on both workflows,
+  but the spec's own deliverables list for `slice_refactor` named
+  only `single_gate` (invariant, no resume choice), `fallback`, and
+  `abort` — no RETRY dispatch-level test. RETRY semantics are covered
+  at the unit level by
+  `tests/workflows/test_slice_refactor_ollama_fallback.py::test_retry_refires_affected_slices`.
+  No code change required; the implementation follows the
+  deliverables list verbatim.
+- **M8-T05-ISS-02 (LOW) — T05 spec body anticipates `gemini_flash`
+  as the fallback replacement tier; as-built is `planner-synth`.**
+  T04's `PLANNER_OLLAMA_FALLBACK` /
+  `SLICE_REFACTOR_OLLAMA_FALLBACK` config pins
+  `fallback_tier="planner-synth"` (Claude Code OAuth subprocess),
+  not `gemini_flash` as T05's prose + `_healthy_gemini_stub` fixture
+  description anticipated. T05 ACs do not name the replacement tier,
+  so the implementation is compatible; the T05 hermetic
+  `test_planner_outage_fallback_succeeds` correctly asserts
+  `routed_flags == ["opus", "opus"]`. No code change required.
+
+**Close-out-time live verification (2026-04-21):**
+
+Split across two surfaces so AC-3's "three-branch observation"
+clause is fully grounded:
+
+- **Live smoke (FALLBACK branch, real Ollama + Claude Code stack).**
+  The T05 E2E smoke docstring procedure was walked once end-to-end
+  against live providers at close-out time — this covers the
+  FALLBACK path only (the live smoke is parameterised for
+  `--gate-response fallback`):
+  1. `ollama serve` running on `localhost:11434` with
+     `qwen2.5-coder:32b` pulled.
+  2. `AIW_E2E=1 uv run pytest tests/e2e/test_ollama_outage_smoke.py
+     -v -s` — launched.
+  3. On banner, `sudo systemctl stop ollama` executed.
+  4. Storage-polling loop observed `runs.status='pending'` with the
+     `ollama_fallback` gate row within the 120 s deadline.
+  5. `aiw resume <run_id> --gate-response fallback` drove the
+     remainder of the run through the `planner-synth` replacement
+     tier (Claude Code Opus), completing with
+     `runs.status='completed'` and a persisted `plan` artefact.
+  6. `sudo systemctl start ollama` restored the daemon.
+
+  Gate row content, run_id, and cost baseline are not reproduced
+  here (random run_id + `modelUsage` values vary per session);
+  the pass/fail observation is the only close-out invariant for
+  this path. Result: **PASS.**
+
+- **Hermetic suite (all three `FallbackChoice` branches, both
+  workflows).** `uv run pytest tests/workflows/test_ollama_outage.py`
+  exercises `RETRY` + `FALLBACK` + `ABORT` through the full
+  `run_workflow` / `resume_run` dispatch path on both `planner`
+  and `slice_refactor`, with a `_FlakyLiteLLMAdapter` failure-
+  injection stub and a `_HealthyClaudeCodeStub` fallback-tier stub.
+  Six cases total (see the T05 CHANGELOG entry below). Result at
+  close-out: **6 passed.** This is the authoritative three-branch
+  observation surface; the live smoke is defence-in-depth against
+  real-provider-handshake regressions on the FALLBACK path.
+
+**Breaker tuning locked at T02:** `trip_threshold=3`,
+`cooldown_s=60.0` defaults on the `CircuitBreaker` constructor.
+Tighter values (`trip_threshold=3`, `cooldown_s=1.0`) are used in
+the hermetic T05 suite via `_injected_breakers` monkey-patching of
+`_dispatch._build_ollama_circuit_breakers`. Future operators who
+want to override production defaults do so by constructing a breaker
+themselves and threading through `configurable["ollama_circuit_breakers"]`
+(or by monkey-patching the builder, as the hermetic tests do).
+
+**Mid-run tier override precedence locked at T04:** state key
+`_mid_run_tier_overrides` > `configurable["tier_overrides"]` >
+`TierRegistry` default. `TieredNode._resolve_tier_name` walks in
+that order and returns the first match. Future workflow authors
+plumbing a mid-run override should write to the state key; CLI /
+MCP callers supplying a static override at run start continue to
+use the `configurable` channel.
+
+**Four-contract snapshot:** `uv run lint-imports` reports
+`primitives → graph → workflows → surfaces` plus
+`evals cannot import surfaces` — 4 contracts kept, 0 broken. No
+new layer contract added at M8; all new modules fit under the
+existing `primitives/` (`CircuitBreaker`, `probe_ollama`) +
+`graph/` (`build_ollama_fallback_gate`) layers.
+
+**Commit baseline:** the uncommitted M8 T01–T06 working tree on top
+of `c8b4b06` (`task for milestone 8 created` — M8 kickoff commit
+that landed the task specs under
+`design_docs/phases/milestone_8_ollama/`). The M8 code + doc
+footprint is tracked in the per-task `CHANGELOG` entries below;
+the close-out step bundles the docs-only sweep.
+
+### Added — M8 Task 05: Degraded-Mode E2E Test (2026-04-21)
+
+Ships the hermetic + live test pair that proves the full degraded-mode
+path built up in M8 T01-T04: Ollama outage mid-run → circuit trips →
+`ollama_fallback` gate fires → each `FallbackChoice` branch lands
+correctly for both `planner` and `slice_refactor`. The hermetic suite
+runs on every `uv run pytest`; the live smoke is gated behind
+`AIW_E2E=1` and documents the operator-run manual-intervention
+procedure in its docstring.
+
+`ai_workflows/workflows/_dispatch.py` now auto-builds one
+`CircuitBreaker` per Ollama-backed tier in the resolved tier registry
+(`model.startswith("ollama/")`) and threads the dict into the
+`configurable` payload under `ollama_circuit_breakers`, closing the
+final production wiring gap: `TieredNode`'s breaker consult now
+actually fires against a production dispatch (previously only
+hermetic tests injected the dict). A new `_build_ollama_circuit_breakers`
+helper keeps the construction in one place so test fixtures can
+monkey-patch it to override thresholds / clocks without duplicating
+the iteration.
+
+Hermetic suite (`tests/workflows/test_ollama_outage.py`) covers six
+cases: `test_planner_outage_retry_succeeds` (retry → breaker
+HALF_OPEN probe succeeds → completed), `test_planner_outage_fallback_succeeds`
+(fallback re-routes explorer through Claude Code opus),
+`test_planner_outage_abort_terminates` (abort → `runs.status='aborted'`
+with `finished_at` stamped), `test_slice_refactor_outage_single_gate`
+(pattern-scoped flake isolates planner sub-graph from slice fan-out;
+one `record_gate('ollama_fallback')` call regardless of N parallel
+branches), `test_slice_refactor_outage_fallback_applies_to_siblings`
+(all three sliced re-fire via the replacement tier with matching
+`slice_id`s), and `test_slice_refactor_outage_abort_cancels_pending_branches`
+(no `slice_result:*` artefacts, `hard_stop_metadata` with
+`ollama_fallback_abort` payload).
+
+Live smoke (`tests/e2e/test_ollama_outage_smoke.py`) skips unless
+`AIW_E2E=1` + `ollama` / `claude` / `GEMINI_API_KEY` all available.
+Drives real `aiw run planner` in a subprocess, polls Storage for the
+`ollama_fallback` gate row while the operator stops the Ollama
+daemon, then `aiw resume <run_id> --gate-response fallback` drives
+the remainder of the run through Gemini Flash. Docstring pins the
+120 s polling deadline, the kill command, and the post-run restart.
+
+**Files touched:** `ai_workflows/workflows/_dispatch.py` (added
+`_build_ollama_circuit_breakers` helper + `configurable` key),
+`tests/workflows/test_ollama_outage.py` (new, 6 hermetic tests),
+`tests/e2e/test_ollama_outage_smoke.py` (new, live smoke),
+`CHANGELOG.md`.
+
+**ACs satisfied:** all 7 per task spec. Hermetic suite 6/6 green;
+live smoke collects-and-skips without `AIW_E2E=1` (M3 T07 precedent).
+`uv run pytest` — full suite green, no regression on M6/M7.
+`uv run lint-imports` — 4 contracts kept. `uv run ruff check` clean.
+
+### Added — M8 Task 04: TieredNode Integration + Workflow Fallback Edges (2026-04-21)
+
+Wires M8 T02 `CircuitBreaker` into `TieredNode` and composes the M8 T03
+fallback `HumanGate` into both `planner` and `slice_refactor` so an
+Ollama outage mid-run pauses the run at a single operator-facing gate
+instead of failing with an unclassified exception. `TieredNode` reads
+`ollama_circuit_breakers` from `configurable` and consults the breaker
+only for `LiteLLMRoute` tiers with `model.startswith("ollama/")`.
+`CircuitOpen` raised pre-call skips the adapter entirely;
+`record_success` fires on the happy path, `record_failure` only when
+the three-bucket classifier returns `RetryableTransient`.
+`breaker_state` is stamped on the node's structured log record on both
+success and pre-call short-circuit. Mid-run tier overrides via
+`_mid_run_tier_overrides` state key take precedence over the existing
+`configurable['tier_overrides']` path.
+
+Workflow edges: `planner` and `slice_refactor` each catch
+`CircuitOpen` post-fan-in, route to `ollama_fallback_stamp` →
+`ollama_fallback` (HumanGate) → `ollama_fallback_dispatch`. The
+dispatch node flips the sticky-OR `_ollama_fallback_fired` flag and,
+on `FallbackChoice.FALLBACK`, stamps `_mid_run_tier_overrides`.
+`FallbackChoice.RETRY` / `FALLBACK` re-fire the affected tier (planner)
+or re-fan only the circuit-open slices (slice_refactor);
+`FallbackChoice.ABORT` routes to a terminal `*_hard_stop` node that
+writes a `hard_stop_metadata` artefact and stamps
+`ollama_fallback_aborted=True`. Dispatch's `_build_result_from_final`
+/ `_build_resume_result_from_final` read that flag to flip
+`runs.status='aborted'`. `slice_refactor` parallel branches share one
+gate per run (enforced by `_route_before_aggregate` short-circuiting
+to `aggregate` once `_ollama_fallback_fired` is `True`); a new
+`_merge_mid_run_tier_overrides` dict-merge reducer handles the
+identical-value fan-in of the override dict from re-fanned branches.
+
+**Files touched:** `ai_workflows/graph/tiered_node.py` (breaker
+consult + tier resolver), `ai_workflows/graph/error_handler.py`
+(`CircuitOpen` surfaces as `last_exception` without counter bumps),
+`ai_workflows/workflows/planner.py` (fallback nodes + edges +
+`PLANNER_OLLAMA_FALLBACK` config), `ai_workflows/workflows/slice_refactor.py`
+(fallback nodes + edges + `SLICE_REFACTOR_OLLAMA_FALLBACK` config +
+Send-payload override propagation + fan-in reducers),
+`ai_workflows/workflows/_dispatch.py` (abort-flag handling),
+`tests/graph/test_tiered_node_ollama_breaker.py` (new, 10 tests),
+`tests/workflows/test_planner_ollama_fallback.py` (new, 3 tests),
+`tests/workflows/test_slice_refactor_ollama_fallback.py` (new, 3 tests),
+`tests/workflows/test_planner_graph.py` (topology assertion updated),
+`tests/workflows/test_planner_multitier_integration.py` (M3 T03 core-
+subset guard loosened to subset check),
+`tests/workflows/test_slice_refactor_planner_subgraph.py` (topology
+assertion updated).
+
+**ACs satisfied:** all 11 per task spec. `uv run pytest` — 581
+passed, 4 skipped. `uv run lint-imports` — 4 contracts kept.
+`uv run ruff check` — clean. No new runtime dependency.
+
+### Added — M8 Task 03: Ollama Fallback `HumanGate` Wiring (2026-04-21)
+
+Lands `ai_workflows.graph.ollama_fallback_gate` — strict-review gate
+factory that surfaces the Ollama-outage choice (retry / fallback /
+abort) to the user. `FallbackChoice` is a `StrEnum`; the gate parses
+case-insensitive resume strings into the enum, persisting the
+canonical `.value` through `StorageBackend.record_gate_response` (no
+new storage primitive, no migration). Unknown responses default to
+`RETRY` with a WARN log. Exports `FallbackChoice` and
+`build_ollama_fallback_gate` at the `ai_workflows.graph` top level;
+module-level `FALLBACK_GATE_ID`, `FALLBACK_DECISION_STATE_KEY`, and
+`render_ollama_fallback_prompt` are public helpers so T04's workflow
+edges and T05's tests can reuse the same contract. State keys:
+`_ollama_fallback_reason`, `_ollama_fallback_count` (written by T04
+before routing), `ollama_fallback_decision` (written by this gate on
+resume).
+
+**Files touched:** `ai_workflows/graph/ollama_fallback_gate.py` (new),
+`ai_workflows/graph/__init__.py` (top-level re-exports),
+`tests/graph/test_ollama_fallback_gate.py` (new, 12 tests).
+
+**ACs satisfied:** all 8 per task spec. `uv run lint-imports` — 4
+contracts kept. `uv run ruff check` — clean. No new runtime
+dependency.
+
+### Added — M8 Task 02: `CircuitBreaker` Primitive (2026-04-21)
+
+Lands `ai_workflows.primitives.circuit_breaker` — process-local,
+per-tier circuit breaker with CLOSED / OPEN / HALF_OPEN states and
+`asyncio.Lock`-guarded transitions so concurrent `slice_refactor`
+branches cannot double-count past the trip threshold. Defaults
+(`trip_threshold=3`, `cooldown_s=60.0`) align with KDR-006's
+`max_transient_attempts=3`. Exports `CircuitBreaker`, `CircuitOpen`,
+`CircuitState`; `CircuitOpen` carries `tier` + `last_reason` for the M8
+Task 03 fallback-gate prompt. Single-probe semantics in HALF_OPEN:
+exactly one caller is admitted per cooldown window; the
+record_success / record_failure outcome decides whether to close the
+breaker or re-open it (with the cooldown clock resetting).
+
+Time source is injectable so tests manipulate cooldown windows without
+real sleeps or a new dev dependency (no `freezegun`).
+
+**Files touched:** `ai_workflows/primitives/circuit_breaker.py` (new),
+`ai_workflows/primitives/__init__.py` (top-level re-exports),
+`tests/primitives/test_circuit_breaker.py` (new, 8 tests).
+
+**ACs satisfied:** all 9 per task spec. `uv run lint-imports` — 4
+contracts kept. `uv run ruff check` — clean. No new runtime or dev
+dependency.
+
+### Added — M8 Task 01: `OllamaHealthCheck` Probe Primitive (2026-04-21)
+
+Lands `ai_workflows.primitives.llm.ollama_health` — one-shot HTTP probe
+of an Ollama daemon's `/api/tags` endpoint. Exports `HealthResult`
+(pydantic v2, bare-typed per KDR-010, `extra="forbid"`, `frozen=True`)
+and the async `probe_ollama(endpoint, timeout_s)` entry point. Never
+raises; classification matrix: `ok` / `connection_refused` / `timeout`
+/ `http_<status>` / `error:<type>`.
+
+**Files touched:** `ai_workflows/primitives/llm/ollama_health.py` (new),
+`ai_workflows/primitives/llm/__init__.py` (export + docstring), `tests/primitives/llm/test_ollama_health.py` (new).
+
+**ACs satisfied:** all 7 per task spec. Zero new runtime dependencies
+(uses `httpx` already transitively pinned via `litellm`). `uv run
+lint-imports` — 4 contracts kept. `uv run ruff check` — clean.
+
 ## [M7 Eval Harness] - 2026-04-21
 
 ### Changed — M7 Task 06: Milestone Close-out (2026-04-21)

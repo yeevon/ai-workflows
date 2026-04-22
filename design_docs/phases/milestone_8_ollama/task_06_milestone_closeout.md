@@ -1,6 +1,6 @@
 # Task 06 — Milestone Close-out
 
-**Status:** 📝 Planned.
+**Status:** ✅ Complete (2026-04-21).
 **Grounding:** [milestone README](README.md) · [CLAUDE.md](../../../CLAUDE.md) close-out conventions · [M7 T06](../milestone_7_evals/task_06_milestone_closeout.md) (pattern to mirror).
 
 ## What to Build
@@ -137,25 +137,25 @@ ask the user.
 
 ## Acceptance Criteria
 
-- [ ] Every exit criterion in the milestone [README](README.md) has a
+- [x] Every exit criterion in the milestone [README](README.md) has a
       concrete verification (paths / test names / issue-file links).
-- [ ] `uv run pytest && uv run lint-imports && uv run ruff check`
+- [x] `uv run pytest && uv run lint-imports && uv run ruff check`
       green on a fresh clone; `lint-imports` reports **4 contracts kept**.
-- [ ] Close-out CHANGELOG entry records the degraded-mode e2e smoke
+- [x] Close-out CHANGELOG entry records the degraded-mode e2e smoke
       rerun at close-out time (commit sha + three-branch observation).
-- [ ] Close-out CHANGELOG entry records the breaker tuning defaults
+- [x] Close-out CHANGELOG entry records the breaker tuning defaults
       locked at T02.
-- [ ] Close-out CHANGELOG entry records the mid-run tier override
+- [x] Close-out CHANGELOG entry records the mid-run tier override
       precedence locked at T04.
-- [ ] M8 milestone README **and** roadmap reflect
-      `✅ Complete (<YYYY-MM-DD>)`.
-- [ ] CHANGELOG has a dated `## [M8 Ollama Infrastructure] - <YYYY-MM-DD>`
+- [x] M8 milestone README **and** roadmap reflect
+      `✅ Complete (2026-04-21)`.
+- [x] CHANGELOG has a dated `## [M8 Ollama Infrastructure] - 2026-04-21`
       section; `[Unreleased]` preserved at the top.
-- [ ] Root README updated: status table, post-M8 narrative,
+- [x] Root README updated: status table, post-M8 narrative,
       What-runs-today, Next → M9.
-- [ ] architecture.md §8.4 updated in place with the landed flow
+- [x] architecture.md §8.4 updated in place with the landed flow
       (no new KDR).
-- [ ] All M8 task issue files audited for propagation holes; any gap
+- [x] All M8 task issue files audited for propagation holes; any gap
       closed or escalated.
 
 ## Dependencies
@@ -177,3 +177,32 @@ ask the user.
 
 *None.* M7 T06 closed clean with the four carry-overs resolved or
 deferred to nice_to_have.md §13. No open items land on M8.
+
+## Carry-over from prior audits
+
+The T06 close-out absorbs two retrospective-notes forward-deferred
+from M8 T05's audit. Both are doc-only, close-out-ready findings.
+
+- [x] **M8-T05-ISS-01 (LOW) — Spec AC-3 vs deliverables mismatch for `slice_refactor`**
+      Record in the close-out's "Spec drift observed during M8"
+      retrospective section: T05 AC-3 text demands "all three
+      `FallbackChoice` branches on both `planner` and
+      `slice_refactor`", but the spec's own deliverables list only
+      three `slice_refactor` tests (single_gate invariant, FALLBACK,
+      ABORT) — no explicit `RETRY` case. The RETRY semantics *are*
+      covered at the unit level by M8 T04's
+      `tests/workflows/test_slice_refactor_ollama_fallback.py::test_retry_refires_affected_slices`;
+      a dispatch-level `test_slice_refactor_outage_retry_re_fires_affected_slices`
+      would close the redundant gap. No code change required.
+      Source: [issues/task_05_issue.md](issues/task_05_issue.md) §LOW ISS-01.
+
+- [x] **M8-T05-ISS-02 (LOW) — Spec body names `gemini_flash` as fallback tier; as-built is `planner-synth`**
+      Record in the same retrospective section: T05 spec body +
+      `_healthy_gemini_stub` fixture description anticipate the
+      FALLBACK replacement tier is `gemini_flash`, but M8 T04
+      configured `fallback_tier="planner-synth"` (Claude Code) in
+      both `PLANNER_OLLAMA_FALLBACK` + `SLICE_REFACTOR_OLLAMA_FALLBACK`.
+      T05 ACs do not name the tier so the implementation is
+      compatible; future readers should see the explanation once
+      instead of rediscovering it. No code change required.
+      Source: [issues/task_05_issue.md](issues/task_05_issue.md) §LOW ISS-02.

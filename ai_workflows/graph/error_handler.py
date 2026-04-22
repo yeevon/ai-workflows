@@ -1,6 +1,14 @@
 """Error-handler wrapper for bucket-raising nodes (M2 Task 08 carry-over —
 M2-T07-ISS-01, KDR-006 / KDR-009,
-[architecture.md §4.2 / §8.2](../../design_docs/architecture.md)).
+[architecture.md §4.2 / §8.2 / §8.4](../../design_docs/architecture.md)).
+
+M8 T04 update: the wrapper also recognises
+:class:`ai_workflows.primitives.circuit_breaker.CircuitOpen` and writes
+``last_exception=exc`` *without* bumping either the per-node retry
+counter or the run-wide ``_non_retryable_failures`` counter. This keeps
+the Ollama-outage fallback gate (architecture.md §8.4) a one-off pause
+rather than a double-failure hard-stop trigger, and lets ``RETRY`` /
+``FALLBACK`` resume with a clean transient-retry budget.
 
 Converts a node that *raises* one of the three retry-taxonomy buckets
 (:class:`RetryableTransient` / :class:`RetryableSemantic` /
@@ -53,6 +61,7 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
+from ai_workflows.primitives.circuit_breaker import CircuitOpen
 from ai_workflows.primitives.retry import (
     NonRetryable,
     RetryableSemantic,
@@ -105,6 +114,18 @@ def wrap_with_error_handler(
             if accepts_config:
                 return await node(state, config)
             return await node(state)
+        except CircuitOpen as exc:
+            # M8 T04: CircuitOpen bypasses the retry-counter bumping because
+            # the workflow's ``catch_circuit_open`` edge routes directly to
+            # the fallback ``HumanGate`` (architecture.md §8.4). Counting it
+            # as a NonRetryable would double-bump the hard-stop counter when
+            # the breaker is shared across parallel branches (one trip, N
+            # raises) and would also burn through the per-node transient
+            # budget that the operator's ``RETRY`` choice is meant to
+            # restart cleanly. Writing ``last_exception`` is sufficient —
+            # the workflow edge checks ``isinstance(exc, CircuitOpen)``
+            # before delegating to :func:`retrying_edge`.
+            return {"last_exception": exc}
         except (RetryableTransient, RetryableSemantic, NonRetryable) as exc:
             return _failure_state_update(state, exc, node_name=node_name)
 

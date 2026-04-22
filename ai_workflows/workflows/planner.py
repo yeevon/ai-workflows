@@ -24,6 +24,7 @@ supplied by the CLI/MCP surface via ``config["configurable"]`` at run time
 
 from __future__ import annotations
 
+import json
 from typing import Any, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -32,15 +33,23 @@ from pydantic import BaseModel, Field
 
 from ai_workflows.graph.error_handler import wrap_with_error_handler
 from ai_workflows.graph.human_gate import human_gate
+from ai_workflows.graph.ollama_fallback_gate import (
+    FALLBACK_DECISION_STATE_KEY,
+    FallbackChoice,
+    build_ollama_fallback_gate,
+)
 from ai_workflows.graph.retrying_edge import retrying_edge
 from ai_workflows.graph.tiered_node import tiered_node
 from ai_workflows.graph.validator_node import validator_node
+from ai_workflows.primitives.circuit_breaker import CircuitOpen
 from ai_workflows.primitives.retry import RetryPolicy
 from ai_workflows.primitives.tiers import ClaudeCodeRoute, LiteLLMRoute, TierConfig
 from ai_workflows.workflows import register
 
 __all__ = [
+    "PLANNER_OLLAMA_FALLBACK",
     "PLANNER_RETRY_POLICY",
+    "OllamaFallback",
     "PlannerInput",
     "PlannerStep",
     "PlannerPlan",
@@ -78,6 +87,43 @@ rather than changing behaviour (resolves the planner half of
 omit the constant fall back to the ``"plan"`` default in dispatch, so
 the contract is backwards-compatible for any future workflow whose
 terminal signal is still a ``plan`` row.
+"""
+
+
+class OllamaFallback(BaseModel):
+    """M8 T04 tier-pair declaration for the Ollama-outage fallback edge.
+
+    Names the **logical** Ollama-backed tier a workflow calls (``logical``)
+    and the **non-Ollama replacement** (``fallback_tier``) that
+    :func:`_ollama_fallback_dispatch` stamps into
+    ``state['_mid_run_tier_overrides']`` when the operator picks
+    :attr:`FallbackChoice.FALLBACK`. Both names must already live in the
+    workflow's tier registry — this config is pure metadata, it does not
+    mint new tiers.
+
+    Introduced by M8 Task 04 (architecture.md §8.4). Exposed at module
+    scope so a workflow's constant (e.g. :data:`PLANNER_OLLAMA_FALLBACK`)
+    can be inspected by tests without re-threading it through
+    :func:`build_planner`.
+    """
+
+    logical: str
+    fallback_tier: str
+
+
+PLANNER_OLLAMA_FALLBACK = OllamaFallback(
+    logical="planner-explorer",
+    fallback_tier="planner-synth",
+)
+"""Tier-pair the planner workflow falls back to on an Ollama outage (M8 T04).
+
+``planner-explorer`` is ``ollama/qwen2.5-coder:32b`` per M5 T01; the
+fallback route is ``planner-synth`` (``ClaudeCodeRoute(cli_model_flag="opus")``
+per M5 T02), which is not Ollama-backed and therefore not breakered. After
+:attr:`FallbackChoice.FALLBACK` the explorer node resolves
+``planner-explorer`` through the state-level override mechanism (see
+:func:`ai_workflows.graph.tiered_node._resolve_tier`) and dispatches the
+replacement route until the run finishes.
 """
 
 
@@ -207,6 +253,13 @@ class PlannerState(TypedDict, total=False):
     last_exception: Any
     _retry_counts: dict[str, int]
     _non_retryable_failures: int
+    _mid_run_tier_overrides: dict[str, str]
+    _ollama_fallback_fired: bool
+    _ollama_fallback_reason: str
+    _ollama_fallback_count: int
+    ollama_fallback_decision: FallbackChoice
+    gate_ollama_fallback_response: str
+    ollama_fallback_aborted: bool
 
 
 def _explorer_prompt(state: PlannerState) -> tuple[str, list[dict[str, str]]]:
@@ -241,6 +294,140 @@ def _planner_prompt(state: PlannerState) -> tuple[str, list[dict[str, str]]]:
         f"Assumptions: {assumptions}"
     )
     return system, [{"role": "user", "content": user}]
+
+
+def _stamp_ollama_fallback_ctx(state: PlannerState) -> dict[str, Any]:
+    """Render the Ollama-fallback gate's prompt context from ``last_exception`` (M8 T04).
+
+    Runs on the ``catch_circuit_open`` branch immediately before the
+    strict-review gate. Reads the :class:`CircuitOpen` exception the
+    upstream :func:`wrap_with_error_handler` captured into
+    ``state['last_exception']`` and writes:
+
+    * ``_ollama_fallback_reason`` — mirrors :attr:`CircuitOpen.last_reason`
+      so the gate prompt (rendered by
+      :func:`render_ollama_fallback_prompt`) can name the exact breaker
+      trip cause.
+    * ``_ollama_fallback_count`` — monotonically increments so a second
+      fallback gate in the same run shows a higher counter even though
+      :data:`_ollama_fallback_fired` short-circuits the wiring after the
+      first firing.
+
+    Pure synthesis — no LLM call, no validator pairing (KDR-004 n/a). The
+    alternative (doing this inside the gate node) would couple the gate
+    factory to workflow-specific state vocabulary; keeping the stamp in
+    the workflow keeps the factory reusable across planner +
+    slice_refactor.
+    """
+    exc = state.get("last_exception")
+    reason = exc.last_reason if isinstance(exc, CircuitOpen) else ""
+    count = (state.get("_ollama_fallback_count") or 0) + 1
+    return {
+        "_ollama_fallback_reason": reason,
+        "_ollama_fallback_count": count,
+    }
+
+
+def _ollama_fallback_dispatch(state: PlannerState) -> dict[str, Any]:
+    """Consume the operator's :class:`FallbackChoice` and stamp downstream
+    state (M8 T04).
+
+    Runs after the Ollama-fallback gate resumes. Three responsibilities:
+
+    1. **Mark the gate as fired** (``_ollama_fallback_fired=True``) so the
+       edge wrapper around :func:`retrying_edge` (see
+       :func:`_decide_after_explorer_with_fallback`) does not re-route to
+       the gate on a second :class:`CircuitOpen` — a repeat trip after
+       the operator has already chosen escalates directly to
+       :func:`_planner_hard_stop` rather than double-prompting.
+    2. **Clear the retry-taxonomy slots** (``last_exception=None``,
+       ``_retry_counts={}``) so the explorer re-fire starts with a clean
+       transient budget. :class:`CircuitOpen` was never counted against
+       the budget (see
+       :mod:`ai_workflows.graph.error_handler`), but explorer may have
+       bumped the transient counter on earlier attempts in the same
+       streak — zeroing it gives the retry choice its full budget back.
+       The planner's ``last_exception`` channel has no reducer, so
+       writing ``None`` cleanly clears it.
+    3. **Stamp the mid-run tier override on** :attr:`FallbackChoice.FALLBACK`
+       so :func:`ai_workflows.graph.tiered_node._resolve_tier` swaps the
+       tripped tier for :attr:`OllamaFallback.fallback_tier` on every
+       subsequent :func:`tiered_node` invocation in this run.
+
+    ABORT is routed by :func:`_route_after_fallback_dispatch` without
+    additional state writes — the conditional edge sees
+    :attr:`FallbackChoice.ABORT` and directs to :func:`_planner_hard_stop`,
+    which owns the ``runs.status='aborted'`` terminal and the
+    ``ollama_fallback_aborted`` dispatch signal.
+    """
+    decision = state.get(FALLBACK_DECISION_STATE_KEY)
+    updates: dict[str, Any] = {
+        "_ollama_fallback_fired": True,
+        "last_exception": None,
+        "_retry_counts": {},
+    }
+    if decision is FallbackChoice.FALLBACK:
+        overrides = dict(state.get("_mid_run_tier_overrides") or {})
+        overrides[PLANNER_OLLAMA_FALLBACK.logical] = (
+            PLANNER_OLLAMA_FALLBACK.fallback_tier
+        )
+        updates["_mid_run_tier_overrides"] = overrides
+    return updates
+
+
+async def _planner_hard_stop(
+    state: PlannerState, config: RunnableConfig
+) -> dict[str, Any]:
+    """Terminal node for the Ollama-fallback ABORT branch (M8 T04).
+
+    Runs exclusively on the :attr:`FallbackChoice.ABORT` branch of
+    :func:`_route_after_fallback_dispatch`, and on a double-:class:`CircuitOpen`
+    escalation (repeat trip after the gate already fired — see
+    :func:`_decide_after_explorer_with_fallback`). Writes a
+    ``hard_stop_metadata`` artefact via
+    :meth:`SQLiteStorage.write_artifact` so the post-mortem surface can
+    read why the run aborted without re-running the graph, then returns
+    ``{"ollama_fallback_aborted": True}`` which
+    :mod:`ai_workflows.workflows._dispatch` reads as the terminal signal
+    to flip ``runs.status='aborted'``.
+
+    Distinct from the slice_refactor ``hard_stop`` node (which carries a
+    ``failing_slice_ids`` payload) — the planner has no per-slice fan-out,
+    so the abort signal is a single boolean and the metadata row names
+    the tripped tier instead. Reusing the same ``hard_stop_metadata``
+    artefact ``kind`` keeps the cross-workflow schema uniform.
+    """
+    run_id = state["run_id"]
+    storage = config["configurable"]["storage"]
+    payload = json.dumps(
+        {
+            "reason": "ollama_fallback_abort",
+            "tier": PLANNER_OLLAMA_FALLBACK.logical,
+        }
+    )
+    await storage.write_artifact(run_id, "hard_stop_metadata", payload)
+    return {"ollama_fallback_aborted": True}
+
+
+def _route_after_fallback_dispatch(state: PlannerState) -> str:
+    """Conditional-edge router after :func:`_ollama_fallback_dispatch` (M8 T04).
+
+    Reads the :class:`FallbackChoice` the gate parsed into
+    :data:`FALLBACK_DECISION_STATE_KEY` and directs:
+
+    * :attr:`FallbackChoice.ABORT` → ``"planner_hard_stop"`` (terminal
+      abort, :func:`_planner_hard_stop` writes the metadata artefact and
+      dispatch flips ``runs.status='aborted'``).
+    * :attr:`FallbackChoice.RETRY` / :attr:`FallbackChoice.FALLBACK` →
+      ``"explorer"`` (re-fire the tripped node; FALLBACK also carries the
+      stamped tier override so the call routes to the replacement tier).
+
+    Unknown / missing → ``"explorer"`` (safe default — RETRY semantics).
+    """
+    decision = state.get(FALLBACK_DECISION_STATE_KEY)
+    if decision is FallbackChoice.ABORT:
+        return "planner_hard_stop"
+    return "explorer"
 
 
 async def _artifact_node(
@@ -329,13 +516,39 @@ def build_planner() -> StateGraph:
         ),
         strict_review=True,
     )
+    ollama_fallback = build_ollama_fallback_gate(
+        tier_name=PLANNER_OLLAMA_FALLBACK.logical,
+        fallback_tier=PLANNER_OLLAMA_FALLBACK.fallback_tier,
+    )
 
-    decide_after_explorer = retrying_edge(
+    decide_after_explorer_base = retrying_edge(
         on_transient="explorer",
         on_semantic="explorer",
         on_terminal="explorer_validator",
         policy=policy,
     )
+
+    def _decide_after_explorer_with_fallback(state: PlannerState) -> str:
+        """CircuitOpen-aware wrapper around :func:`decide_after_explorer_base`.
+
+        Intercepts :class:`CircuitOpen` on ``state['last_exception']``
+        before delegating to the three-bucket :func:`retrying_edge`. First
+        trip in the run → route to ``ollama_fallback_stamp`` → gate.
+        Second trip (gate already fired; operator already chose) →
+        escalate directly to :func:`_planner_hard_stop` rather than
+        double-prompting or falling into ``retrying_edge``'s
+        ``on_terminal`` branch (which would land the run on
+        ``explorer_validator`` with no ``explorer_output`` — a confusing
+        downstream error).
+        """
+        exc = state.get("last_exception")
+        already_fired = state.get("_ollama_fallback_fired") or False
+        if isinstance(exc, CircuitOpen):
+            if already_fired:
+                return "planner_hard_stop"
+            return "ollama_fallback_stamp"
+        return decide_after_explorer_base(state)
+
     decide_after_explorer_validator = retrying_edge(
         on_transient="explorer",
         on_semantic="explorer",
@@ -362,12 +575,21 @@ def build_planner() -> StateGraph:
     g.add_node("planner_validator", planner_validator)
     g.add_node("gate", gate)
     g.add_node("artifact", _artifact_node)
+    g.add_node("ollama_fallback_stamp", _stamp_ollama_fallback_ctx)
+    g.add_node("ollama_fallback", ollama_fallback)
+    g.add_node("ollama_fallback_dispatch", _ollama_fallback_dispatch)
+    g.add_node("planner_hard_stop", _planner_hard_stop)
 
     g.add_edge(START, "explorer")
     g.add_conditional_edges(
         "explorer",
-        decide_after_explorer,
-        ["explorer", "explorer_validator"],
+        _decide_after_explorer_with_fallback,
+        [
+            "explorer",
+            "explorer_validator",
+            "ollama_fallback_stamp",
+            "planner_hard_stop",
+        ],
     )
     g.add_conditional_edges(
         "explorer_validator",
@@ -386,6 +608,14 @@ def build_planner() -> StateGraph:
     )
     g.add_edge("gate", "artifact")
     g.add_edge("artifact", END)
+    g.add_edge("ollama_fallback_stamp", "ollama_fallback")
+    g.add_edge("ollama_fallback", "ollama_fallback_dispatch")
+    g.add_conditional_edges(
+        "ollama_fallback_dispatch",
+        _route_after_fallback_dispatch,
+        {"explorer": "explorer", "planner_hard_stop": "planner_hard_stop"},
+    )
+    g.add_edge("planner_hard_stop", END)
     return g
 
 

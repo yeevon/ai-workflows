@@ -240,9 +240,16 @@ def _planner_input() -> PlannerInput:
 
 
 def test_topology_unchanged_six_nodes_as_shipped_by_m3_t03() -> None:
-    """Guard: T03 must not mutate the graph shape. Same nodes as M3 T03."""
+    """Guard: M5 T03 must not mutate the graph shape.
+
+    The M3 T03 six-node core is preserved as a subset; M8 T04 extends
+    the graph with the Ollama-outage fallback nodes
+    (``ollama_fallback_stamp``, ``ollama_fallback``,
+    ``ollama_fallback_dispatch``, ``planner_hard_stop``). The M5 T03
+    topology invariant is the core subset, not the exact node set.
+    """
     g = build_planner()
-    assert set(g.nodes) == {
+    core_nodes = {
         "explorer",
         "explorer_validator",
         "planner",
@@ -250,6 +257,7 @@ def test_topology_unchanged_six_nodes_as_shipped_by_m3_t03() -> None:
         "gate",
         "artifact",
     }
+    assert core_nodes.issubset(set(g.nodes))
 
 
 # ---------------------------------------------------------------------------

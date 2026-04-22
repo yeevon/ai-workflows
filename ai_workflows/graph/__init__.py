@@ -11,4 +11,16 @@ Architectural rule (enforced by ``import-linter``): ``graph`` may
 import :mod:`ai_workflows.primitives` only — never
 :mod:`ai_workflows.workflows` or the surfaces
 (:mod:`ai_workflows.cli`, :mod:`ai_workflows.mcp`).
+
+Re-exports (additive):
+    M8 Task 03 surfaces ``FallbackChoice`` and ``build_ollama_fallback_gate``
+    at the top level so workflow modules can compose the Ollama-outage
+    gate without reaching into the submodule path.
 """
+
+from ai_workflows.graph.ollama_fallback_gate import (
+    FallbackChoice,
+    build_ollama_fallback_gate,
+)
+
+__all__ = ["FallbackChoice", "build_ollama_fallback_gate"]

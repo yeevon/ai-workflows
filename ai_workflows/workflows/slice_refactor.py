@@ -155,8 +155,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ai_workflows.graph.error_handler import wrap_with_error_handler
 from ai_workflows.graph.human_gate import human_gate
+from ai_workflows.graph.ollama_fallback_gate import (
+    FALLBACK_DECISION_STATE_KEY,
+    FallbackChoice,
+    build_ollama_fallback_gate,
+)
 from ai_workflows.graph.retrying_edge import retrying_edge
 from ai_workflows.graph.tiered_node import tiered_node
+from ai_workflows.primitives.circuit_breaker import CircuitOpen
 from ai_workflows.primitives.retry import (
     NonRetryable,
     RetryableSemantic,
@@ -166,6 +172,7 @@ from ai_workflows.primitives.tiers import LiteLLMRoute, TierConfig
 from ai_workflows.workflows import register
 from ai_workflows.workflows.planner import (
     ExplorerReport,
+    OllamaFallback,
     PlannerInput,
     PlannerPlan,
     build_planner,
@@ -173,6 +180,7 @@ from ai_workflows.workflows.planner import (
 )
 
 __all__ = [
+    "SLICE_REFACTOR_OLLAMA_FALLBACK",
     "SliceRefactorInput",
     "SliceSpec",
     "SliceResult",
@@ -191,6 +199,27 @@ __all__ = [
     "slice_refactor_eval_node_schemas",
     "initial_state",
 ]
+
+
+SLICE_REFACTOR_OLLAMA_FALLBACK = OllamaFallback(
+    logical="slice-worker",
+    fallback_tier="planner-synth",
+)
+"""Tier-pair the ``slice_refactor`` workflow falls back to on an Ollama outage (M8 T04).
+
+``slice-worker`` is ``ollama/qwen2.5-coder:32b`` per M6 T02 — identical
+model to ``planner-explorer`` but a distinct registry entry so the
+per-tier ``asyncio.Semaphore`` caps workers independently from the
+planner sub-graph. The fallback route reuses ``planner-synth``
+(``ClaudeCodeRoute(cli_model_flag="opus")``) — a non-Ollama,
+non-breakered tier already declared by the composed
+:func:`planner_tier_registry`, so no new registry entry is needed. After
+:attr:`FallbackChoice.FALLBACK` every remaining :func:`tiered_node`
+invocation tagged ``slice-worker`` resolves through the state-level
+override mechanism (see
+:func:`ai_workflows.graph.tiered_node._resolve_tier`) and dispatches the
+Opus route.
+"""
 
 
 TERMINAL_GATE_ID = "slice_refactor_review"
@@ -311,6 +340,42 @@ def _merge_retry_counts(
     fan-out shape. If a future task adds multiple writers for the
     same ``node_name`` in parallel (e.g. a retry that re-fans-out),
     last-wins applies to the duplicate key — T07 will revisit.
+    """
+    merged = dict(existing or {})
+    if update:
+        merged.update(update)
+    return merged
+
+
+def _merge_ollama_fallback_fired(
+    existing: bool | None, update: bool | None
+) -> bool:
+    """Sticky-OR reducer for ``_ollama_fallback_fired`` under parallel fan-out (M8 T04).
+
+    Once the Ollama-fallback gate has fired in this run the flag stays
+    ``True`` forever. Re-fan branches after :attr:`FallbackChoice.RETRY`
+    / :attr:`FallbackChoice.FALLBACK` carry the flag on their Send
+    payload; with N parallel branches echoing ``True`` through the
+    fan-in, a scalar channel would trip LangGraph's
+    :class:`InvalidUpdateError`. ``sticky-OR`` is idempotent, safe
+    against re-fire, and matches the semantic: fire-once per run.
+    """
+    return bool(existing) or bool(update)
+
+
+def _merge_mid_run_tier_overrides(
+    existing: dict[str, str] | None, update: dict[str, str] | None
+) -> dict[str, str]:
+    """Reducer for ``_mid_run_tier_overrides`` under parallel fan-out (M8 T04).
+
+    After :attr:`FallbackChoice.FALLBACK`, every re-fanned slice-branch
+    Send payload carries the override dict so the sub-graph's
+    :func:`tiered_node._resolve_tier` sees it. When N branches complete
+    in parallel, each emits the same override back to the parent state
+    — a scalar channel would trip :class:`InvalidUpdateError`. Shallow
+    merge (last-wins per key) is safe: every branch writes the same
+    dict, so duplicate-key collisions always resolve to the same value.
+    Accepts ``None`` on either side (initial state / un-set channel).
     """
     merged = dict(existing or {})
     if update:
@@ -536,6 +601,16 @@ class SliceRefactorState(TypedDict, total=False):
     aggregate: SliceAggregate
     applied_artifact_count: int
     hard_stop_failing_slice_ids: list[str]
+    _mid_run_tier_overrides: Annotated[
+        dict[str, str], _merge_mid_run_tier_overrides
+    ]
+    _ollama_fallback_fired: Annotated[bool, _merge_ollama_fallback_fired]
+    _ollama_fallback_reason: str
+    _ollama_fallback_count: int
+    ollama_fallback_decision: FallbackChoice
+    gate_ollama_fallback_response: str
+    ollama_fallback_aborted: bool
+    _circuit_open_slice_ids: Annotated[list[str], operator.add]
 
 
 class SliceBranchState(TypedDict, total=False):
@@ -578,6 +653,9 @@ class SliceBranchState(TypedDict, total=False):
     last_exception: Any
     _retry_counts: dict[str, int]
     _non_retryable_failures: int
+    _ollama_fallback_fired: bool
+    _circuit_open_slice_ids: Annotated[list[str], operator.add]
+    _mid_run_tier_overrides: dict[str, str]
 
 
 def _slice_list_normalize(
@@ -739,10 +817,10 @@ async def _slice_worker_validator(
 
 def _slice_branch_finalize(state: SliceBranchState) -> dict[str, Any]:
     """Convert an exhausted-retry branch terminal into a :class:`SliceFailure`
-    (T04).
+    (T04) or a pending-fallback marker (M8 T04).
 
     Runs as the sub-graph's final node after the retrying_edge decides
-    ``on_terminal``. Two cases:
+    ``on_terminal``. Three cases:
 
     * Happy path — ``last_exception`` is ``None`` (the T03 validator's
       success return flowed through without a bucket raise, and the
@@ -750,13 +828,28 @@ def _slice_branch_finalize(state: SliceBranchState) -> dict[str, Any]:
       ``{}`` so the branch contributes only its ``slice_results`` entry
       (already accumulated on the branch state via ``operator.add``)
       to the parent's fan-in reducer.
-    * Exhausted path — ``last_exception`` still holds the classified
-      exception the :func:`wrap_with_error_handler` shim wrote on the
-      last failing attempt. Emit one :class:`SliceFailure` row into
+    * :class:`CircuitOpen` on first firing — the Ollama-fallback gate
+      has not yet fired (``_ollama_fallback_fired`` is ``False`` or
+      unset on this branch). Emit the slice id into
+      ``_circuit_open_slice_ids`` so :func:`_route_before_aggregate`
+      can route the run to the single per-run ``ollama_fallback``
+      gate (M8 T04, architecture.md §8.4). Intentionally **not**
+      emitting a :class:`SliceFailure` here: the breaker trip is an
+      infrastructure signal, not a slice-level failure — promoting it
+      to ``slice_failures`` would double-bump the hard-stop counter
+      when the breaker is shared across parallel branches.
+    * Exhausted path (all other failures, incl.
+      :class:`CircuitOpen` *after* gate fired) —
+      ``last_exception`` still holds the classified exception the
+      :func:`wrap_with_error_handler` shim wrote on the last failing
+      attempt. Emit one :class:`SliceFailure` row into
       ``slice_failures`` so the parent's ``operator.add`` reducer
       appends it. The classification collapses transient exhaustion
       into ``non_retryable`` per :class:`SliceFailure`'s docstring
-      (exhaustion is effectively non-retryable).
+      (exhaustion is effectively non-retryable). A second
+      :class:`CircuitOpen` *after* the operator already chose means
+      Ollama is still broken; treating it as a slice failure feeds
+      the normal double-failure hard-stop (architecture.md §8.2).
 
     Why this is a standalone node rather than baked into the validator:
     when the T03 in-validator escalation raises :class:`NonRetryable`,
@@ -777,10 +870,16 @@ def _slice_branch_finalize(state: SliceBranchState) -> dict[str, Any]:
         return {}
     slice_spec = state.get("slice")
     slice_id = slice_spec.id if slice_spec is not None else "unknown"
+    already_fired = state.get("_ollama_fallback_fired") or False
+    if isinstance(exc, CircuitOpen) and not already_fired:
+        return {"_circuit_open_slice_ids": [slice_id]}
     # The else branch covers NonRetryable (the T03 escalation pattern),
     # exhausted RetryableTransient (further retries are impossible, so
-    # the effect matches non_retryable), and any unclassified exception
-    # that slipped through the three-bucket taxonomy.
+    # the effect matches non_retryable), any unclassified exception
+    # that slipped through the three-bucket taxonomy, and CircuitOpen
+    # that re-trips after the operator has already chosen on the
+    # ollama_fallback gate (we treat the re-trip as a real slice
+    # failure feeding the §8.2 double-failure hard-stop).
     bucket: Literal["retryable_semantic", "non_retryable"] = (
         "retryable_semantic"
         if isinstance(exc, RetryableSemantic)
@@ -1006,17 +1105,37 @@ def _route_on_gate_response(state: SliceRefactorState) -> str:
 
 
 def _route_before_aggregate(state: SliceRefactorState) -> str:
-    """Conditional-edge router: hard-stop vs. normal aggregation (T07).
+    """Conditional-edge router: hard-stop vs. Ollama fallback vs. aggregate
+    (T07, extended M8 T04).
 
-    Pure ``(state) -> str``. Returns ``"hard_stop"`` when the count of
-    :class:`SliceFailure` rows accumulated in ``state["slice_failures"]``
-    reaches :data:`HARD_STOP_FAILURE_THRESHOLD` (==2), otherwise
-    ``"aggregate"``. Reads the list length — not
-    ``state["_non_retryable_failures"]`` — because the ``max`` reducer
-    on that counter undercounts parallel writes to ``1``
-    (see :func:`_merge_non_retryable_failures`). The ``slice_failures``
-    list is ``operator.add``-reduced so its length is the exact
-    cross-branch failure count at fan-in.
+    Pure ``(state) -> str``. Three branches, checked in order:
+
+    1. ``"hard_stop"`` when the count of :class:`SliceFailure` rows
+       accumulated in ``state["slice_failures"]`` reaches
+       :data:`HARD_STOP_FAILURE_THRESHOLD` (==2). Reads the list length
+       — not ``state["_non_retryable_failures"]`` — because the ``max``
+       reducer on that counter undercounts parallel writes to ``1``
+       (see :func:`_merge_non_retryable_failures`). The
+       ``slice_failures`` list is ``operator.add``-reduced so its
+       length is the exact cross-branch failure count at fan-in.
+    2. ``"ollama_fallback_stamp"`` when one or more branches hit
+       :class:`CircuitOpen` on this run *and* the per-run
+       :data:`_ollama_fallback_fired` flag has not yet flipped.
+       Routes into the M8 T04 fallback gate (architecture.md §8.4).
+       Hard-stop is checked first: a run that has already accumulated
+       two real :class:`SliceFailure` rows aborts regardless of
+       pending :class:`CircuitOpen` branches (the failures are
+       independent Ollama-health signals and the spec is explicit
+       about the two-failure abort).
+    3. ``"aggregate"`` otherwise — the normal happy path.
+
+    Re-entry after the gate resumes re-fans only the circuit-open
+    branches via :func:`_route_after_fallback_dispatch_slice`; on the
+    second pass ``_ollama_fallback_fired`` is ``True`` so the
+    circuit-open check short-circuits to ``aggregate`` (the new branch
+    outputs have written either :class:`SliceResult` rows or
+    :class:`SliceFailure` rows depending on whether the retry /
+    fallback succeeded).
 
     The edge evaluates after all :class:`Send`-dispatched ``slice_branch``
     sub-graphs complete (LangGraph synchronises parent super-steps on
@@ -1028,6 +1147,10 @@ def _route_before_aggregate(state: SliceRefactorState) -> str:
     failures = state.get("slice_failures") or []
     if len(failures) >= HARD_STOP_FAILURE_THRESHOLD:
         return "hard_stop"
+    circuit_open_ids = state.get("_circuit_open_slice_ids") or []
+    already_fired = state.get("_ollama_fallback_fired") or False
+    if circuit_open_ids and not already_fired:
+        return "ollama_fallback_stamp"
     return "aggregate"
 
 
@@ -1079,6 +1202,204 @@ async def _hard_stop(
         payload,
     )
     return {"hard_stop_failing_slice_ids": failing_ids}
+
+
+def _stamp_ollama_fallback_ctx_slice(
+    state: SliceRefactorState,
+) -> dict[str, Any]:
+    """Render the Ollama-fallback gate's prompt context from ``last_exception``
+    (M8 T04, slice_refactor).
+
+    Runs on the ``_route_before_aggregate`` → ``ollama_fallback_stamp``
+    branch immediately before the strict-review gate. Reads the
+    :class:`CircuitOpen` exception the upstream
+    :func:`wrap_with_error_handler` captured into
+    ``state['last_exception']`` (the per-branch finalize did not clear
+    it; the ``_merge_last_exception`` reducer keeps the non-``None``
+    value at fan-in) and writes:
+
+    * ``_ollama_fallback_reason`` — mirrors
+      :attr:`CircuitOpen.last_reason` so the gate prompt rendered by
+      :func:`render_ollama_fallback_prompt` can name the exact breaker
+      trip cause.
+    * ``_ollama_fallback_count`` — monotonically increments. A second
+      trip in the same run would be short-circuited by
+      ``_ollama_fallback_fired`` on :func:`_route_before_aggregate`, so
+      the count is primarily a diagnostic signal (recorded in the
+      ``gate_prompts`` table payload).
+
+    Pure synthesis — no LLM call, no validator pairing (KDR-004 n/a).
+    The fallback pair (:data:`SLICE_REFACTOR_OLLAMA_FALLBACK`) is
+    workflow-scoped, so the stamp is workflow-local; the gate factory
+    itself stays reusable across planner + slice_refactor.
+    """
+    exc = state.get("last_exception")
+    reason = exc.last_reason if isinstance(exc, CircuitOpen) else ""
+    count = (state.get("_ollama_fallback_count") or 0) + 1
+    return {
+        "_ollama_fallback_reason": reason,
+        "_ollama_fallback_count": count,
+    }
+
+
+def _ollama_fallback_dispatch_slice(
+    state: SliceRefactorState,
+) -> dict[str, Any]:
+    """Consume the operator's :class:`FallbackChoice` and stamp run-scoped
+    state (M8 T04, slice_refactor).
+
+    Runs after the per-run Ollama-fallback gate resumes. Three
+    responsibilities mirror the planner's
+    :func:`ai_workflows.workflows.planner._ollama_fallback_dispatch`:
+
+    1. **Mark the gate as fired** (``_ollama_fallback_fired=True``) so
+       :func:`_route_before_aggregate` short-circuits to ``aggregate``
+       on the re-fan's fan-in (a second :class:`CircuitOpen` on the
+       same run now falls through to :class:`SliceFailure` via
+       :func:`_slice_branch_finalize`'s second branch, feeding the
+       §8.2 double-failure hard-stop).
+    2. **Clear the retry-taxonomy slots** (``last_exception=None``,
+       ``_retry_counts={}``) so the re-fanned branches start with a
+       clean transient budget. The ``_merge_last_exception`` reducer
+       keeps the latest non-``None`` value — writing ``None`` here is
+       idempotent (leaves any future non-``None`` write untouched) but
+       more importantly lets the re-fanned branches overwrite cleanly
+       if they hit a fresh transient failure.
+    3. **Stamp the mid-run tier override** on
+       :attr:`FallbackChoice.FALLBACK` so
+       :func:`ai_workflows.graph.tiered_node._resolve_tier` swaps
+       :data:`SLICE_REFACTOR_OLLAMA_FALLBACK.logical` for
+       :attr:`OllamaFallback.fallback_tier` on every subsequent
+       :func:`tiered_node` invocation in this run. Applies to *all*
+       re-fanned branches because the override lives on the parent
+       state and is propagated into each :class:`Send` payload by
+       :func:`_route_after_fallback_dispatch_slice`.
+
+    ABORT is routed by :func:`_route_after_fallback_dispatch_slice`
+    without additional state writes — the conditional edge sees
+    :attr:`FallbackChoice.ABORT` and directs to
+    :func:`_slice_refactor_ollama_abort`.
+    """
+    decision = state.get(FALLBACK_DECISION_STATE_KEY)
+    updates: dict[str, Any] = {
+        "_ollama_fallback_fired": True,
+        "last_exception": None,
+        "_retry_counts": {},
+    }
+    if decision is FallbackChoice.FALLBACK:
+        overrides = dict(state.get("_mid_run_tier_overrides") or {})
+        overrides[SLICE_REFACTOR_OLLAMA_FALLBACK.logical] = (
+            SLICE_REFACTOR_OLLAMA_FALLBACK.fallback_tier
+        )
+        updates["_mid_run_tier_overrides"] = overrides
+    return updates
+
+
+def _route_after_fallback_dispatch_slice(
+    state: SliceRefactorState,
+) -> str | list[Send]:
+    """Conditional-edge router after :func:`_ollama_fallback_dispatch_slice`
+    (M8 T04).
+
+    Reads the :class:`FallbackChoice` the gate parsed into
+    :data:`FALLBACK_DECISION_STATE_KEY` and dispatches:
+
+    * :attr:`FallbackChoice.ABORT` → ``"slice_refactor_ollama_abort"``
+      (terminal; :func:`_slice_refactor_ollama_abort` writes the
+      metadata artefact and dispatch flips
+      ``runs.status='aborted'``).
+    * :attr:`FallbackChoice.RETRY` / :attr:`FallbackChoice.FALLBACK` →
+      one :class:`Send` per circuit-open slice, re-dispatched to
+      ``slice_branch``. Each payload carries
+      ``_ollama_fallback_fired=True`` so the re-fanned branch's
+      :func:`_slice_branch_finalize` promotes any second
+      :class:`CircuitOpen` to :class:`SliceFailure` instead of
+      re-adding to ``_circuit_open_slice_ids`` (the fan-out would
+      otherwise bounce between gate and branches forever).
+
+    RETRY vs. FALLBACK differ only in state stamping
+    (:func:`_ollama_fallback_dispatch_slice` writes
+    ``_mid_run_tier_overrides`` only on FALLBACK). The Send-fan below
+    is identical for both — on FALLBACK, :func:`tiered_node` resolves
+    each branch's ``slice-worker`` tier through the override to Opus;
+    on RETRY the tier stays Ollama (the breaker is still OPEN but
+    its half-open probe gives the retry a chance).
+
+    **Defensive fallback.** When ``_circuit_open_slice_ids`` is empty
+    (not reachable under the normal contract — the upstream router
+    only directs here when the list is non-empty) the router returns
+    ``"slice_refactor_ollama_abort"`` so the run terminates cleanly
+    rather than emitting an empty Send list (LangGraph treats that as
+    an unroutable edge).
+    """
+    decision = state.get(FALLBACK_DECISION_STATE_KEY)
+    if decision is FallbackChoice.ABORT:
+        return "slice_refactor_ollama_abort"
+    slice_list = state.get("slice_list") or []
+    slice_by_id = {s.id: s for s in slice_list}
+    circuit_ids = state.get("_circuit_open_slice_ids") or []
+    overrides = state.get("_mid_run_tier_overrides") or {}
+    seen: set[str] = set()
+    sends: list[Send] = []
+    for sid in circuit_ids:
+        if sid in seen:
+            continue
+        seen.add(sid)
+        spec = slice_by_id.get(sid)
+        if spec is not None:
+            payload: dict[str, Any] = {
+                "slice": spec,
+                "_ollama_fallback_fired": True,
+            }
+            # Propagate the mid-run tier override into the sub-graph's
+            # state so ``TieredNode._resolve_tier`` sees it. The parent
+            # graph's `_mid_run_tier_overrides` channel only reaches the
+            # sub-graph via the Send payload (LangGraph Sends start the
+            # sub-graph with an explicit state view).
+            if overrides:
+                payload["_mid_run_tier_overrides"] = dict(overrides)
+            sends.append(Send("slice_branch", payload))
+    if not sends:
+        return "slice_refactor_ollama_abort"
+    return sends
+
+
+async def _slice_refactor_ollama_abort(
+    state: SliceRefactorState, config: RunnableConfig
+) -> dict[str, Any]:
+    """Terminal node for the Ollama-fallback ABORT branch (M8 T04, slice_refactor).
+
+    Runs exclusively on the :attr:`FallbackChoice.ABORT` branch of
+    :func:`_route_after_fallback_dispatch_slice`. Writes a
+    :data:`HARD_STOP_METADATA_ARTIFACT_KIND` artefact via
+    :meth:`SQLiteStorage.write_artifact` so the post-mortem surface can
+    read why the run aborted without re-running the graph, then returns
+    ``{"ollama_fallback_aborted": True}`` which
+    :mod:`ai_workflows.workflows._dispatch` reads as the terminal
+    signal to flip ``runs.status='aborted'``.
+
+    Distinct from :func:`_hard_stop` (which writes ``failing_slice_ids``
+    for the double-failure path): this node's metadata names the
+    tripped tier and the operator's ABORT choice, not a per-slice
+    failure list. Reusing the same ``hard_stop_metadata`` artefact
+    ``kind`` keeps the cross-workflow schema uniform.
+    """
+    run_id = config["configurable"]["thread_id"]
+    storage = config["configurable"]["storage"]
+    circuit_ids = state.get("_circuit_open_slice_ids") or []
+    payload = json.dumps(
+        {
+            "reason": "ollama_fallback_abort",
+            "tier": SLICE_REFACTOR_OLLAMA_FALLBACK.logical,
+            "circuit_open_slice_ids": list(dict.fromkeys(circuit_ids)),
+        }
+    )
+    await storage.write_artifact(
+        run_id,
+        HARD_STOP_METADATA_ARTIFACT_KIND,
+        payload,
+    )
+    return {"ollama_fallback_aborted": True}
 
 
 async def _apply(
@@ -1183,6 +1504,10 @@ def build_slice_refactor() -> StateGraph:
         prompt_fn=_render_review_prompt,
         strict_review=True,
     )
+    ollama_fallback = build_ollama_fallback_gate(
+        tier_name=SLICE_REFACTOR_OLLAMA_FALLBACK.logical,
+        fallback_tier=SLICE_REFACTOR_OLLAMA_FALLBACK.fallback_tier,
+    )
 
     g: StateGraph = StateGraph(SliceRefactorState)
     g.add_node("planner_subgraph", planner_subgraph)
@@ -1192,6 +1517,18 @@ def build_slice_refactor() -> StateGraph:
     g.add_node("hard_stop", _hard_stop)
     g.add_node("slice_refactor_review", review_gate)
     g.add_node("apply", _apply)
+    # M8 T04: Ollama-fallback gate lives *per run*, not per branch.
+    # Architecture.md §8.4: "pause the run" — one interrupt, one gate
+    # record, one operator choice applied to every remaining branch.
+    # The single-gate shape is enforced by `_route_before_aggregate`
+    # (only routes here once `_ollama_fallback_fired` is False) and
+    # `_ollama_fallback_dispatch_slice` (flips the flag on the way out,
+    # so re-fanned branches that trip a second time flow into
+    # SliceFailure / hard_stop instead of bouncing back to the gate).
+    g.add_node("ollama_fallback_stamp", _stamp_ollama_fallback_ctx_slice)
+    g.add_node("ollama_fallback", ollama_fallback)
+    g.add_node("ollama_fallback_dispatch", _ollama_fallback_dispatch_slice)
+    g.add_node("slice_refactor_ollama_abort", _slice_refactor_ollama_abort)
 
     g.add_edge(START, "planner_subgraph")
     g.add_edge("planner_subgraph", "slice_list_normalize")
@@ -1203,7 +1540,11 @@ def build_slice_refactor() -> StateGraph:
     g.add_conditional_edges(
         "slice_branch",
         _route_before_aggregate,
-        {"aggregate": "aggregate", "hard_stop": "hard_stop"},
+        {
+            "aggregate": "aggregate",
+            "hard_stop": "hard_stop",
+            "ollama_fallback_stamp": "ollama_fallback_stamp",
+        },
     )
     g.add_edge("hard_stop", END)
     g.add_edge("aggregate", "slice_refactor_review")
@@ -1213,6 +1554,14 @@ def build_slice_refactor() -> StateGraph:
         {"apply": "apply", "END": END},
     )
     g.add_edge("apply", END)
+    g.add_edge("ollama_fallback_stamp", "ollama_fallback")
+    g.add_edge("ollama_fallback", "ollama_fallback_dispatch")
+    g.add_conditional_edges(
+        "ollama_fallback_dispatch",
+        _route_after_fallback_dispatch_slice,
+        ["slice_branch", "slice_refactor_ollama_abort"],
+    )
+    g.add_edge("slice_refactor_ollama_abort", END)
     return g
 
 

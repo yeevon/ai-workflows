@@ -82,6 +82,7 @@ import structlog
 from pydantic import BaseModel
 
 from ai_workflows.graph.cost_callback import CostTrackingCallback
+from ai_workflows.primitives.circuit_breaker import CircuitBreaker, CircuitOpen
 from ai_workflows.primitives.cost import TokenUsage
 from ai_workflows.primitives.llm.claude_code import ClaudeCodeSubprocess
 from ai_workflows.primitives.llm.litellm_adapter import LiteLLMAdapter
@@ -100,6 +101,12 @@ from ai_workflows.primitives.tiers import (
 )
 
 __all__ = ["tiered_node"]
+
+_MID_RUN_TIER_OVERRIDES_STATE_KEY = "_mid_run_tier_overrides"
+"""State key carrying ``dict[logical, replacement]`` for the M8 T04
+fallback gate: the ``FALLBACK`` choice stamps this key so subsequent
+:func:`tiered_node` invocations resolve the tripped tier to its
+workflow-declared replacement for the remainder of the run."""
 
 GraphState = Mapping[str, Any]
 
@@ -199,19 +206,39 @@ def tiered_node(
         )
         pricing: Mapping[str, ModelPricing] = configurable.get("pricing") or {}
         workflow_name: str | None = configurable.get("workflow")
+        breakers: Mapping[str, CircuitBreaker] = (
+            configurable.get("ollama_circuit_breakers") or {}
+        )
 
+        resolved_tier = _resolve_tier(tier, state, configurable)
         try:
-            tier_config = tier_registry[tier]
+            tier_config = tier_registry[resolved_tier]
         except KeyError as exc:
             raise NonRetryable(
-                f"TieredNode({node_name!r}) unknown tier: {tier!r}"
+                f"TieredNode({node_name!r}) unknown tier: {resolved_tier!r}"
             ) from exc
 
         route = tier_config.route
         provider = _provider_from_route(route)
         model_id = _model_from_route(route)
         system, messages = prompt_fn(state)
-        semaphore = semaphores.get(tier)
+        semaphore = semaphores.get(resolved_tier)
+        breaker = _resolve_breaker(route, resolved_tier, breakers)
+
+        if breaker is not None and not await breaker.allow():
+            # Short-circuit: breaker denies the call before any dispatch.
+            # Raising CircuitOpen lets :func:`wrap_with_error_handler`
+            # catch the specific type and the workflow-layer edge route
+            # to the M8 T03 fallback :class:`HumanGate` rather than
+            # through the standard three-bucket retry path.
+            raise CircuitOpen(
+                tier=resolved_tier,
+                last_reason=breaker.last_reason,
+            )
+
+        log_extras: dict[str, Any] = {}
+        if breaker is not None:
+            log_extras["breaker_state"] = breaker.state.value
 
         start = time.monotonic()
         try:
@@ -235,7 +262,9 @@ def tiered_node(
                     output_schema=output_schema,
                 )
             usage_with_tier = (
-                usage if usage.tier else usage.model_copy(update={"tier": tier})
+                usage
+                if usage.tier
+                else usage.model_copy(update={"tier": resolved_tier})
             )
             # Cost callback lives inside the try block so a budget-breach
             # NonRetryable raised by ``CostTracker.check_budget`` (§8.5)
@@ -243,6 +272,11 @@ def tiered_node(
             # exception — preserves the "exactly one structured log per
             # invocation" invariant on the budget-cap path.
             cost_callback.on_node_complete(run_id, node_name, usage_with_tier)
+            if breaker is not None:
+                await breaker.record_success()
+                # Re-read the state after record_success so the log line
+                # shows the post-success state (e.g. HALF_OPEN → CLOSED).
+                log_extras["breaker_state"] = breaker.state.value
             # Optional eval-capture callback (M7 T02). Duck-typed —
             # TieredNode does not import ``ai_workflows.evals`` because
             # ``graph`` must not reach ``evals`` (lower-layer-reaches-higher
@@ -264,6 +298,9 @@ def tiered_node(
             # emits it here we must not re-classify.
             raise
         except (RetryableTransient, NonRetryable) as exc:
+            if breaker is not None and isinstance(exc, RetryableTransient):
+                await breaker.record_failure(reason=type(exc).__name__)
+                log_extras["breaker_state"] = breaker.state.value
             duration_ms = int((time.monotonic() - start) * 1000)
             log_node_event(
                 _LOG,
@@ -271,7 +308,7 @@ def tiered_node(
                 run_id=run_id,
                 workflow=workflow_name,
                 node=node_name,
-                tier=tier,
+                tier=resolved_tier,
                 provider=provider,
                 model=model_id,
                 duration_ms=duration_ms,
@@ -281,10 +318,14 @@ def tiered_node(
                 level="error",
                 error_class=type(exc).__name__,
                 bucket=type(exc).__name__,
+                **log_extras,
             )
             raise
         except Exception as exc:  # noqa: BLE001 — classification boundary
             bucket_cls = classify(exc)
+            if breaker is not None and bucket_cls is RetryableTransient:
+                await breaker.record_failure(reason=type(exc).__name__)
+                log_extras["breaker_state"] = breaker.state.value
             duration_ms = int((time.monotonic() - start) * 1000)
             log_node_event(
                 _LOG,
@@ -292,7 +333,7 @@ def tiered_node(
                 run_id=run_id,
                 workflow=workflow_name,
                 node=node_name,
-                tier=tier,
+                tier=resolved_tier,
                 provider=provider,
                 model=model_id,
                 duration_ms=duration_ms,
@@ -302,6 +343,7 @@ def tiered_node(
                 level="error",
                 error_class=type(exc).__name__,
                 bucket=bucket_cls.__name__,
+                **log_extras,
             )
             if bucket_cls is RetryableTransient:
                 raise RetryableTransient(str(exc)) from exc
@@ -317,7 +359,7 @@ def tiered_node(
             run_id=run_id,
             workflow=workflow_name,
             node=node_name,
-            tier=tier,
+            tier=resolved_tier,
             provider=provider,
             model=model_id,
             duration_ms=duration_ms,
@@ -325,6 +367,7 @@ def tiered_node(
             output_tokens=usage_with_tier.output_tokens,
             cost_usd=usage_with_tier.cost_usd,
             level="info",
+            **log_extras,
         )
 
         return {
@@ -333,6 +376,57 @@ def tiered_node(
         }
 
     return _node
+
+
+def _resolve_tier(
+    logical: str, state: GraphState, configurable: Mapping[str, Any]
+) -> str:
+    """Resolve the logical tier to its runtime replacement (M8 T04).
+
+    Precedence (spec §Mid-run tier override plumbing):
+
+    1. ``state[_mid_run_tier_overrides][logical]`` — the M8 T04 fallback
+       gate stamps this on ``FallbackChoice.FALLBACK`` so the swap
+       applies for the remainder of the run.
+    2. ``configurable['tier_overrides'][logical]`` — the M5 T04
+       start-of-run override path. Kept for forward compatibility;
+       :mod:`ai_workflows.workflows._dispatch` currently applies these
+       by rewriting the registry before the node sees it, so this
+       layer is usually a no-op in production.
+    3. ``logical`` — registry default.
+
+    The first match wins; the second and third layers are not
+    consulted. Returns the logical name unchanged when no layer
+    supplies an override.
+    """
+    state_overrides = state.get(_MID_RUN_TIER_OVERRIDES_STATE_KEY) or {}
+    if logical in state_overrides:
+        return state_overrides[logical]
+    config_overrides = configurable.get("tier_overrides") or {}
+    if logical in config_overrides:
+        return config_overrides[logical]
+    return logical
+
+
+def _resolve_breaker(
+    route: LiteLLMRoute | ClaudeCodeRoute,
+    resolved_tier: str,
+    breakers: Mapping[str, CircuitBreaker],
+) -> CircuitBreaker | None:
+    """Return the breaker for ``resolved_tier`` iff the route is Ollama-backed.
+
+    Consult rule (spec AC-1): only ``LiteLLMRoute`` tiers whose
+    ``route.model`` starts with ``"ollama/"`` are breakered. Gemini-backed
+    LiteLLM tiers and every :class:`ClaudeCodeRoute` tier bypass the
+    breaker even if the configurable map lists them (KDR-003 /
+    architecture.md §8.4 — breakers exist for the local Ollama daemon,
+    not hosted providers with their own rate-limit semantics).
+    """
+    if not isinstance(route, LiteLLMRoute):
+        return None
+    if not route.model.startswith("ollama/"):
+        return None
+    return breakers.get(resolved_tier)
 
 
 async def _dispatch(

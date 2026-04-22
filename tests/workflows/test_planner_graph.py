@@ -212,7 +212,15 @@ def _planner_input() -> PlannerInput:
 
 
 def test_build_planner_returns_stategraph_with_expected_nodes() -> None:
-    """AC: ``build_planner`` exposes the exact six-node shape from the spec."""
+    """AC: ``build_planner`` exposes the expected node set.
+
+    The original six-node shape (M5) is extended by M8 T04 with four
+    additional nodes for the Ollama-outage fallback surface:
+    ``ollama_fallback_stamp`` (stamps gate context),
+    ``ollama_fallback`` (the :class:`HumanGate` itself),
+    ``ollama_fallback_dispatch`` (parses the operator's choice), and
+    ``planner_hard_stop`` (terminal for :attr:`FallbackChoice.ABORT`).
+    """
     g = build_planner()
     assert set(g.nodes) == {
         "explorer",
@@ -221,6 +229,10 @@ def test_build_planner_returns_stategraph_with_expected_nodes() -> None:
         "planner_validator",
         "gate",
         "artifact",
+        "ollama_fallback_stamp",
+        "ollama_fallback",
+        "ollama_fallback_dispatch",
+        "planner_hard_stop",
     }
 
 

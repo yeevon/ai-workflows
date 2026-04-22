@@ -21,4 +21,16 @@ Relationship to sibling modules
   ``subprocess.CalledProcessError`` → ``NonRetryable`` for the Claude
   Code driver; LiteLLM's own exception hierarchy for the LiteLLM
   adapter). The adapters themselves are classification-free.
+* ``primitives/llm/ollama_health.py`` (M8 Task 01) — one-shot HTTP
+  probe of Ollama's ``/api/tags`` endpoint returning a typed
+  :class:`HealthResult`. Consumed by the M8 circuit breaker + fallback
+  gate; not invoked from the drivers themselves (driver-layer failures
+  are classified via :mod:`primitives.retry`, not via a sibling probe).
 """
+
+from ai_workflows.primitives.llm.ollama_health import (
+    HealthResult,
+    probe_ollama,
+)
+
+__all__ = ["HealthResult", "probe_ollama"]

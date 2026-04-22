@@ -69,10 +69,11 @@ from ai_workflows import workflows
 from ai_workflows.evals import CaptureCallback
 from ai_workflows.graph.checkpointer import build_async_checkpointer
 from ai_workflows.graph.cost_callback import CostTrackingCallback
+from ai_workflows.primitives.circuit_breaker import CircuitBreaker
 from ai_workflows.primitives.cost import CostTracker, TokenUsage
 from ai_workflows.primitives.retry import NonRetryable
 from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path
-from ai_workflows.primitives.tiers import TierConfig
+from ai_workflows.primitives.tiers import LiteLLMRoute, TierConfig
 
 __all__ = [
     "ResumePreconditionError",
@@ -323,6 +324,38 @@ def _build_semaphores(
     }
 
 
+def _build_ollama_circuit_breakers(
+    tier_registry: dict[str, TierConfig],
+) -> dict[str, CircuitBreaker]:
+    """Build one :class:`CircuitBreaker` per Ollama-backed tier (M8 T05).
+
+    Scans the resolved registry for any tier whose route is a
+    :class:`LiteLLMRoute` with ``route.model`` starting with
+    ``"ollama/"`` and instantiates a breaker using
+    :class:`CircuitBreaker`'s architecture.md §8.4 defaults
+    (``trip_threshold=3``, ``cooldown_s=60.0``). Non-Ollama tiers
+    (Gemini-backed LiteLLM + :class:`ClaudeCodeRoute`) get no entry —
+    :func:`ai_workflows.graph.tiered_node._resolve_breaker` would ignore
+    them anyway (KDR-003 / architecture.md §8.4 — breakers exist for the
+    local Ollama daemon, not hosted providers with their own rate-limit
+    semantics), so omitting them keeps the log surface clean.
+
+    Breakers are **per-run, process-local**: one fresh dict per
+    dispatched workflow. Two concurrent runs see independent breakers,
+    matching the "process-local" clause in the M8 T02 primitive spec.
+
+    Tests that need a shared breaker (to pre-trip it, inject a time
+    source, or tighten the threshold) monkey-patch this helper at the
+    dispatch boundary — see ``tests/workflows/test_ollama_outage.py``.
+    """
+    return {
+        name: CircuitBreaker(tier=name)
+        for name, config in tier_registry.items()
+        if isinstance(config.route, LiteLLMRoute)
+        and config.route.model.startswith("ollama/")
+    }
+
+
 def _build_cfg(
     *,
     run_id: str,
@@ -349,6 +382,14 @@ def _build_cfg(
     ``configurable["eval_capture_callback"]``. ``TieredNode`` reads the
     key duck-typed and no-ops when absent, so unset default paths stay
     byte-identical.
+
+    M8 T05 threads a ``{tier_name: CircuitBreaker}`` dict through
+    ``configurable["ollama_circuit_breakers"]`` for every Ollama-backed
+    tier in the resolved registry (see
+    :func:`_build_ollama_circuit_breakers`). :func:`tiered_node` consults
+    this dict on every Ollama-route call and raises :class:`CircuitOpen`
+    when the breaker denies; the workflow-layer edges route that to the
+    M8 T04 fallback :class:`HumanGate`.
     """
     configurable: dict[str, Any] = {
         "thread_id": run_id,
@@ -358,6 +399,7 @@ def _build_cfg(
         "storage": storage,
         "workflow": workflow,
         "semaphores": _build_semaphores(tier_registry),
+        "ollama_circuit_breakers": _build_ollama_circuit_breakers(tier_registry),
     }
     if eval_capture_callback is not None:
         configurable["eval_capture_callback"] = eval_capture_callback
@@ -565,6 +607,31 @@ async def _build_result_from_final(
             "plan": None,
             "total_cost_usd": total,
             "error": None,
+        }
+
+    if final.get("ollama_fallback_aborted"):
+        # M8 T04: the Ollama-fallback gate resolved to ABORT (planner or
+        # slice_refactor). The abort terminal already wrote the
+        # ``hard_stop_metadata`` artefact; dispatch flips the run status
+        # and surfaces a distinct error message so the operator can tell
+        # this abort apart from the §8.2 double-failure hard-stop.
+        finished_at = datetime.now(UTC).isoformat()
+        await storage.update_run_status(
+            run_id,
+            "aborted",
+            finished_at=finished_at,
+            total_cost_usd=total,
+        )
+        return {
+            "run_id": run_id,
+            "status": "aborted",
+            "awaiting": None,
+            "plan": None,
+            "total_cost_usd": total,
+            "error": (
+                "ollama_fallback: operator aborted run at the "
+                "circuit-breaker gate"
+            ),
         }
 
     failing_ids = final.get("hard_stop_failing_slice_ids")
@@ -783,6 +850,29 @@ async def _build_resume_result_from_final(
             "plan": None,
             "total_cost_usd": total,
             "error": None,
+        }
+
+    if final.get("ollama_fallback_aborted"):
+        # M8 T04: see :func:`_build_result_from_final` for the rationale.
+        # The resume path is the primary trigger for this branch — the
+        # Ollama-fallback gate only fires after a human interrupt, so the
+        # ABORT terminal always lands on the resume boundary.
+        finished_at = datetime.now(UTC).isoformat()
+        await storage.update_run_status(
+            run_id,
+            "aborted",
+            finished_at=finished_at,
+            total_cost_usd=total,
+        )
+        return {
+            "run_id": run_id,
+            "status": "aborted",
+            "plan": None,
+            "total_cost_usd": total,
+            "error": (
+                "ollama_fallback: operator aborted run at the "
+                "circuit-breaker gate"
+            ),
         }
 
     # Prefer the state-recorded response for the workflow's terminal gate;

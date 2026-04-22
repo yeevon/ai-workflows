@@ -184,7 +184,39 @@ A typical run:
 
 ### 8.4 Provider health & fallback
 
-- Ollama: periodic health check; on `ConnectionError`, pause the run and emit a gate asking the user to retry or fall back to a higher tier (e.g. Gemini Flash).
+**Ollama (M8, landed 2026-04-21).** The original bullet's "periodic health check" was **reframed at M8 T01**: the primary mid-run health signal is per-call failure classified through the three-bucket taxonomy (KDR-006), not a scheduled poller. `probe_ollama` (under `ai_workflows.primitives.llm.ollama_health`) is retained as a one-shot diagnostic tool — returns a `HealthResult` with one of five reasons (`ok` / `connection_refused` / `timeout` / `http_<status>` / `error:<type>`) and never raises — but no background task drives it. A process-local `CircuitBreaker` (`ai_workflows.primitives.circuit_breaker`) sits between `TieredNode` and every `LiteLLMRoute` whose `model.startswith("ollama/")`:
+
+- Breaker defaults: `trip_threshold=3` (three consecutive `RetryableTransient`-bucketed failures flip CLOSED → OPEN), `cooldown_s=60.0` (OPEN → HALF_OPEN window during which one probe is allowed). A HALF_OPEN probe that succeeds flips the breaker CLOSED; a probe that fails flips it back to OPEN with a fresh cooldown. State transitions are serialized by an `asyncio.Lock`.
+- Only `RetryableTransient` failures feed `record_failure` — auth / bad-request / budget failures are **not** Ollama-health signals.
+- `TieredNode` raises `CircuitOpen(*, tier, last_reason)` pre-call when the breaker denies; the adapter is never invoked on that path. `wrap_with_error_handler` recognises `CircuitOpen` as a distinct exception type and routes it to `state["last_exception"]` **without** bumping retry counters (it is not a KDR-006 bucket).
+- Gemini-backed LiteLLM tiers and `ClaudeCodeRoute` bypass the breaker entirely (the breaker dict only receives entries for tiers whose route is an Ollama `LiteLLMRoute` — see `_build_ollama_circuit_breakers` in `ai_workflows/workflows/_dispatch.py`).
+
+**Fallback `HumanGate` (M8 T03/T04).** When `CircuitOpen` propagates, the workflow routes to a strict-review gate built by `build_ollama_fallback_gate` (under `ai_workflows.graph.ollama_fallback_gate`). The gate stamps three state-channel keys so the rest of the graph can reason about it:
+
+- `_ollama_fallback_reason: str` — the `last_reason` from the breaker (`"circuit_open"` when the breaker short-circuited; otherwise the classifier's reason string).
+- `_ollama_fallback_count: int` — incremented once per gate-pause per run (sticky via a dict-merge reducer for safe parallel fan-in).
+- `ollama_fallback_decision: FallbackChoice | None` — the caller's response when the gate resumes. `FallbackChoice.{RETRY, FALLBACK, ABORT}` is a `StrEnum`, so CLI / MCP callers can pass the string value directly.
+
+A workflow-scoped `OllamaFallback` dataclass (`PLANNER_OLLAMA_FALLBACK` in `planner.py`, `SLICE_REFACTOR_OLLAMA_FALLBACK` in `slice_refactor.py`) names the tripped tier (`tier_name`) and the replacement tier (`fallback_tier`). Both workflows point `fallback_tier` at `planner-synth` (the Claude Code OAuth subprocess tier) — the replacement tier is not hard-coded as `gemini_flash`; it is a per-workflow knob.
+
+**Resume branches:**
+
+- `RETRY` — clears `_retry_counts` and re-dispatches the tripped tier. The breaker is unchanged; if it is still OPEN, the next call re-raises `CircuitOpen` and the gate fires again. The caller is expected to have advanced the clock past `cooldown_s` (by waiting wall-clock time) before choosing RETRY — this is the "try again; Ollama might be back" branch.
+- `FALLBACK` — stamps `_mid_run_tier_overrides[tier_name] = fallback_tier` on the state. Every subsequent `TieredNode` call for `tier_name` resolves to `fallback_tier` for the remainder of the run. The tripped Ollama tier is not re-attempted.
+- `ABORT` — routes to a workflow-specific terminal node (`planner_hard_stop` / `slice_refactor_ollama_abort`) that writes a `hard_stop_metadata` artefact with `reason="ollama_fallback_abort"`. Dispatch's `_build_result_from_final` / `_build_resume_result_from_final` observe the terminal state and flip `runs.status='aborted'` with `finished_at` stamped (matching the M6 double-failure hard-stop shape, but distinct in artefact payload).
+
+**Mid-run tier override precedence (locked at M8 T04).** `TieredNode._resolve_tier_name` walks three levels and returns the first match:
+
+1. `state["_mid_run_tier_overrides"].get(tier_name)` — the post-FALLBACK channel.
+2. `config["configurable"]["tier_overrides"].get(tier_name)` — the at-invoke-time channel wired from `aiw run --tier-override logical=replacement` and from MCP `RunWorkflowInput.tier_overrides`.
+3. The registry default (`TierRegistry[tier_name]`).
+
+State wins over configurable wins over registry. Future workflow authors plumbing a mid-run override should write to the state key; static at-invoke overrides stay on the configurable channel.
+
+**Single-gate-per-run invariant for parallel fan-out.** `slice_refactor`'s `Send`-based slice fan-out means three independent `slice-worker` branches can each trip the shared breaker and each emit a `CircuitOpen` exception in the same super-step. Without protection, each branch would record-gate its own `ollama_fallback` row. The workflow prevents this by a `sticky-OR` `_ollama_fallback_fired: bool` state key (flipped `True` on the first `CircuitOpen` emission of the run) plus a `_route_before_aggregate` router that short-circuits to the single `ollama_fallback_stamp` → gate chain when the flag is already `True`. The gate pauses once per run; all three branches resume on the same `FallbackChoice` decision; on `FALLBACK`, the override dict is re-read by every re-fired branch via the `_mid_run_tier_overrides` Send-payload carry (M8 T04 addition-beyond-spec — needed because LangGraph's `Send` payload *is* the sub-graph's initial state view; keys absent from the payload don't propagate).
+
+**Non-Ollama tiers.**
+
 - Claude Code CLI: `claude --version` probe on startup; on absent binary, disable that tier with a clear error.
 - Gemini: API key presence check; quota errors routed through `RetryableTransient`.
 
