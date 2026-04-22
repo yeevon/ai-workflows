@@ -115,7 +115,7 @@ def test_aiw_version_command() -> None:
         ".github/workflows/ci.yml",
         "CHANGELOG.md",
         "docs/architecture.md",
-        "docs/writing-a-component.md",
+        "docs/writing-a-graph-primitive.md",
         "docs/writing-a-workflow.md",
     ],
 )

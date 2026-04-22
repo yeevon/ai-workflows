@@ -7,6 +7,320 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M13 Task 04: trim root `README.md` to user-facing intro + shape test (2026-04-22)
+
+Closes M13 exit criteria §4 (root README rewritten to user-facing
+intro) and §5 adjacency (readiness for the T05 branch split). Pre-T04
+`README.md` was 235 lines of builder-facing narrative with milestone
+headings, `CLAUDE.md` / `.claude/commands/` references, and four
+separate `design_docs/` deep-links. Post-T04 it is a thin, PyPI-
+friendly intro.
+
+**`README.md` rewritten 235 → 109 lines (target ≤ 150).** Ten
+sections, in order: title + one-paragraph hook, Status table
+(milestones M1–M14 mirrored from `design_docs/roadmap.md`), What it
+is, Architecture at a glance (four-layer ASCII diagram + pointer into
+[`docs/architecture.md`](docs/architecture.md) / `docs/writing-a-
+workflow.md` / `docs/writing-a-graph-primitive.md`), Install (uvx one-
+shot + `uv tool install` persistent — both reference the wheel by the
+public package name), Getting started (three-command demo: set
+`GEMINI_API_KEY`, `aiw run planner`, `aiw resume --approve`, `aiw
+list-runs`), MCP server (single `claude mcp add` line + the HTTP
+transport opt-in for browser-origin hosts), Contributing / from
+source (clone + `uv sync` + builder-workflow pointer at the `design`
+branch), Development (three gates: `uv run pytest`, `uv run lint-
+imports`, `uv run ruff check`), Next (single pointer at
+`design_docs/roadmap.md` with the `(builder-only, on design branch)`
+marker).
+
+**Exactly one `design_docs/` reference post-trim** — the roadmap
+pointer in `## Next`, carrying the builder-only marker so a PyPI user
+understands the link is a repo-clone-on-design-branch surface rather
+than a broken path. All other `design_docs/*` deep-links removed
+(builder detail lives under `docs/` now). Zero references to
+`CLAUDE.md`, `.claude/commands/`, or `nice_to_have.md` — those are
+`design`-branch-only surfaces.
+
+**New `tests/docs/test_readme_shape.py` — hermetic shape guard.**
+Three test functions pin the README's invariants: (1) line-count cap
+— `len(README.md.splitlines()) ≤ 150`, with failure message reporting
+the actual count so an operator can see how far over; (2) user-facing
+section presence — three required headings (`## Install`, `##
+Contributing / from source`, `## Development`) must each appear
+exactly once (matched as literal lines, not substrings — catches
+accidental duplication); (3) `design_docs/` reference audit — exactly
+one line mentioning `design_docs/`, and that line must carry the
+`(builder-only, on design branch)` marker. Pure string-scan + no
+subprocess, mirrors the hermetic shape of the sibling T03 link test.
+
+**Lockstep edit — deleted `tests/skill/test_doc_links.py::
+test_root_readme_links_skill_install`.** The original M9 T03 AC-2
+asserted that the root README contained a link to `design_docs/
+phases/milestone_9_skill/skill_install.md`. T04's AC-5 requires zero
+`design_docs/` references except the single roadmap pointer, which
+supersedes that M9 AC for the main-branch README. The skill install
+walkthrough surface moves to T06 (uvx option) behind a different
+entry point, so the main-branch test is deleted rather than
+relocated. Module docstring amended in place to record the
+supersession and point at T04 / T06. Same lockstep-sibling-test
+pattern as T03's `tests/test_scaffolding.py` one-line rename.
+
+**Files touched:** `README.md` (rewrite 235 → 109 lines),
+`tests/docs/test_readme_shape.py` (new, 3 tests),
+`tests/skill/test_doc_links.py` (one test function deleted + module
+docstring amended in lockstep),
+`design_docs/phases/milestone_13_v0_release/task_04_readme_trim.md`
+(new — spec drafted at T04 kickoff), `CHANGELOG.md` (this entry).
+**Not touched:** `ai_workflows/` (README-only — AC-13);
+`pyproject.toml` (no new dep); `docs/` (T03 owns the walkthroughs);
+`design_docs/phases/milestone_9_skill/skill_install.md` (T06 owns
+the uvx option on a different surface).
+
+ACs satisfied: AC-1 (README rewritten, 109 lines ≤ 150), AC-2
+(Install section present as `## Install` with both uvx + `uv tool
+install` paths), AC-3 (`## Contributing / from source` renamed from
+the old `## Getting started` / build-from-source split), AC-4
+(`## Development` kept — three gates), AC-5 (exactly one
+`design_docs/` link, carrying `(builder-only, on design branch)`),
+AC-6 (zero `CLAUDE.md` / `.claude/commands/` / `nice_to_have.md`
+references), AC-7 (Status table mirrors `design_docs/roadmap.md` —
+manually sync-verified at write time; silent roadmap drift caught by
+M13 T08 milestone-close-out cross-check), AC-8 (Architecture at a
+glance points at the three `docs/*.md` files from T03), AC-9
+(Getting started demo shows the end-to-end planner run), AC-10
+(`aiw-mcp` surface line shows both stdio + HTTP-transport registration
+forms), AC-11 (`tests/docs/test_readme_shape.py` — three-function
+hermetic shape guard, green), AC-12 (gates green: `uv run pytest`
+620 passed + 5 skipped, `uv run lint-imports` 4/4 kept, `uv run ruff
+check` clean), AC-13 (zero changes under `ai_workflows/`).
+
+Blockers: none. Stop-points for the human operator (T05 branch
+creation, T07 PyPI publish authorization) remain the next two
+handoffs.
+
+### Changed — M13 Task 03: populate `docs/` — architecture.md + writing-a-workflow.md + writing-a-graph-primitive.md + link test (2026-04-22)
+
+Closes M13 exit criterion §5 (`docs/` populated) without touching any
+`ai_workflows/` runtime code. Documentation + test only.
+
+**Three docs rewritten from 5-line pre-pivot placeholders to
+user-facing content.**
+
+- [`docs/architecture.md`](docs/architecture.md) — 65 lines (target ≤
+  200). Six sections: what this project is, four-layer model, LangGraph
+  substrate, public surfaces, KDR summary (5-row load-bearing set), and
+  where-to-go-next pointers. Zero links into `design_docs/` on the main
+  body (the only `(builder-only, on design branch)` references point at
+  the deep-dive KDR grid). No pre-pivot "components" vocabulary.
+- [`docs/writing-a-workflow.md`](docs/writing-a-workflow.md) — 120
+  lines (target ≤ 250). Seven sections: prerequisites, `StateGraph`
+  shape, composing graph primitives (`TieredNode` / `ValidatorNode` /
+  `HumanGate` / `RetryingEdge`), registration, worked `echo` workflow
+  (~30 lines of copy-pasteable Python that references real class names
+  + real `register` API), testing via `StubLLMAdapter`, surfaces-
+  automatic pointer.
+- [`docs/writing-a-graph-primitive.md`](docs/writing-a-graph-primitive.md)
+  — 108 lines (target ≤ 250). Seven sections: when-to-promote heuristic,
+  layer contract, composition pattern, worked `MaxLatencyNode` example
+  (~40 lines), testing, KDR alignment self-check (cites KDR-003 /
+  KDR-006 / KDR-007 / KDR-009 by id), where-to-deep-dive pointers.
+
+**`docs/writing-a-component.md` → `docs/writing-a-graph-primitive.md`
+rename.** "Component" was a pre-pivot artefact from the abandoned
+substrate; "graph primitive" matches the current LangGraph vocabulary.
+`tests/test_scaffolding.py`'s parametrised scaffolding set updated
+in lockstep (one-line edit — swaps the old name for the new).
+
+**New `tests/docs/test_docs_links.py` — hermetic relative-link test.**
+Three test functions: (1) main scan — every `*.md` under `docs/` is
+parsed, every relative markdown link target resolved against disk, any
+broken link or unmarked builder-only link is reported with the source
+file + line number; (2) marker-enforcement smoke — in `tmp_path` the
+test writes a fake `.md` with an unmarked `../design_docs/` link and
+asserts the scanner reports exactly one violation; (3) marker-
+acceptance smoke — companion case that pins the scanner passes a
+well-formed builder-only link silently. Fenced code blocks are
+skipped (``[text](url)`` inside a ``` ... ``` span is not a real link —
+the worked `echo` and `MaxLatencyNode` examples would otherwise false-
+positive). Pure filesystem + regex; zero `uv build` dependency. Empty
+`tests/docs/__init__.py` lands alongside for pytest collection.
+
+**Spec deviation + addition called out.** Spec §Deliverables 4 called
+for "target: 2" link tests; shipped 3. The third (marker-acceptance)
+pins the positive case alongside the negative, blocking scanner drift
+into over-flagging. Recorded verbatim in T03 audit issue file under
+"additions beyond spec".
+
+**Files touched:** `docs/architecture.md` (rewrite),
+`docs/writing-a-workflow.md` (rewrite),
+`docs/writing-a-graph-primitive.md` (new — replaces
+`writing-a-component.md`), `docs/writing-a-component.md` (deleted),
+`tests/docs/__init__.py` (new, empty), `tests/docs/test_docs_links.py`
+(new, 3 tests), `tests/test_scaffolding.py` (one-line rename in
+scaffolding parametrize list),
+`design_docs/phases/milestone_13_v0_release/task_03_populate_docs.md`
+(new — spec drafted at T03 kickoff), `CHANGELOG.md` (this entry).
+**Not touched:** `ai_workflows/` (documentation-only — AC-13);
+`pyproject.toml` (no new dep); `README.md` (T04 owns the root trim);
+`skill_install.md` (T06 owns the uvx option).
+
+ACs satisfied: AC-1 (architecture.md rewritten, 65 lines ≤ 200, six
+sections), AC-2 (zero unmarked `design_docs/` links — enforced by link
+test), AC-3 (writing-a-workflow.md rewritten, 120 lines ≤ 250, seven
+sections), AC-4 (worked `echo` workflow references real classes +
+real `register` signature), AC-5 (writing-a-component.md deleted,
+writing-a-graph-primitive.md exists, 108 lines ≤ 250, seven sections),
+AC-6 (four KDRs named by id + primitives cited by file path), AC-7
+(tests/docs/test_docs_links.py + __init__.py land, pass), AC-8
+(marker-enforcement smoke drives the scanner against a mutated
+tmp_path file, asserts exactly one violation), AC-9 (`uv run pytest`
+618 tests — 615 T02 baseline + 3 new docs tests; T03 shipped 3 tests
+vs. spec target 2 — addition justified), AC-10 (`uv run lint-imports`
+4 kept), AC-11 (`uv run ruff check` clean), AC-12 (this CHANGELOG
+entry, above T02's block), AC-13 (`git diff --name-only` shows zero
+`ai_workflows/` paths).
+
+### Changed — M13 Task 02: PyPI name claim + release smoke + wheel excludes (2026-04-22)
+
+Closes three more M13 exit criteria without touching any `ai_workflows/`
+runtime code. Composes over T01: reuses the `built_wheel` module-scoped
+fixture; depends on the `force-include` hook T01 installed.
+
+**PyPI name `ai-workflows` confirmed available.** `curl -sS -o /dev/null
+-w '%{http_code}\n' https://pypi.org/pypi/ai-workflows/json` returned
+`404` as of 2026-04-22. The `[project].name = "ai-workflows"` stamp
+from T01 stands — no namespace alternative needed. Claim is held
+passively by the first successful `uv publish` at T07.
+
+**New `scripts/release_smoke.sh` — manual release gate.** Six-stage
+bash script that: (1) `uv build --wheel` into a temp dir, (2) creates
+a fresh venv outside the repo, (3) installs the wheel into it, (4)
+help-smokes `aiw` + `aiw-mcp`, (5) runs `aiw list-runs` against a
+fresh `AIW_STORAGE_DB` — exercises the migrations-from-wheel path
+T01's `force-include` unlocked, (6) optional real-provider planner
+run gated by `AIW_E2E=1 + GEMINI_API_KEY`. `set -euo pipefail`; cleans
+up via `trap cleanup EXIT`. Not wired into CI — the hermetic stages
+duplicate `tests/test_wheel_contents.py`; the live stage would cost
+real money per PR. Invoked manually from T07's runbook.
+
+**New `design_docs/phases/milestone_13_v0_release/release_runbook.md`
+— builder-only runbook.** Four sections covering when to run the
+smoke, pre-flight checks (release branch, clean tree, intended SHA,
+`uv` on PATH), stage-by-stage failure guide, optional live-provider
+pass costs and caveats. Stays on `design` branch — M13 T05 prunes it
+from `main`.
+
+**`tests/test_wheel_contents.py` gains
+`test_built_wheel_excludes_builder_mode_artefacts`.** Asserts
+`design_docs/`, `CLAUDE.md`, `.claude/commands/` are absent from the
+built wheel archive. Reuses the `built_wheel` module-scoped fixture
+— no new fixture, one extra cheap zipfile assertion. Closes the
+other half of milestone README §Exit criteria 2 (T01 shipped the
+inclusion half).
+
+**Spec deviation recorded.** Milestone README §Exit criteria 3 +
+task_02 spec §Deliverables 2 called for the smoke to run `aiw run
+planner --goal 'wheel-smoke' --run-id wheel-smoke --no-wait` against
+a stubbed provider. Two gaps prevented a literal implementation:
+(a) `aiw run` has no `--no-wait` flag (adding one would be
+graph-surface scope — out-of-scope for a packaging task); (b) there
+is no shell-surface provider stub (`StubLLMAdapter` is a Python
+test helper, not an `AIW_*` env-configurable runtime swap). The
+shipped script substitutes `aiw list-runs` for `aiw run` in the
+hermetic default path — `list-runs` exercises the same
+`SQLiteStorage.open()` + migrations-apply path the smoke is meant
+to gate, with zero provider dependency. The real-provider `aiw run`
+path lives in stage 6 behind the standard `AIW_E2E=1 +
+GEMINI_API_KEY` double-gate that `tests/e2e/` uses today. Recorded
+verbatim in [T02 audit issue file](design_docs/phases/milestone_13_v0_release/issues/task_02_issue.md).
+
+**Files touched:** `scripts/release_smoke.sh` (new),
+`design_docs/phases/milestone_13_v0_release/task_02_name_claim_release_smoke.md`
+(new — spec drafted at T02 kickoff),
+`design_docs/phases/milestone_13_v0_release/release_runbook.md`
+(new — builder-only), `tests/test_wheel_contents.py` (one test
+appended), `CHANGELOG.md` (this entry). **Not touched:**
+`pyproject.toml` (T02 records the name claim; no pyproject edit);
+anything under `ai_workflows/` (packaging-only, AC-12).
+
+ACs satisfied: AC-1 (name claim recorded), AC-2 (smoke script
+executable + `set -euo pipefail` + `trap` cleanup), AC-3 (stages 1-5
+green on current tip — verified manually), AC-4 (stage 6 double-gated
+by `AIW_E2E=1 + GEMINI_API_KEY`, skips cleanly when missing), AC-5
+(smoke not in ci.yml — grep-verified), AC-6 (runbook exists, covers
+the four sections, stays on `design` branch), AC-7 (new test lands
+green, reuses `built_wheel` fixture), AC-8 (`uv run pytest` 615
+tests), AC-9 (`uv run lint-imports` 4 kept), AC-10 (`uv run ruff
+check` clean), AC-11 (this CHANGELOG entry), AC-12 (zero
+`ai_workflows/` diff — `git diff --name-only` confirms).
+
+### Changed — M13 Task 01: pyproject polish + wheel migrations bundle (2026-04-22)
+
+Closes the first two M13 shipping-blockers: PyPI listing metadata and
+the silently-omitted `migrations/` directory. Zero runtime behaviour
+change — a running-from-repo `uv run aiw …` / `uv run aiw-mcp`
+invocation is byte-identical; the fix is about what lands inside the
+published wheel.
+
+**`pyproject.toml [project]` metadata filled in.** `authors`,
+`urls.Homepage` / `urls.Repository` / `urls.Issues`, `keywords`
+(`langgraph`, `mcp`, `claude-code`, `ai-workflow`, `litellm`,
+`ollama`), and `classifiers` (`Development Status :: 3 - Alpha`,
+`Intended Audience :: Developers`,
+`License :: OSI Approved :: MIT License`,
+`Operating System :: OS Independent`,
+`Programming Language :: Python :: 3` + `Python :: 3.12`,
+`Topic :: Software Development :: Libraries`). No dependency change.
+No version bump — `0.1.0` stays (the `[0.1.0]` CHANGELOG release
+section lands at T07).
+
+**`pyproject.toml [tool.hatch.build.targets.wheel]` force-includes
+`migrations/`.** `packages = ["ai_workflows"]` alone sweeps the source
+package; the repo-root `migrations/` directory is silently omitted
+from the wheel. `yoyo-migrations` reads migration scripts from an
+on-disk path, so a `uvx --from ai-workflows aiw run planner …` from a
+clean machine would fail on first-run with a "no migration scripts
+found"-equivalent error. New
+`[tool.hatch.build.targets.wheel.force-include]` block maps
+`"migrations" = "migrations"`, landing the directory at
+`site-packages/migrations/` on install — which is exactly where
+`ai_workflows/primitives/storage.py`'s existing
+`Path(__file__).parent.parent.parent / "migrations"` walk-up
+resolves. Zero `ai_workflows/` diff (option 1 in the task spec §Storage
+layer — the current lookup already works with `force-include`;
+`importlib.resources` rewrite not needed).
+
+**New hermetic test `tests/test_wheel_contents.py`.** Two tests
+sharing a module-scoped `built_wheel` fixture that shells out to
+`uv build --wheel --out-dir <tmp>`:
+
+- `test_built_wheel_includes_migrations` — asserts `001_initial.sql`
+  and `002_reconciliation.sql` are present in the archive, plus a
+  whole-set equality check between the shipped `migrations/*.sql`
+  entries and the files currently in the repo's `migrations/`
+  directory (catches future migrations silently missing from the
+  wheel — e.g. `003_artifacts.sql` which exists today and the task
+  spec did not know about).
+- `test_built_wheel_includes_ai_workflows_package` — sanity guard
+  that the `force-include` edit does not regress the
+  `packages = ["ai_workflows"]` sweep.
+
+Skips loudly when `uv` is not on PATH (matches the e2e-smoke skip
+pattern); CI always has it.
+
+**Files touched:** `pyproject.toml` (metadata block + force-include
+block), `tests/test_wheel_contents.py` (new), `CHANGELOG.md` (this
+entry). **Not touched:** `ai_workflows/primitives/storage.py` (the
+existing walk-up resolves correctly against the `force-include`
+layout — confirmed by the new test).
+
+ACs satisfied: AC-1 (metadata block), AC-2 (force-include block),
+AC-3 (`uv build` includes migrations), AC-4 (Storage walk-up resolves
+under wheel layout — no code change needed), AC-5 (both tests land
+green), AC-6 (no dependency change, no version bump), AC-7 (no diff
+under `ai_workflows/workflows/` / `mcp/` / `graph/`), AC-8 (gates
+green), AC-9 (this entry).
+
 ## [M14 MCP HTTP Transport] - 2026-04-22
 
 ### Changed — M14 Task 02: Milestone Close-out (2026-04-22)

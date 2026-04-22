@@ -8,8 +8,17 @@ Relationship to other modules
 -----------------------------
 * ``design_docs/phases/milestone_9_skill/skill_install.md`` — the
   walk-through under test (T03 deliverable).
-* ``README.md`` — root project README, asserted to link back at the
-  walk-through.
+
+M13 T04 note
+------------
+The original M9 T03 AC-2 asserted that the root ``README.md`` contained
+a link to ``skill_install.md``. M13 T04 trims the root README to a
+user-facing intro with exactly one ``design_docs/`` reference (the
+roadmap pointer), which removes the skill-install link from the main
+branch. The ``test_root_readme_links_skill_install`` case that pinned
+that link has been deleted as a T04 lockstep edit — the skill install
+surface moves under the ``design`` branch / PyPI onboarding path in
+M13 T06.
 """
 
 from __future__ import annotations
@@ -19,7 +28,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOC_PATH = REPO_ROOT / "design_docs" / "phases" / "milestone_9_skill" / "skill_install.md"
-ROOT_README = REPO_ROOT / "README.md"
 
 # Matches markdown-link URL targets: (...). Excludes pure-anchor (#foo)
 # and external scheme://… targets; we only check local relative links.
@@ -61,18 +69,6 @@ def test_skill_install_doc_links_resolve() -> None:
     assert not unresolved, (
         "skill_install.md relative links failed to resolve:\n  - "
         + "\n  - ".join(unresolved)
-    )
-
-
-def test_root_readme_links_skill_install() -> None:
-    """Root README contains a link to the install walk-through.
-
-    Matches the spec's single-contextually-appropriate-line requirement;
-    the test only asserts the substring presence, not placement.
-    """
-    body = _read(ROOT_README)
-    assert "design_docs/phases/milestone_9_skill/skill_install.md" in body, (
-        "root README.md must link to skill_install.md (M9 T03 AC-2)"
     )
 
 
