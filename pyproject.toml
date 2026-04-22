@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "Composable AI workflow framework built on LangGraph + MCP."
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
   "langgraph>=0.2",
   "langgraph-checkpoint-sqlite>=1.0",
