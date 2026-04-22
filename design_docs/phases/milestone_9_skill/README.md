@@ -28,14 +28,14 @@ Package `ai-workflows` as a Claude Code skill: a thin `.claude/skills/ai-workflo
 
 ## Task order
 
-| # | Task |
-| --- | --- |
-| 01 | `.claude/skills/ai-workflows/SKILL.md` + supporting files |
-| 02 | Optional plugin manifest (if packaging for distribution) |
-| 03 | Distribution / install docs |
-| 04 | Milestone close-out |
+| # | Task | Kind |
+| --- | --- | --- |
+| 01 | [`.claude/skills/ai-workflows/SKILL.md` + supporting files](task_01_skill_md.md) | doc + test |
+| 02 | [Optional plugin manifest (conditional — trigger-gated)](task_02_plugin_manifest.md) | doc + test |
+| 03 | [Distribution / install docs](task_03_distribution_docs.md) | doc + test |
+| 04 | [Milestone close-out](task_04_milestone_closeout.md) | doc |
 
-Per-task files generated if and when this milestone is promoted from optional.
+Per-task specs drafted 2026-04-21. Milestone remains `📝 Optional` in the roadmap — promotion to active requires a concrete reason (user intent to distribute, a second host onboarding, or the in-repo skill surface being regularly invoked). Task scope stays packaging-only per KDR-002 regardless of when it runs.
 
 ## Issues
 
