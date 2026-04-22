@@ -14,8 +14,20 @@ The mechanics to flip this are small but real:
 3. **No external install documentation.** Root `README.md § Getting started` assumes `uv sync` from a clone. There is no "pip install ai-workflows" / "uvx" / "uv tool install" guidance.
 4. **No PyPI release flow.** No `uv publish` rehearsal, no dist-smoke, no release notes section in `CHANGELOG.md` (the Keep-a-Changelog template is in place — the `[0.1.0]` section is not).
 5. **Claude Code skill install path is git-clone-only.** [`skill_install.md §3`](../milestone_9_skill/skill_install.md) documents Option A (in-repo), Option B (user-level symlink), Option C (plugin — not applicable). A `uvx`-equivalent option for the MCP server + a plain `uv tool install ai-workflows` path for the skill's `aiw-mcp` dependency would make the skill usable on a machine that has never seen this repo.
+6. **Repo layout is builder-facing, not user-facing.** `design_docs/` is ~50 markdown files of builder/auditor internals (architecture of record, milestones, audit issue files, nice_to_have.md). An external consumer landing on the GitHub repo sees the builder workflow before they see a getting-started doc — the signal-to-noise ratio on `main` is wrong for a v0 release. The three pre-pivot placeholder files under [`docs/`](../../../docs/) ([architecture.md](../../../docs/architecture.md), [writing-a-component.md](../../../docs/writing-a-component.md), [writing-a-workflow.md](../../../docs/writing-a-workflow.md)) still say *"Placeholder. This document is to be authored by M1 Task 11"* and reference the abandoned **components** vocabulary (pre-LangGraph pivot) — they are wrong on both freshness and terminology.
+7. **Root `README.md` is builder-facing.** The "What runs today (post-M9)" section is a ~15-bullet dense narrative of every module M1–M9 touched. Useful during construction; noise at release time. A first-time user wants: what it is, how to install, how to run the first workflow, where to go next.
 
-M13 is the smallest milestone that closes all five gaps and ships `0.1.0` to PyPI. **No new feature, no new KDR.** Composes over KDR-002 (surface portability) and KDR-008 (MCP schema public contract) unchanged.
+M13 closes all seven gaps and ships `0.1.0` to PyPI. **No new feature, no new KDR.** Composes over KDR-002 (surface portability) and KDR-008 (MCP schema public contract) unchanged.
+
+## Branch model — `main` (release) + `design` (builder)
+
+The builder/auditor workflow this project was built with is valuable to preserve; it is also not what a first-time user should see. M13 formalises a **two-branch model** so both audiences get the right surface without losing history:
+
+- **`design` branch** — the builder/auditor workflow continues here. Full `design_docs/`, full audit issue files, full CLAUDE.md conventions, full `nice_to_have.md`. This is where `/implement`, `/audit`, `/clean-implement` run. All post-0.1.0 milestone work happens on `design`; the existing main-branch history *is* the design-branch starting point.
+- **`main` branch** — the release branch. User-facing only: `ai_workflows/`, `tests/`, `migrations/`, `docs/` (populated), `README.md` (trimmed), `CHANGELOG.md`, `LICENSE`, `pyproject.toml`, `.github/`, `.claude/skills/`. No `design_docs/`. No `CLAUDE.md` builder-mode doc. PyPI publishes from `main`.
+- **Merge direction** — design → main, never the other way. User-facing doc edits on `design` propagate to `main` via a release-time cherry-pick or a targeted merge at milestone close-out; builder-only changes (new audit issue files, nice_to_have entries, design_docs edits) stay on `design` only.
+
+The user creates the `design` branch from the current `main` tip **before** T05 deletes `design_docs/` from `main` HEAD. T05 is the branch-split task. T01–T04 happen on `design` and only touch files that will exist on both branches.
 
 ## Goal
 
@@ -25,23 +37,27 @@ Publish **`ai-workflows==0.1.0`** to PyPI such that:
 uvx --from ai-workflows aiw run planner --goal 'x' --run-id demo
 ```
 
-works from a clean machine that has `uv`, `GEMINI_API_KEY`, and the `claude` CLI on PATH — and the Claude Code skill install path covers the `uvx aiw-mcp` mode end-to-end.
+works from a clean machine that has `uv`, `GEMINI_API_KEY`, and the `claude` CLI on PATH — and the Claude Code skill install path covers the `uvx aiw-mcp` mode end-to-end. The `main` branch that a first-time user lands on is trimmed to user-facing content only; the builder/auditor workflow is preserved intact on a `design` branch.
 
 ## Exit criteria
 
 1. **`pyproject.toml` polished.** `authors`, `urls.Homepage` + `urls.Repository` + `urls.Issues`, a minimal `classifiers` list (Python 3.12, OS-independent, Development Status :: 3 — Alpha, License :: OSI Approved :: MIT), and `keywords` (langgraph, mcp, ai-workflow, claude-code). No dependency change at M13. Version stays `0.1.0`.
-2. **Wheel contents correct.** `uv build` produces a wheel whose contents include both `ai_workflows/` and `migrations/`. `tool.hatch.build.targets.wheel` extended to sweep `migrations/` (either via a new `packages` entry or `force-include`). Hermetic test: `tests/test_wheel_contents.py` builds the wheel in a `tmp_path`, unzips, asserts `migrations/001_initial.sql` + `migrations/002_reconciliation.sql` are present in the archive. Runs in the default hermetic suite — no network.
-3. **Clean-venv install smoke.** A new gate-script `scripts/release_smoke.sh` creates a fresh venv outside the repo, installs the built wheel, runs `aiw --help` + `aiw-mcp --help`, runs `aiw run planner --goal 'wheel-smoke' --run-id wheel-smoke --no-wait` against a stubbed provider (or against real Gemini Flash if `GEMINI_API_KEY` + `AIW_E2E=1` are set), and asserts the run row lands in Storage with migrations applied. Script is **not** added to CI at M13 (live providers); it is the manual release-gate script invoked from T04 before `uv publish`. Documented in `design_docs/phases/milestone_13_v0_release/release_runbook.md`.
+2. **Wheel contents correct.** `uv build` produces a wheel whose contents include both `ai_workflows/` and `migrations/`, and **explicitly exclude** `design_docs/` + `CLAUDE.md` + `.claude/commands/` (builder-mode artefacts, even if they briefly coexist during the branch-split window). `tool.hatch.build.targets.wheel` extended to sweep `migrations/` via `force-include`. Hermetic test: `tests/test_wheel_contents.py` builds the wheel in a `tmp_path`, unzips, asserts `migrations/001_initial.sql` + `migrations/002_reconciliation.sql` are present **and** `design_docs/` / `CLAUDE.md` are absent. Runs in the default hermetic suite — no network.
+3. **Clean-venv install smoke.** A new gate-script `scripts/release_smoke.sh` creates a fresh venv outside the repo, installs the built wheel, runs `aiw --help` + `aiw-mcp --help`, runs `aiw run planner --goal 'wheel-smoke' --run-id wheel-smoke --no-wait` against a stubbed provider (or against real Gemini Flash if `GEMINI_API_KEY` + `AIW_E2E=1` are set), and asserts the run row lands in Storage with migrations applied. Script is **not** added to CI at M13 (live providers); it is the manual release-gate script invoked from T06 before `uv publish`. Documented in `design_docs/phases/milestone_13_v0_release/release_runbook.md` (builder-only — does not ship to `main`).
 4. **PyPI name claimed.** A `ai-workflows` PyPI name check is performed; if taken, namespace the package (candidates: `aiw-framework`, `ai-workflows-langgraph`, or `<user>-ai-workflows`). Final name decision recorded in T02's spec + `pyproject.toml` `[project].name` + every doc that quotes the name. Changing the package name does *not* change the CLI script names (`aiw`, `aiw-mcp`) — those stay stable.
-5. **README install section.** Root `README.md § Getting started` grows a pre-`uv sync` "Install from PyPI" sub-section documenting three paths:
-   - **One-shot (recommended):** `uvx --from ai-workflows aiw run planner …` (no permanent install).
-   - **Persistent tool install:** `uv tool install ai-workflows` then `aiw run planner …`.
-   - **Existing clone (contributors):** the current `uv sync` flow stays as the second heading.
-6. **Skill install doc extended.** [`skill_install.md §2 Install the MCP server`](../milestone_9_skill/skill_install.md) gains an "Option A-bis — via uvx (no clone required)" sub-section: `claude mcp add ai-workflows --scope user -- uvx --from ai-workflows aiw-mcp`. Option A (clone-based) stays primary for contributors; the new option is the user path. `tests/skill/test_doc_links.py` stays green.
-7. **CHANGELOG `[0.1.0]` release section.** `CHANGELOG.md` gets a `## [0.1.0] — 2026-MM-DD` header above the Keep-a-Changelog template, listing the M1–M9 surfaces as one bulleted inventory under `### Added` (not per-milestone — the release-notes audience does not map to milestones). `## [Unreleased]` stays in place above it for post-0.1.0 work.
-8. **First PyPI publish.** `uv publish --token $PYPI_TOKEN` (from a one-shot token, not long-lived credentials) succeeds against pypi.org for the `0.1.0` wheel. A second smoke — `uvx --from ai-workflows==0.1.0 aiw version` against the real PyPI-hosted package — verifies the published artefact resolves. Observation + commit sha baseline recorded in the T04 CHANGELOG close-out block.
-9. **Gates green.** `uv run pytest` + `uv run lint-imports` (4 contracts kept — M12's new contract lands at M12 T02, not here) + `uv run ruff check` all clean at T05 close-out.
-10. **M11 landed before T04.** The first-time-user gate-review UX (ISS-02 closure) must be in place before the first PyPI upload. If M11 is still open when M13 reaches T04, the milestone **stops and waits** rather than shipping a broken first-install experience. See §*Dependencies* for rationale.
+5. **`docs/` populated.** The three [`docs/`](../../../docs/) placeholder files are rewritten against the actual post-pivot architecture:
+   - `docs/architecture.md` — user-facing architecture overview: four-layer model (primitives → graph → workflows → surfaces), LangGraph `StateGraph` as the substrate, MCP as the public surface, KDR summary. Links to `design_docs/architecture.md` *are removed* (the file does not ship on `main`); any grounding reference points to the `design` branch path with a `(builder-only)` note.
+   - `docs/writing-a-workflow.md` — tutorial for authoring a new `StateGraph` under `ai_workflows/workflows/` that composes the M2 graph primitives (`TieredNode`, `ValidatorNode`, `HumanGate`), registers via `ai_workflows.workflows.register`, and surfaces through both CLI (`aiw run <name>`) and MCP (`run_workflow`).
+   - `docs/writing-a-component.md` — **renamed** to `docs/writing-a-graph-primitive.md` (the "component" term is a pre-pivot artefact; graph primitives is the current vocabulary). Tutorial for authoring a new adapter under `ai_workflows/graph/` over an existing primitive, matching the `TieredNode` / `ValidatorNode` composition pattern.
+   Each doc compiles + lints clean, and a new `tests/docs/test_docs_links.py` hermetic test pins that every relative link in `docs/` resolves.
+6. **Root `README.md` trimmed.** The "What runs today (post-M9)" section (currently a ~15-bullet dense narrative) is replaced by a three-paragraph overview: (1) what this project is in two sentences, (2) one-paragraph architecture summary pointing at `docs/architecture.md`, (3) one-paragraph install + first-run pointer. The milestone status table stays. The "Next" section is compressed to a single pointer at `design_docs/roadmap.md` on the `design` branch (with a `(builder-only)` note) — no per-milestone narrative on `main`. Post-trim README target: **≤ 150 lines** (currently ~156 without the M13 additions). A new `tests/docs/test_readme_shape.py` hermetic test pins: line count under the cap, presence of *Install* / *Getting started* / *Development* sections, absence of any `design_docs/` link (the `design` branch pointer is the exception, tested explicitly).
+7. **Install section added.** `README.md` grows an **Install** section above *Getting started* documenting two paths: (a) **one-shot via `uvx`** (`uvx --from ai-workflows aiw run planner --goal '…' --run-id demo`); (b) **persistent tool install** (`uv tool install ai-workflows`). The *Getting started* section that currently assumes `uv sync` from a clone is preserved below, relabeled **Contributing / from source**, and points at the `design` branch for the full builder workflow.
+8. **Skill install doc extended.** [`skill_install.md §2 Install the MCP server`](../milestone_9_skill/skill_install.md) gains an "Option A-bis — via uvx (no clone required)" sub-section: `claude mcp add ai-workflows --scope user -- uvx --from ai-workflows aiw-mcp`. Option A (clone-based) stays primary for contributors; the new option is the user path. `tests/skill/test_doc_links.py` stays green.
+9. **Branch split executed.** The `design` branch is created from the `main` tip at M13 kickoff. On `main`, the following are **deleted** (exist only on `design`): `design_docs/`, `CLAUDE.md`, `.claude/commands/`, `scripts/spikes/`, and the builder-mode `release_runbook.md` under `design_docs/phases/milestone_13_v0_release/`. On `main`, these **stay**: `ai_workflows/`, `tests/`, `migrations/`, `evals/`, `docs/`, `README.md`, `CHANGELOG.md`, `LICENSE`, `pyproject.toml`, `uv.lock`, `.github/`, `.gitignore`, `.claude/skills/` (the M9 skill — this *is* user-facing). A new `.github/CONTRIBUTING.md` on `main` explains the two-branch model in one paragraph + links to the `design` branch README. A `tests/test_main_branch_shape.py` hermetic test (runs on both branches) pins the "no design_docs on main" invariant via a `Path` check that **skips** on the `design` branch (env-flag gated: `AIW_BRANCH=design` makes the test assert the inverse).
+10. **CHANGELOG `[0.1.0]` release section.** `CHANGELOG.md` gets a `## [0.1.0] — 2026-MM-DD` header above the Keep-a-Changelog template, listing the M1–M9 surfaces as one bulleted inventory under `### Added` (not per-milestone — the release-notes audience does not map to milestones). `## [Unreleased]` stays in place above it for post-0.1.0 work. On `main`, the per-milestone `[M1..M9]` detail blocks the `design` branch carries under `## [Unreleased]` history are *pruned* — the `[0.1.0]` block is the user-facing summary.
+11. **First PyPI publish.** `uv publish --token $PYPI_TOKEN` (from a one-shot token, not long-lived credentials) succeeds against pypi.org from the **`main` branch** for the `0.1.0` wheel. A second smoke — `uvx --from ai-workflows==0.1.0 aiw version` against the real PyPI-hosted package — verifies the published artefact resolves. Observation + commit sha baseline recorded in the T07 CHANGELOG close-out block (on both branches).
+12. **Gates green on both branches.** `uv run pytest` + `uv run lint-imports` (4 contracts kept — M12's new contract lands at M12 T02, not here) + `uv run ruff check` all clean on both `design` and `main` at T08 close-out. The `design` branch retains its full test surface; `main` retains the same code tests (four-layer package is identical) — only non-code artefacts differ between branches.
+13. **M11 landed before T06.** The first-time-user gate-review UX (ISS-02 closure) must be in place before the first PyPI upload. If M11 is still open when M13 reaches T06 (release smoke), the milestone **stops and waits** rather than shipping a broken first-install experience. See §*Dependencies* for rationale.
 
 ## Non-goals
 
@@ -62,22 +78,28 @@ works from a clean machine that has `uv`, `GEMINI_API_KEY`, and the `claude` CLI
 | Packaging is portable; skill is packaging-only over the MCP surface | KDR-002 |
 | Four-layer import contract holds through the published wheel | architecture.md §3 + import-linter |
 | Release notes audience ≠ milestone audience — `CHANGELOG.md` grows a `[0.1.0]` consolidated block above the per-milestone history | project convention (this milestone) |
+| Two-branch model — `main` is user-facing, `design` preserves builder workflow; merge direction is `design → main` only | project convention (this milestone) |
 
 ## Task order
 
 | # | Task | Kind |
 | --- | --- | --- |
 | 01 | [pyproject polish + wheel contents fix](task_01_pyproject_polish.md) | code + test |
-| 02 | PyPI name claim + clean-venv install smoke | code + test + doc |
-| 03 | README install section + skill_install.md uvx option | doc + test |
-| 04 | CHANGELOG `[0.1.0]` section + first PyPI publish (manual) | doc + release |
-| 05 | Milestone close-out | doc |
+| 02 | PyPI name claim + clean-venv install smoke + wheel-excludes test | code + test + doc |
+| 03 | Populate `docs/` — architecture.md + writing-a-workflow.md + writing-a-graph-primitive.md | doc + test |
+| 04 | Trim root `README.md` — collapse "What runs today", add Install section, line-cap + shape tests | doc + test |
+| 05 | Branch split — create `design` branch, delete builder artefacts from `main`, add `.github/CONTRIBUTING.md`, branch-shape invariant test | git + doc + test |
+| 06 | `skill_install.md` uvx option + release-smoke script | doc + release |
+| 07 | CHANGELOG `[0.1.0]` section + first PyPI publish (manual) | doc + release |
+| 08 | Milestone close-out | doc |
 
-Per-task spec files land as each predecessor closes (same convention as M10 / M11 / M12). T01 is spec'd below; T02–T05 are written at each predecessor's close-out. The README alone is enough context to start T01.
+Per-task spec files land as each predecessor closes (same convention as M10 / M11 / M12). T01 is spec'd below; T02–T08 are written at each predecessor's close-out. The README alone is enough context to start T01.
+
+**Branch at which each task runs.** T01 / T02 / T03 / T04 happen on `design` (the builder branch) — they touch files that exist on both branches and will propagate to `main` at T05's split. T05 is the split itself: it operates on both branches (creates `design`, prunes `main`). T06 / T07 / T08 run on `design` and cherry-pick / merge the user-facing deltas into `main` at each step. Audit issue files always land on `design` under `design_docs/phases/milestone_13_v0_release/issues/`, never on `main`.
 
 ## Dependencies
 
-- **M11 (hard).** A first-time PyPI install that walks the skill's gate-pause flow lands on `plan: null` and a non-reviewable gate — the defect ISS-02 named. Shipping `0.1.0` before M11 would publish a broken first-impression UX for the primary documented install path. **If M11 has not landed by T04 kickoff, M13 T04 stops and waits.** T01–T03 can run in parallel with M11 because they touch no `ai_workflows.mcp/` surface.
+- **M11 (hard).** A first-time PyPI install that walks the skill's gate-pause flow lands on `plan: null` and a non-reviewable gate — the defect ISS-02 named. Shipping `0.1.0` before M11 would publish a broken first-impression UX for the primary documented install path. **If M11 has not landed by T06 kickoff, M13 T06 stops and waits.** T01–T05 can run in parallel with M11 because they touch no `ai_workflows.mcp/` surface.
 - **M10 — none.** Ollama hardening is independent; degraded M8 behaviour is functional and falls back correctly. A post-0.1.0 0.2.x release absorbs M10.
 - **M12 — none.** Audit cascade is a quality layer above the 0.1.0 contract.
 
