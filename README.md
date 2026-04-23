@@ -60,12 +60,45 @@ uv tool install jmdl-ai-workflows
 aiw run planner --goal 'Write a release checklist' --run-id demo
 ```
 
-## Getting started
+## Setup
 
-After installing (either path above), set your Gemini API key and drive a planner run end-to-end:
+`aiw` and `aiw-mcp` read configuration from environment variables. As of 0.1.1 both binaries auto-load a `.env` file from your current working directory at startup (shell-exported values always win over `.env` values).
+
+**Required for most workflows**
+
+- `GEMINI_API_KEY` — Google Gemini key, used by the LiteLLM adapter. Get one at <https://aistudio.google.com/apikey>. Required for any workflow that routes through a Gemini tier (the default `planner-explorer` / `planner-synth` paths cover this).
+
+**Optional**
+
+- `OLLAMA_BASE_URL` — default `http://localhost:11434`. Set this if your Ollama daemon listens elsewhere. Needed only when a workflow routes to the local Qwen tier.
+- `AIW_STORAGE_DB` — path override for the run registry database. Defaults to `~/.ai-workflows/storage.sqlite3`.
+- `AIW_CHECKPOINT_DB` — path override for the LangGraph checkpoint database. Defaults to `~/.ai-workflows/checkpoint.sqlite3`.
+
+**Claude Code tier (no API key needed)**
+
+Some workflows route to the `claude` CLI via OAuth — install and authenticate it separately per [Anthropic's setup docs](https://docs.claude.com/en/docs/claude-code/setup). `aiw` never reads `ANTHROPIC_API_KEY` and never imports the `anthropic` SDK; Claude access is OAuth-only through the CLI subprocess.
+
+**`.env` auto-load**
+
+Create a `.env` in the directory you run `aiw` / `aiw-mcp` from:
 
 ```bash
-export GEMINI_API_KEY=...
+# .env
+GEMINI_API_KEY=your-key-here
+# OLLAMA_BASE_URL=http://localhost:11434  # uncomment if non-default
+```
+
+A shell-exported value wins over the `.env` value — right precedence for CI pipelines, `direnv` setups, and one-off inline overrides (`GEMINI_API_KEY=x aiw run ...`).
+
+**Troubleshooting**
+
+Seeing a `401 Unauthorized` from LiteLLM? Your `GEMINI_API_KEY` is missing, invalid, or out-of-quota. Confirm `echo $GEMINI_API_KEY` in the shell you're running `aiw` from, or verify the value in your `.env`.
+
+## Getting started
+
+After Setup, drive a planner run end-to-end:
+
+```bash
 aiw run planner --goal 'Write a release checklist' --run-id demo
 aiw resume demo --approve
 aiw list-runs

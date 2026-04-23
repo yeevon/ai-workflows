@@ -139,3 +139,34 @@ def test_built_wheel_excludes_builder_mode_artefacts(built_wheel: Path) -> None:
     assert "CLAUDE.md" not in names, (
         f"wheel leaked CLAUDE.md; full list: {sorted(names)}"
     )
+
+
+def test_built_wheel_excludes_dotenv_and_loose_yaml(built_wheel: Path) -> None:
+    """0.1.1 patch — wheel must not ship `.env*` or bare-root `*.yaml`.
+
+    Belt-and-braces against accidental secrets leakage. The current
+    ``packages = ["ai_workflows"]`` + targeted ``force-include`` for
+    ``migrations/`` makes this invariant hold by construction (repo-root
+    `.env` / `tiers.yaml` / `pricing.yaml` sit outside the source
+    package), but a future ``force-include`` edit that broadens the
+    sweep could silently leak them. This test pins the invariant so
+    the wheel layer catches the regression directly.
+    """
+    with zipfile.ZipFile(built_wheel) as zf:
+        names = list(zf.namelist())
+
+    dotenv_leaks = [n for n in names if Path(n).name.startswith(".env")]
+    assert not dotenv_leaks, (
+        f"wheel leaked dotenv-shaped file(s): {dotenv_leaks}"
+    )
+
+    root_yaml_leaks = [
+        n for n in names
+        if n.endswith((".yaml", ".yml"))
+        and "/" not in n.rstrip("/")
+    ]
+    assert not root_yaml_leaks, (
+        f"wheel leaked bare-root YAML file(s): {root_yaml_leaks}. "
+        f"Repo-root `tiers.yaml` / `pricing.yaml` are dev-time only and "
+        f"must never ship."
+    )

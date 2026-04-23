@@ -1041,7 +1041,7 @@ wheels = [
 
 [[package]]
 name = "jmdl-ai-workflows"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
@@ -1050,6 +1050,7 @@ dependencies = [
     { name = "langgraph-checkpoint-sqlite" },
     { name = "litellm" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "structlog" },
     { name = "typer" },
@@ -1061,7 +1062,6 @@ dev = [
     { name = "import-linter" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "python-dotenv" },
     { name = "ruff" },
 ]
 
@@ -1073,6 +1073,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-sqlite", specifier = ">=1.0" },
     { name = "litellm", specifier = ">=1.40" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "structlog", specifier = ">=24.0" },
     { name = "typer", specifier = ">=0.12" },
@@ -1084,7 +1085,6 @@ dev = [
     { name = "import-linter", specifier = ">=2.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
-    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "ruff", specifier = ">=0.5" },
 ]
 

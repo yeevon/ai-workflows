@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-04-23
+
+First-run onboarding patch. 0.1.0 shipped without end-user setup guidance
+and without `.env` auto-load at the CLI / MCP entry points. A `uvx`-installed
+user with a `.env` in their working directory got nothing — the process
+only saw shell-exported vars. 0.1.1 closes both gaps. No runtime feature
+change; no schema change; no MCP surface change.
+
+### Fixed
+
+- **`aiw` and `aiw-mcp` auto-load `.env` from the current directory at
+  startup.** `python-dotenv` was declared in `pyproject.toml` as a dev
+  dependency but `load_dotenv()` was invoked only from the test
+  conftest. Both CLI surfaces now call
+  `load_dotenv(override=False)` at module top, so a shell-exported
+  variable still wins over the `.env` value (right precedence for CI
+  pipelines and one-off inline overrides). `python-dotenv>=1.0`
+  promoted from `[dependency-groups.dev]` to `[project.dependencies]`
+  so the wheel ships with the runtime dependency.
+
+### Changed
+
+- **Root `README.md` gains a `## Setup` section** between `## Install`
+  and `## Getting started`. Documents: required env var
+  (`GEMINI_API_KEY` with a link to Google AI Studio), optional vars
+  (`OLLAMA_BASE_URL`, `AIW_STORAGE_DB`, `AIW_CHECKPOINT_DB`), the
+  `claude` CLI OAuth path (no API key needed — KDR-003), the `.env`
+  auto-load behaviour with precedence rules, and a one-line
+  troubleshooting note for `401 Unauthorized` from LiteLLM. The
+  `## Getting started` section's `export GEMINI_API_KEY=...` line is
+  trimmed (redundant with the new Setup section).
+
+### Added
+
+- **`tests/test_dotenv_autoload.py`** — three subprocess-isolated
+  tests that pin the auto-load invariant end-to-end: (1) importing
+  `ai_workflows.cli` from a cwd with `.env` populates `os.environ`;
+  (2) importing `ai_workflows.mcp.__main__` likewise; (3) a shell-
+  exported variable wins over the `.env` value.
+- **`tests/test_wheel_contents.py`** — new assertion
+  `test_built_wheel_excludes_dotenv_and_loose_yaml` as a
+  belt-and-braces guard against accidental `.env*` / bare-root
+  `*.yaml` leakage into future wheels. Current packaging
+  (`packages = ["ai_workflows"]`) already holds this invariant by
+  construction; this test pins it at the wheel layer.
+
+### Published
+
+<!-- stamped post-publish, same shape as the [0.1.0] block -->
+- **PyPI:** _pending_
+- **Wheel:** _pending_
+- **SHA256:** _pending_
+- **Publish-side commit:** _pending_
+- **Post-publish live smoke:** _pending_
+
 ## [0.1.0] — 2026-04-22
 
 First public release. Ships the packaged runtime + CLI + MCP surface that

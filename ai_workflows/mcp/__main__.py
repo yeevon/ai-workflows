@@ -42,9 +42,16 @@ from __future__ import annotations
 from typing import Any
 
 import typer
+from dotenv import load_dotenv
 
-from ai_workflows.mcp.server import build_server
-from ai_workflows.primitives.logging import configure_logging
+# 0.1.1 patch: load a cwd-local ``.env`` before :mod:`ai_workflows.mcp`
+# submodules resolve any env-var lookup (LiteLLM / Claude Code tiers).
+# ``override=False`` keeps shell-exported vars winning — mirrors the
+# CLI-surface precedence.
+load_dotenv(override=False)
+
+from ai_workflows.mcp.server import build_server  # noqa: E402
+from ai_workflows.primitives.logging import configure_logging  # noqa: E402
 
 app = typer.Typer(add_completion=False, help="ai-workflows MCP server.")
 
