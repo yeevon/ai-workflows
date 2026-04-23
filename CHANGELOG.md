@@ -36,12 +36,17 @@ triggers — all recorded in the builder-mode audit disposition on the
 
 ### Published
 
-<!-- stamped post-publish, same shape as the [0.1.0] / [0.1.1] / [0.1.2] blocks -->
-- **PyPI:** _pending_
-- **Wheel:** _pending_
-- **SHA256:** _pending_
-- **Publish-side commit:** _pending_
-- **Post-publish live smoke:** _pending_
+- **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.1.3/>
+- **Wheel:** `jmdl_ai_workflows-0.1.3-py3-none-any.whl` (160070 bytes).
+- **SHA256:** `9a54e566a00e89e3e024890eec5990458cc725dff3b15ada6da5e4df3c5f428d`
+- **Publish-side commit:** `main:b01b1ec` (the release-prep commit whose
+  wheel was uploaded).
+- **Post-publish live smoke:** `uvx --refresh --from
+  jmdl-ai-workflows==0.1.3 aiw version` from `/tmp` prints `0.1.3`; a
+  companion `python -c "import ai_workflows.cli; ..."` from `/tmp` with
+  a `.env` sentinel round-tripped green — the 0.1.1 dotenv auto-load
+  and the 0.1.2 single-source-of-truth version contract both stay
+  intact under the 0.1.3 observability-cleanup diff.
 
 ## [0.1.2] — 2026-04-23
 
