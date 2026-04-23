@@ -47,12 +47,18 @@ the dunder drifting from `pyproject.toml` again.
 
 ### Published
 
-<!-- stamped post-publish, same shape as the [0.1.0] block -->
-- **PyPI:** _pending_
-- **Wheel:** _pending_
-- **SHA256:** _pending_
-- **Publish-side commit:** _pending_
-- **Post-publish live smoke:** _pending_
+- **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.1.2/>
+- **Wheel:** `jmdl_ai_workflows-0.1.2-py3-none-any.whl` (159198 bytes).
+- **SHA256:** `9a5a6108f2c362a63b121bccbf95e70ffe180e13493058129dee60a98d95ba1b`
+- **Publish-side commit:** `main:a0f3fd0` (the release-prep commit whose
+  wheel was uploaded).
+- **Post-publish live smoke:** `uvx --refresh --from
+  jmdl-ai-workflows==0.1.2 aiw version` from `/tmp` prints `0.1.2` (the
+  `__version__` regression fix verified end-to-end). A companion
+  `uvx --from jmdl-ai-workflows==0.1.2 python -c "import
+  ai_workflows.cli; ..."` from `/tmp` with a `.env` sentinel also
+  round-tripped green, confirming the 0.1.1 dotenv auto-load stays
+  intact across the version-config rewire.
 
 ## [0.1.1] — 2026-04-23
 
