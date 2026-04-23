@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — 0.1.2 patch: single-source-of-truth version config (2026-04-23)
+
+0.1.1 shipped with a stale `ai_workflows/__init__.py:__version__ =
+"0.1.0"` while `pyproject.toml` said `version = "0.1.1"` — the two
+hardcoded literals drifted. The published 0.1.1 wheel was
+functionally correct (the `.env` auto-load fix landed as intended),
+but `aiw version` from a 0.1.1 install reported `0.1.0`. PyPI does
+not permit re-uploading the same version, so `0.1.1` stays published
+with the cosmetic regression and `0.1.2` is the fix-forward release.
+
+**Root-cause fix:** single source of truth for the version string.
+
+- `ai_workflows/__init__.py` — `__version__` is now authoritative;
+  bumped to `"0.1.2"`. Module docstring calls out the new contract.
+- `pyproject.toml` — dropped the literal `version = "0.1.1"`; added
+  `dynamic = ["version"]` to `[project]` and a new
+  `[tool.hatch.version]` section with `path = "ai_workflows/__init__.py"`.
+  Hatchling's built-in regex version source parses the
+  `__version__ = "..."` assignment at build time and stamps it into
+  the wheel metadata. Edit the Python dunder, rebuild, publish — the
+  two can never diverge again.
+- `tests/test_version_dunder.py` (new) — two regression tests:
+  (1) `ai_workflows.__version__` equals
+  `importlib.metadata.version("jmdl-ai-workflows")`; (2) the dunder
+  parses as well-formed SemVer.
+
+**`design_branch`-only:** this mirror entry under `[Unreleased]`.
+
+**Gates green on `design_branch`:** `uv run pytest` 629 passed + 6
+skipped (+2 over 0.1.1 baseline of 627); `uv run lint-imports` 4
+kept, 0 broken; `uv run ruff check` clean.
+
 ### Fixed — 0.1.1 patch: `.env` auto-load at CLI + MCP entry points (2026-04-23)
 
 A post-publish review of `jmdl-ai-workflows==0.1.0` surfaced a first-run
