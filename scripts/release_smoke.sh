@@ -48,7 +48,7 @@ uv build --wheel --out-dir "$TMP_DIR/dist" > "$TMP_DIR/build.log" 2>&1 || {
 }
 
 shopt -s nullglob
-WHEELS=("$TMP_DIR/dist"/ai_workflows-*.whl)
+WHEELS=("$TMP_DIR/dist"/*.whl)
 shopt -u nullglob
 if [[ ${#WHEELS[@]} -ne 1 ]]; then
     echo "FAIL: expected exactly 1 wheel in $TMP_DIR/dist, got ${#WHEELS[@]}." >&2

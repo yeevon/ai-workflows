@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ai-workflows"
+name = "jmdl-ai-workflows"
 version = "0.1.0"
 description = "Composable AI workflow framework built on LangGraph + MCP."
 readme = "README.md"

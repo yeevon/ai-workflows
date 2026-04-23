@@ -2,7 +2,7 @@
 
 A framework for building multi-step AI workflows that can plan, execute, validate, and recover from failures. Supports multiple models (Claude, Gemini, Ollama), human approval steps, and resumable runs with persistent state.
 
-A LangGraph-native workflow framework for solo developers. Orchestrates multi-step AI workflows — planning, execution, validation, human gates, resume — with durable state, multi-provider routing, and deterministic cost accounting across Gemini (via LiteLLM), Qwen (via Ollama), and Claude Code (via OAuth CLI subprocess).
+A LangGraph-native workflow framework for solo developers. Orchestrates multi-step AI workflows with durable state, multi-provider routing, and deterministic cost accounting across Gemini (via LiteLLM), Qwen (via Ollama), and Claude Code (via OAuth CLI subprocess).
 
 ## Status
 
@@ -50,13 +50,13 @@ Requires Python ≥ 3.12 and [uv](https://github.com/astral-sh/uv).
 **One-shot via `uvx`** — no persistent install; every invocation fetches the wheel into a cache:
 
 ```bash
-uvx --from ai-workflows aiw run planner --goal 'Write a release checklist' --run-id demo
+uvx --from jmdl-ai-workflows aiw run planner --goal 'Write a release checklist' --run-id demo
 ```
 
 **Persistent tool install** — puts `aiw` + `aiw-mcp` on `PATH`:
 
 ```bash
-uv tool install ai-workflows
+uv tool install jmdl-ai-workflows
 aiw run planner --goal 'Write a release checklist' --run-id demo
 ```
 
@@ -78,7 +78,7 @@ The planner workflow composes two LLM tiers (Qwen explorer via Ollama + Claude C
 Register `aiw-mcp` with any MCP host — Claude Code, Cursor, Zed, or an HTTP client via the streamable-HTTP transport — to drive the same workflows inside-out:
 
 ```bash
-claude mcp add ai-workflows --scope user -- uvx --from ai-workflows aiw-mcp
+claude mcp add ai-workflows --scope user -- uvx --from jmdl-ai-workflows aiw-mcp
 ```
 
 The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport http --port 8080 --cors-origin http://localhost:3000`. Full skill-install walkthrough (builder-only, on design branch).

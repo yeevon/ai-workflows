@@ -466,13 +466,13 @@ experience.
   plan + gate_context projection at the plan-review pause so operators
   receive a reviewable artefact (not `plan: null`).
 - **MCP surfaces** — stdio (Claude Code / Cursor / Zed) via
-  `claude mcp add ai-workflows --scope user -- uvx --from ai-workflows
-  aiw-mcp`; streamable-HTTP (Astro / browser-origin consumers) via
-  `aiw-mcp --transport http --host 127.0.0.1 --port 8000`. Identical
-  schema across transports (FastMCP + pydantic).
-- **Install paths** — `uvx --from ai-workflows aiw run planner …` for
-  one-shot invocations; `uv tool install ai-workflows` for persistent
-  installs; `git clone` for contributors.
+  `claude mcp add ai-workflows --scope user -- uvx --from
+  jmdl-ai-workflows aiw-mcp`; streamable-HTTP (Astro / browser-origin
+  consumers) via `aiw-mcp --transport http --host 127.0.0.1 --port
+  8000`. Identical schema across transports (FastMCP + pydantic).
+- **Install paths** — `uvx --from jmdl-ai-workflows aiw run planner …`
+  for one-shot invocations; `uv tool install jmdl-ai-workflows` for
+  persistent installs; `git clone` for contributors.
 - **Documentation** — user-facing `docs/architecture.md`,
   `docs/writing-a-workflow.md`, and `docs/writing-a-graph-primitive.md`
   cover the four-layer model, authoring a new workflow, and authoring a
@@ -488,8 +488,8 @@ experience.
 
 ### Published
 
-- **PyPI:** <https://pypi.org/project/ai-workflows/0.1.0/>
-- **Wheel:** `ai_workflows-0.1.0-py3-none-any.whl`
+- **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.1.0/>
+- **Wheel:** `jmdl_ai_workflows-0.1.0-py3-none-any.whl`
 - **SHA256:** `<filled-in-post-publish>`
 - **Publish-side commit:** `<filled-in-post-publish>` (the commit on
   `main` that produced the wheel `uv publish` uploaded).
