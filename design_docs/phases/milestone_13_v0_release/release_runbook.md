@@ -75,3 +75,14 @@ What this does **not** exercise:
 - The MCP surface. `aiw-mcp` is help-smoked at stage 4 but not driven by a real client. The T07 post-publish validation (`uvx --from ai-workflows==0.1.0 aiw version`) is where end-to-end PyPI reachability is proven, not here.
 
 Never set `AIW_E2E=1` without `GEMINI_API_KEY` — the script checks both; the absence of either skips the stage cleanly without failing the smoke.
+
+## 5. Release smoke invocation log
+
+A rolling log of every pre-publish smoke run. Keep chronological — most recent at the bottom. Each entry has: date, SHA, branch, stages pass/fail, any notable observations.
+
+### 2026-04-22 — M13 T06 pre-publish smoke
+
+- **SHA:** `8f1fd8e` (main HEAD, post-T05 branch-split commit).
+- **Branch:** main.
+- **Result:** ✅ PASS. All six stage headers emitted; tail line `=== OK — release smoke passed ===`. Stage 6 (real-provider planner) cleanly skipped — `AIW_E2E=1` intentionally unset per T06 spec (T07 owns the post-publish live round-trip).
+- **Notes:** First pre-publish smoke after the T05 branch split. `main`-only test invariants held: `tests/test_main_branch_shape.py::test_design_docs_absence_on_main` passes because no `design_docs/`, `CLAUDE.md`, `.claude/commands/`, `tests/skill/`, or `scripts/spikes/` path resolves on `main`. Wheel build included the bundled `migrations/001_initial.sql` + `migrations/002_reconciliation.sql` via the T01 `[tool.hatch.build.targets.wheel.force-include]` hook; stage 5 `aiw list-runs` against a fresh `AIW_STORAGE_DB` applied them without error. Built wheel artefact: `ai_workflows-0.1.0-py3-none-any.whl` (discarded after the smoke's tempdir cleanup — T07 will rebuild from the same `main` HEAD for the actual `uv publish`). No regressions; T07 is unblocked.

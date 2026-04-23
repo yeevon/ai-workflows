@@ -25,11 +25,25 @@ duplicate it.
 
 ## 2. Install the MCP server
 
-One link, no duplication: follow [design_docs/phases/milestone_4_mcp/mcp_setup.md](../milestone_4_mcp/mcp_setup.md)
+Two install paths for the MCP server side; pick one.
+
+### Option A — clone-based (contributors)
+
+Follow [design_docs/phases/milestone_4_mcp/mcp_setup.md](../milestone_4_mcp/mcp_setup.md)
 to register `aiw-mcp` with Claude Code (`claude mcp add ai-workflows --scope user -- uv run aiw-mcp`).
-Verify with `claude mcp list` before continuing.
+Verify with `claude mcp list` before continuing. This is the right path when you've already cloned the repo for builder/auditor work.
+
+### Option A-bis — via `uvx` (no clone required)
+
+```bash
+claude mcp add ai-workflows --scope user -- uvx --from ai-workflows aiw-mcp
+```
+
+No repo clone needed — `uvx` fetches the latest `ai-workflows` wheel into its cache on first invocation and every Claude Code session reuses it. `GEMINI_API_KEY` still needs to be exported in the shell that launches Claude Code (see §1).
 
 ## 3. Install the skill
+
+**Skill install requires the repo on disk** — Options A and B below both assume `.claude/skills/ai-workflows/SKILL.md` resolves to a local file. If you took §2's Option A-bis (uvx, no clone) for the MCP server, you can still use Option B below after a one-time `git clone` just to own the skill directory; the MCP subprocess side remains uvx-driven.
 
 ### Option A — in-repo (default, zero extra steps)
 

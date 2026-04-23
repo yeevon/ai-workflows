@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M13 Task 06: skill_install.md uvx option + pre-publish release-smoke run (2026-04-22)
+
+Adds the "Option A-bis — via `uvx` (no clone required)" sub-section to
+`design_docs/phases/milestone_9_skill/skill_install.md §2` and logs the
+T06 pre-publish `scripts/release_smoke.sh` run against `main` HEAD
+`8f1fd8e` in `release_runbook.md §5`. Post-T06, a first-time user who
+has never cloned the repo can register `aiw-mcp` with Claude Code
+directly from PyPI via `claude mcp add ai-workflows --scope user --
+uvx --from ai-workflows aiw-mcp`.
+
+**Files touched (`design_branch` only):**
+
+- `design_docs/phases/milestone_9_skill/skill_install.md` — §2
+  rewritten with Option A (clone-based, contributors) + Option A-bis
+  (uvx, no clone required) sub-headings; §3 intro grows a
+  one-sentence skill-disk-requirement note.
+- `design_docs/phases/milestone_13_v0_release/release_runbook.md` — new
+  §5 "Release smoke invocation log" with the T06 entry (SHA `8f1fd8e`,
+  branch `main`, all six stages green, stage 6 intentionally skipped).
+- `design_docs/phases/milestone_13_v0_release/task_06_skill_uvx_release_smoke.md`
+  — spec drafted at T06 kickoff.
+- `design_docs/phases/milestone_13_v0_release/issues/task_06_issue.md`
+  — audit file.
+- `CHANGELOG.md` — this entry.
+
+**Release-smoke outcome:** 6/6 stages green from clean `main` working
+tree; hermetic path (stages 1–5) exercised; live-provider stage 6
+deliberately skipped (`AIW_E2E` unset) — T07 owns the post-publish
+live round-trip. Pre-T07 "last known good" reference recorded in
+`release_runbook.md §5`.
+
+**Not touched:** `ai_workflows/` (no runtime change); `pyproject.toml`
+(no dep); `main` branch (skill_install.md is design_branch-only;
+README.md `## MCP server` on `main` already carries the `uvx --from
+ai-workflows aiw-mcp` command form from T04 so no cherry-pick is
+needed).
+
+**ACs satisfied (spec §Acceptance Criteria):** AC-1 through AC-12.
+
 ### Changed — M13 Task 05: branch split — `design_branch` mirror entry (2026-04-22)
 
 Mirror of the `main` T05 CHANGELOG block — the branch-split itself
