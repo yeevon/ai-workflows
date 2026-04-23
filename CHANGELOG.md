@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M13 Task 07: `[0.1.0]` CHANGELOG block + first PyPI publish — `design_branch` mirror entry (2026-04-22)
+
+`design_branch`-side footprint for the T07 release commit pair. The user-
+facing `## [0.1.0] — 2026-04-22` block lands below (byte-identical on both
+branches for the `### Added` inventory); on `main` the block directly
+replaces the free-standing M13 T05 + T06 blocks under `[Unreleased]` (user-
+facing release notes do not carry builder-mode audit trail). On
+`design_branch` the free-standing T01–T06 entries are preserved intact —
+this mirror entry only records that the T07 work happened, not what it
+absorbed.
+
+**Files touched (`design_branch` only, pre-publish):**
+
+- `CHANGELOG.md` — this mirror entry under `[Unreleased]` + the new
+  `## [0.1.0] — 2026-04-22` block (body per T07 spec Deliverable 1).
+- `design_docs/phases/milestone_13_v0_release/task_07_changelog_publish.md`
+  — T07 spec (drafted 2026-04-22 at T06 close).
+- `design_docs/phases/milestone_13_v0_release/issues/task_07_issue.md`
+  — pre-publish audit file. AC-1 through AC-6, AC-10, AC-11 graded at
+  this commit; AC-7 (PyPI upload), AC-8 (post-publish live smoke), AC-9
+  (`### Published` footer stamping) marked `⏳ pending-publish`.
+- `design_docs/phases/milestone_13_v0_release/release_runbook.md` — §5
+  gains a second smoke entry for the T07 pre-publish re-run of
+  `scripts/release_smoke.sh` (distinct from the T06 entry at SHA
+  `8f1fd8e`; T07 re-runs the smoke against the CHANGELOG commit on
+  `main` to catch any `pyproject.toml` / wheel-build regression that
+  the CHANGELOG commit itself might have introduced).
+
+**Post-publish amendment (cherry-picked from `main`):** the `### Published`
+footer of the `[0.1.0]` block gets the four captured values stamped in
+(pypi.org URL, wheel filename, SHA256 digest, publish-side commit SHA).
+Cherry-pick is clean because both branches carry the block byte-identical
+pre-publish.
+
+**Not touched on `design_branch`:** `ai_workflows/` (no runtime change),
+`pyproject.toml` (version already `0.1.0` post-T01), `tests/`, `migrations/`,
+`evals/`, `.claude/skills/`.
+
 ### Changed — M13 Task 06: skill_install.md uvx option + pre-publish release-smoke run (2026-04-22)
 
 Adds the "Option A-bis — via `uvx` (no clone required)" sub-section to
@@ -397,6 +435,67 @@ under wheel layout — no code change needed), AC-5 (both tests land
 green), AC-6 (no dependency change, no version bump), AC-7 (no diff
 under `ai_workflows/workflows/` / `mcp/` / `graph/`), AC-8 (gates
 green), AC-9 (this entry).
+
+## [0.1.0] — 2026-04-22
+
+First public release. Ships the packaged runtime + CLI + MCP surface that
+milestones M1–M9 built, plus M11's gate-review projection and M14's
+streamable-HTTP transport which are preconditions for a usable first-install
+experience.
+
+### Added
+
+- **Four-layer package** (`ai_workflows/`) — `primitives` (storage, cost,
+  tiers, providers, retry, structured logging), `graph` (LangGraph adapters:
+  `TieredNode`, `ValidatorNode`, `HumanGate`, `CostTrackingCallback`,
+  `RetryingEdge`, SQLite checkpointer), `workflows` (the `planner` and
+  `slice_refactor` `StateGraph`s), and the two user-facing surfaces: `cli`
+  (`aiw run`, `aiw resume`, `aiw list-runs`, `aiw version`) and `mcp`
+  (`aiw-mcp` with four MCP tools: `run_workflow`, `resume_run`,
+  `list_runs`, `cancel_run`). Import-linter contract enforces the layer
+  direction.
+- **Provider tiering** — Gemini Flash (orchestrator / implementer /
+  `gemini_flash` tiers via `GEMINI_API_KEY` + LiteLLM), Qwen2.5-Coder via
+  Ollama (`local_coder` tier), Claude Code OAuth subprocess (`planner-synth`
+  tier). No Anthropic API (KDR-003).
+- **Ollama hardening** — circuit breaker + three-bucket retry taxonomy
+  (transient / retriable / fatal) + fallback-gate pause on tier
+  unavailability (M8).
+- **Claude Code skill** — `.claude/skills/ai-workflows/` ships a
+  first-class skill the Claude Code IDE auto-discovers. M11 T01 added the
+  plan + gate_context projection at the plan-review pause so operators
+  receive a reviewable artefact (not `plan: null`).
+- **MCP surfaces** — stdio (Claude Code / Cursor / Zed) via
+  `claude mcp add ai-workflows --scope user -- uvx --from ai-workflows
+  aiw-mcp`; streamable-HTTP (Astro / browser-origin consumers) via
+  `aiw-mcp --transport http --host 127.0.0.1 --port 8000`. Identical
+  schema across transports (FastMCP + pydantic).
+- **Install paths** — `uvx --from ai-workflows aiw run planner …` for
+  one-shot invocations; `uv tool install ai-workflows` for persistent
+  installs; `git clone` for contributors.
+- **Documentation** — user-facing `docs/architecture.md`,
+  `docs/writing-a-workflow.md`, and `docs/writing-a-graph-primitive.md`
+  cover the four-layer model, authoring a new workflow, and authoring a
+  new graph primitive respectively. `README.md` ships a trimmed three-
+  paragraph overview + Install section + Getting started pointer.
+- **Storage** — SQLite via `yoyo-migrations` (`migrations/001_initial.sql`,
+  `migrations/002_reconciliation.sql`). Migrations are bundled in the
+  wheel via `[tool.hatch.build.targets.wheel.force-include]` (T01).
+- **Branch model** — `main` is the user-facing release branch; the
+  builder/auditor workflow (`design_docs/`, `CLAUDE.md`,
+  `.claude/commands/`) lives on `design_branch`. Contributing guide
+  at `.github/CONTRIBUTING.md`.
+
+### Published
+
+- **PyPI:** <https://pypi.org/project/ai-workflows/0.1.0/>
+- **Wheel:** `ai_workflows-0.1.0-py3-none-any.whl`
+- **SHA256:** `<filled-in-post-publish>`
+- **Publish-side commit:** `<filled-in-post-publish>` (the commit on
+  `main` that produced the wheel `uv publish` uploaded).
+- **Pre-publish release-smoke:** `scripts/release_smoke.sh` green from
+  `main` at `8f1fd8e` (T06 close-out) and from the T07 publish-side
+  commit itself (logged in `release_runbook.md §5`).
 
 ## [M14 MCP HTTP Transport] - 2026-04-22
 
