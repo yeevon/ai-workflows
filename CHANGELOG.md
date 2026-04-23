@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M13 Task 05: branch split — `design_branch` mirror entry (2026-04-22)
+
+Mirror of the `main` T05 CHANGELOG block — the branch-split itself
+landed on `main` as commit `8f1fd8e`. This entry records the
+`design_branch`-side footprint so audit trails exist on both branches.
+
+**On `design_branch` (this commit):**
+
+- New: `design_docs/phases/milestone_13_v0_release/task_05_branch_split.md`
+  (spec — landed in predecessor commit `4541372`).
+- New: `design_docs/phases/milestone_13_v0_release/issues/task_05_issue.md`
+  (audit file).
+- New: `.github/CONTRIBUTING.md` — cherry-picked from `main` so both
+  branches carry the one-paragraph design-branch pointer.
+- New: `tests/test_main_branch_shape.py` — cherry-picked from `main`
+  for cross-branch byte-identical test surface (the `AIW_BRANCH=design`
+  inversion makes it green here too).
+- Edited: `tests/test_scaffolding.py` — three tests now gated on
+  `AIW_BRANCH=design` (they read `design_docs/` content that does not
+  ship on `main`); ADR-metadata assertion extracted to a new
+  `test_adr_0001_metadata_on_design_branch` function so the runtime-
+  invariant half of `test_workflow_hash_module_is_retired_per_adr_0001`
+  still runs on both branches.
+- Edited: `CHANGELOG.md` — this mirror entry under `## [Unreleased]`.
+
+**Not touched on `design_branch`:** `design_docs/` (kept in full —
+this is the builder branch), `CLAUDE.md`, `.claude/commands/`,
+`tests/skill/`, `ai_workflows/`, `migrations/`, `evals/`,
+`.claude/skills/`.
+
+**Gates green on `design_branch`** (`AIW_BRANCH=design uv run pytest`):
+623 passed + 6 skipped; `uv run lint-imports` → 4 kept, 0 broken;
+`uv run ruff check` → clean.
+
+**`main` commit reference:** `8f1fd8e M13 T05 — branch split: user-facing release slice on main (KDR-002)`.
+See the full T05 block on `main:CHANGELOG.md` under `## [Unreleased]`
+for the deletion + adoption details.
+
 ### Changed — M13 Task 04: trim root `README.md` to user-facing intro + shape test (2026-04-22)
 
 Closes M13 exit criteria §4 (root README rewritten to user-facing

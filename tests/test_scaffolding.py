@@ -19,6 +19,7 @@ tasks (M2 onward).
 from __future__ import annotations
 
 import importlib
+import os
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,11 @@ import pytest
 from typer.testing import CliRunner
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# M13 T05 branch-split gate. ``design_docs/`` does not ship on ``main``;
+# tests that assert its contents skip on ``main`` and run on
+# ``design_branch``, signalled by ``AIW_BRANCH=design``.
+_ON_DESIGN = os.environ.get("AIW_BRANCH", "main").lower() == "design"
 
 
 # ---------------------------------------------------------------------------
@@ -128,9 +134,12 @@ def test_scaffolding_file_exists(relative_path: str) -> None:
 def test_workflow_hash_module_is_retired_per_adr_0001() -> None:
     """M1 Task 10 / ADR-0001: the pre-pivot ``workflow_hash`` primitive is gone.
 
-    Pins three artefacts at once — the module, the test file, and the
-    ADR — so a future restore of any of the first two visibly collides
-    with the decision recorded in the third.
+    Runtime-scope invariant — valid on both branches. Pins the module
+    + test absence so a future restore visibly collides with ADR-0001.
+    The ADR file assertion moved to
+    ``test_adr_0001_metadata_on_design_branch`` (skipped on ``main``
+    per M13 T05 — ``design_docs/`` does not ship on the release
+    branch).
     """
     module_path = REPO_ROOT / "ai_workflows" / "primitives" / "workflow_hash.py"
     assert not module_path.exists(), (
@@ -143,15 +152,25 @@ def test_workflow_hash_module_is_retired_per_adr_0001() -> None:
         "tests/primitives/test_workflow_hash.py must stay deleted per ADR-0001."
     )
 
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("ai_workflows.primitives.workflow_hash")
+
+
+@pytest.mark.skipif(not _ON_DESIGN, reason="ADR files live under design_docs/ (M13 T05)")
+def test_adr_0001_metadata_on_design_branch() -> None:
+    """ADR-0001 file metadata — design_branch only.
+
+    Pins status + outcome + KDR citation on the ADR itself. The
+    runtime-absence half of this assertion is in
+    ``test_workflow_hash_module_is_retired_per_adr_0001`` and runs
+    on both branches.
+    """
     adr_path = REPO_ROOT / "design_docs" / "adr" / "0001_workflow_hash.md"
     assert adr_path.is_file(), "ADR-0001 must exist at design_docs/adr/0001_workflow_hash.md."
     adr_text = adr_path.read_text(encoding="utf-8")
     assert "Accepted" in adr_text, "ADR-0001 must declare its status."
     assert "Option B" in adr_text, "ADR-0001 must name the Remove outcome."
     assert "KDR-009" in adr_text, "ADR-0001 must cite KDR-009 per the task spec."
-
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("ai_workflows.primitives.workflow_hash")
 
 
 def test_pyproject_declares_required_dependencies() -> None:
@@ -346,8 +365,13 @@ def _split_dep_name(spec: str) -> str:
 # reversion of any artefact visibly fails here.
 
 
+@pytest.mark.skipif(not _ON_DESIGN, reason="milestone READMEs live under design_docs/ (M13 T05)")
 def test_milestone_1_readme_marked_complete() -> None:
-    """M1 Task 13 AC-6: milestone README status line reads ✅ Complete."""
+    """M1 Task 13 AC-6: milestone README status line reads ✅ Complete.
+
+    Design_branch-only. ``design_docs/phases/milestone_1_reconciliation/
+    README.md`` does not ship on ``main`` post-M13 T05.
+    """
     readme = (
         REPO_ROOT
         / "design_docs"
@@ -364,8 +388,13 @@ def test_milestone_1_readme_marked_complete() -> None:
     )
 
 
+@pytest.mark.skipif(not _ON_DESIGN, reason="roadmap lives under design_docs/ (M13 T05)")
 def test_roadmap_m1_row_marked_complete() -> None:
-    """M1 Task 13 AC-6: roadmap M1 row reads ✅ complete."""
+    """M1 Task 13 AC-6: roadmap M1 row reads ✅ complete.
+
+    Design_branch-only. ``design_docs/roadmap.md`` does not ship on
+    ``main`` post-M13 T05.
+    """
     roadmap = REPO_ROOT / "design_docs" / "roadmap.md"
     text = roadmap.read_text(encoding="utf-8")
     assert "✅ complete" in text, (
