@@ -1,5 +1,7 @@
 # ai-workflows
 
+A framework for building multi-step AI workflows that can plan, execute, validate, and recover from failures. Supports multiple models (Claude, Gemini, Ollama), human approval steps, and resumable runs with persistent state.
+
 A LangGraph-native workflow framework for solo developers. Orchestrates multi-step AI workflows — planning, execution, validation, human gates, resume — with durable state, multi-provider routing, and deterministic cost accounting across Gemini (via LiteLLM), Qwen (via Ollama), and Claude Code (via OAuth CLI subprocess).
 
 ## Status
