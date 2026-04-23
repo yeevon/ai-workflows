@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M13 Task 07: PyPI distribution renamed to `jmdl-ai-workflows` (2026-04-22)
+
+First `uv publish` against pypi.org returned `400 The name 'ai-workflows'
+is too similar to an existing project.` — PyPI's similarity check is
+stricter than the `/pypi/<name>/json` 404 lookup recorded at T02 close.
+No artefact was uploaded (reject came before byte transfer). Renamed the
+sdist/wheel distribution name to `jmdl-ai-workflows` (author's initials
+prefix). **Unchanged:** Python module name `ai_workflows`, entry points
+`aiw` + `aiw-mcp`, MCP server name `ai-workflows` in `claude mcp add`,
+GitHub repo URL `yeevon/ai-workflows`, storage conventions under
+`~/.ai-workflows/`.
+
+**Files touched (both branches, cherry-pick):**
+
+- `pyproject.toml` — `name = "jmdl-ai-workflows"`.
+- `README.md` — install + MCP `uvx --from` examples.
+- `CHANGELOG.md [0.1.0]` — MCP-surfaces bullet, install-paths bullet,
+  `### Published` footer PyPI URL + wheel filename.
+- `docs/writing-a-workflow.md:9` — install snippet.
+- `scripts/release_smoke.sh`, `tests/test_wheel_contents.py` — loosen
+  wheel glob to `*.whl` (one-wheel assertion preserved).
+- `uv.lock` — regenerated.
+
+**`design_branch`-only:**
+
+- `design_docs/phases/milestone_9_skill/skill_install.md` — `uvx --from
+  jmdl-ai-workflows` examples.
+- `design_docs/phases/milestone_13_v0_release/release_runbook.md` — §1
+  scope wording + §5 T07 smoke-log entry.
+- `design_docs/phases/milestone_13_v0_release/task_07_changelog_publish.md`
+  — new "Rename addendum (2026-04-22)" section above Deliverables;
+  `### Published` footer placeholder URL updated.
+- `design_docs/phases/milestone_13_v0_release/issues/task_07_issue.md`
+  — audit file amendment documenting the 400 reject + rename.
+
+**Verified pre-publish:** `release_smoke.sh` green against renamed wheel
+(`jmdl_ai_workflows-0.1.0-py3-none-any.whl`, 157723 bytes, SHA256
+`1087075fb90d3ae9e760366620f118e37eb4325264cc1c96133c1acc1def6fa8`);
+`uv run pytest` → 610 passed, 9 skipped; `uv run lint-imports` → 4
+contracts kept; `uv run ruff check` → clean.
+
 ### Added — M13 Task 07: `[0.1.0]` CHANGELOG block + first PyPI publish — `design_branch` mirror entry (2026-04-22)
 
 `design_branch`-side footprint for the T07 release commit pair. The user-

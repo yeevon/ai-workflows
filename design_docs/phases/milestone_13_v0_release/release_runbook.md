@@ -1,6 +1,6 @@
 # M13 Release Runbook — builder-only
 
-**Scope:** Manual gate for every `uv publish` of `ai-workflows`. Landed at M13 T02; invoked from M13 T07 before the first 0.1.0 upload and from every subsequent patch-release thereafter.
+**Scope:** Manual gate for every `uv publish` of `jmdl-ai-workflows`. Landed at M13 T02; invoked from M13 T07 before the first 0.1.0 upload and from every subsequent patch-release thereafter. (Pre-rename references to `ai-workflows` in historical task specs + audit files reflect the original PyPI name claim from T02; the M13 T07 upload was rejected on similarity and renamed to `jmdl-ai-workflows` — see the CHANGELOG `## [Unreleased]` entry for the rename record.)
 
 **Branch residence:** `design` branch only. M13 T05 prunes this file from `main` — a PyPI user landing on the `main` branch should not see builder-mode runbooks.
 
@@ -72,7 +72,7 @@ What this costs:
 What this does **not** exercise:
 
 - The Claude Code OAuth subprocess driver (planner's synth phase). A two-phase planner run that touches Opus would add cost and latency; the smoke deliberately stops at the first gate to keep the live pass cheap.
-- The MCP surface. `aiw-mcp` is help-smoked at stage 4 but not driven by a real client. The T07 post-publish validation (`uvx --from ai-workflows==0.1.0 aiw version`) is where end-to-end PyPI reachability is proven, not here.
+- The MCP surface. `aiw-mcp` is help-smoked at stage 4 but not driven by a real client. The T07 post-publish validation (`uvx --from jmdl-ai-workflows==0.1.0 aiw version`) is where end-to-end PyPI reachability is proven, not here.
 
 Never set `AIW_E2E=1` without `GEMINI_API_KEY` — the script checks both; the absence of either skips the stage cleanly without failing the smoke.
 
@@ -86,3 +86,10 @@ A rolling log of every pre-publish smoke run. Keep chronological — most recent
 - **Branch:** main.
 - **Result:** ✅ PASS. All six stage headers emitted; tail line `=== OK — release smoke passed ===`. Stage 6 (real-provider planner) cleanly skipped — `AIW_E2E=1` intentionally unset per T06 spec (T07 owns the post-publish live round-trip).
 - **Notes:** First pre-publish smoke after the T05 branch split. `main`-only test invariants held: `tests/test_main_branch_shape.py::test_design_docs_absence_on_main` passes because no `design_docs/`, `CLAUDE.md`, `.claude/commands/`, `tests/skill/`, or `scripts/spikes/` path resolves on `main`. Wheel build included the bundled `migrations/001_initial.sql` + `migrations/002_reconciliation.sql` via the T01 `[tool.hatch.build.targets.wheel.force-include]` hook; stage 5 `aiw list-runs` against a fresh `AIW_STORAGE_DB` applied them without error. Built wheel artefact: `ai_workflows-0.1.0-py3-none-any.whl` (discarded after the smoke's tempdir cleanup — T07 will rebuild from the same `main` HEAD for the actual `uv publish`). No regressions; T07 is unblocked.
+
+### 2026-04-22 — M13 T07 post-rename pre-publish smoke
+
+- **SHA:** `56cedd5` on `main` (rename commit) / `146c9fe` on `design_branch` (cherry-picked rename).
+- **Branch:** main.
+- **Result:** ✅ PASS. All six stage headers emitted; tail line `=== OK — release smoke passed ===`. Stage 6 cleanly skipped.
+- **Notes:** First smoke after the PyPI similarity-check rejection. `pyproject.toml [project].name` renamed from `ai-workflows` to `jmdl-ai-workflows`; wheel filename shifted to `jmdl_ai_workflows-0.1.0-py3-none-any.whl` (underscore-normalized PyPI convention). Loosened the wheel-discovery glob in `scripts/release_smoke.sh` (line 51) and `tests/test_wheel_contents.py` (line 64) from the old `ai_workflows-*.whl` literal to `*.whl` — one-wheel assertion preserved, just name-agnostic. Wheel SHA256: `1087075fb90d3ae9e760366620f118e37eb4325264cc1c96133c1acc1def6fa8`. Wheel size: 157,723 bytes. Full gate green: `uv run pytest` → 610 passed, 9 skipped; `uv run lint-imports` → 4 contracts kept; `uv run ruff check` → clean. T07 `uv publish` retry is unblocked.

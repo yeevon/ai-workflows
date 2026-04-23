@@ -3,7 +3,7 @@
 **Source task:** [../task_07_changelog_publish.md](../task_07_changelog_publish.md)
 **Audited on:** 2026-04-22 (pre-publish audit; close-out amendment to follow per §Execution step 15)
 **Audit scope:** At this pre-publish pass, scope covers the `design_branch`-side work that lands in the step-6 commit — `CHANGELOG.md` `[0.1.0]` block draft + T07 `[Unreleased]` mirror entry, T07 spec file, this issue file. ACs verifiable on `design_branch` alone are graded now; `main`-side work + the destructive `uv publish` + the post-publish live smoke + the `### Published` footer stamping are deferred to the post-publish audit amendment and marked `⏳ pending-<step>` below.
-**Status:** 🟡 PARTIAL — pre-publish scope clean (AC-3 partial, AC-4, AC-10 design-side, AC-11 design-side all ✅). AC-1, AC-2, AC-5, AC-6, AC-10 main-side, AC-11 main-side marked `⏳ pending-step-8/9`. AC-7, AC-8, AC-9 marked `⏳ pending-publish`. Ready for operator approval at spec §Execution step 5.
+**Status:** 🟡 PARTIAL — pre-publish scope clean; first `uv publish` attempt at 2026-04-22 rejected with `400 The name 'ai-workflows' is too similar to an existing project.` Distribution renamed to `jmdl-ai-workflows` (`pyproject.toml` + install docs + CHANGELOG block on both branches; see spec §Rename addendum and the `[Unreleased]` entry on `CHANGELOG.md`). Pre-publish re-smoke green at `main` `56cedd5` / `design_branch` `146c9fe`. AC-7, AC-8, AC-9 remain `⏳ pending-publish` (publish retry pending operator approval).
 
 ---
 

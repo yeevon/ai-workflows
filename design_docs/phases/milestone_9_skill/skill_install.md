@@ -36,10 +36,10 @@ Verify with `claude mcp list` before continuing. This is the right path when you
 ### Option A-bis — via `uvx` (no clone required)
 
 ```bash
-claude mcp add ai-workflows --scope user -- uvx --from ai-workflows aiw-mcp
+claude mcp add ai-workflows --scope user -- uvx --from jmdl-ai-workflows aiw-mcp
 ```
 
-No repo clone needed — `uvx` fetches the latest `ai-workflows` wheel into its cache on first invocation and every Claude Code session reuses it. `GEMINI_API_KEY` still needs to be exported in the shell that launches Claude Code (see §1).
+No repo clone needed — `uvx` fetches the latest `jmdl-ai-workflows` wheel into its cache on first invocation and every Claude Code session reuses it. `GEMINI_API_KEY` still needs to be exported in the shell that launches Claude Code (see §1). (The MCP server name `ai-workflows` in `claude mcp add` is a user-local identifier and is independent of the PyPI distribution name.)
 
 ## 3. Install the skill
 

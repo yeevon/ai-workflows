@@ -1,7 +1,37 @@
 # Task 07 — `CHANGELOG.md [0.1.0]` section + first PyPI publish (manual)
 
-**Status:** 📝 Planned (drafted 2026-04-22 after T06 audit closed clean and commit `3e3f6c1` landed on `design_branch`; `main` still at post-T05 HEAD `8f1fd8e`).
+**Status:** 🚧 In progress — pre-publish work complete; first `uv publish` rejected 2026-04-22 with `400 The name 'ai-workflows' is too similar to an existing project.` Distribution renamed to `jmdl-ai-workflows` (see §Rename addendum below); publish retry pending.
 **Grounding:** [milestone README §Exit-criteria-10 + §Exit-criteria-11](README.md) · [task_06 close](issues/task_06_issue.md) · [release_runbook.md](release_runbook.md) · [scripts/release_smoke.sh](../../../scripts/release_smoke.sh) · [architecture.md §9 KDR-002 (surface portability)](../../architecture.md) · [architecture.md §9 KDR-008 (MCP schema public contract)](../../architecture.md) · [pyproject.toml](../../../pyproject.toml).
+
+## Rename addendum (2026-04-22)
+
+T07's first `uv publish` attempt against real pypi.org returned:
+
+```text
+400 The name 'ai-workflows' is too similar to an existing project.
+```
+
+No byte was uploaded — pypi.org rejects at metadata-parse before the wheel transfer, so the `0.1.0` slot on the rejected name remains theoretically available (moot for our purposes — we moved off the name). The T02 pre-publish name-availability check (`curl /pypi/ai-workflows/json` → 404) proves exact-name availability but does **not** exercise pypi.org's stricter confusable-name check, which uses normalized-name collision against the full existing-project set. This is the lesson for any future new-name claim: the 404 check alone is necessary but not sufficient.
+
+**Resolution.** Renamed `[project].name` from `ai-workflows` to `jmdl-ai-workflows` (author's initials-prefixed; `jmdl-ai-workflows/json` returned 404 at 2026-04-22 21:44 UTC). What changed:
+
+- `pyproject.toml [project].name = "jmdl-ai-workflows"`.
+- Every user-facing install snippet on `main` + `design_branch` — `uvx --from jmdl-ai-workflows`, `uv tool install jmdl-ai-workflows`.
+- CHANGELOG `[0.1.0]` block's `### Published` footer — `https://pypi.org/project/jmdl-ai-workflows/0.1.0/` + wheel filename `jmdl_ai_workflows-0.1.0-py3-none-any.whl`.
+- Wheel-discovery glob in `scripts/release_smoke.sh:51` + `tests/test_wheel_contents.py:64` loosened from the literal `ai_workflows-*.whl` to `*.whl`; one-wheel assertion preserved.
+- `uv.lock` regenerated.
+
+What did **not** change:
+
+- Python module name (`ai_workflows` — import paths unchanged; LangGraph adapters, primitives, tests keep importing `from ai_workflows.X`).
+- Entry points (`aiw`, `aiw-mcp` unchanged — PyPI distribution name is independent of console-script names).
+- MCP server name in `claude mcp add ai-workflows --scope user -- ...` (user-local identifier; unrelated to PyPI).
+- GitHub repository URL (`github.com/yeevon/ai-workflows`).
+- Storage conventions (`~/.ai-workflows/` user-data directory).
+
+**References to read as post-rename.** Every `ai-workflows` occurrence below in the §Deliverables / §Execution protocol / §Acceptance criteria sections that is either (a) a `uvx --from …` / `uv tool install …` install snippet or (b) a `pypi.org/project/…/` URL should be read as `jmdl-ai-workflows` / `jmdl-ai-workflows` respectively. Other `ai-workflows` references (module name, MCP server name, repo URL, `.claude/skills/ai-workflows/` path) are unaffected.
+
+**Status of the publish retry.** Pre-publish re-smoke against the rename commit pair (`main` → `56cedd5`, `design_branch` → `146c9fe`) green; full gate passes (`uv run pytest` → 610 passed, 9 skipped; `uv run lint-imports` → 4 contracts kept; `uv run ruff check` → clean). `uv publish jmdl_ai_workflows-0.1.0-py3-none-any.whl` is the next irreversible action.
 
 ## What to Build
 
