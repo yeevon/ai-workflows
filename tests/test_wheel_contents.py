@@ -61,7 +61,7 @@ def built_wheel(tmp_path_factory: pytest.TempPathFactory) -> Path:
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
 
-    wheels = list(out_dir.glob("ai_workflows-*.whl"))
+    wheels = list(out_dir.glob("*.whl"))
     assert len(wheels) == 1, f"expected exactly one wheel, got {wheels}"
     return wheels[0]
 

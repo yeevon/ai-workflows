@@ -6,7 +6,7 @@ If you have not read the [architecture overview](architecture.md) yet, start the
 
 ## Prerequisites
 
-- `ai-workflows` installed (`uv tool install ai-workflows` for a persistent install, or working from a clone with `uv sync`).
+- `ai-workflows` installed (`uv tool install jmdl-ai-workflows` for a persistent install, or working from a clone with `uv sync`).
 - `GEMINI_API_KEY` exported if your workflow uses the Gemini-backed tiers (`orchestrator`, `implementer`, `gemini_flash`).
 - `ollama serve` reachable at `http://127.0.0.1:11434` if your workflow uses the `local_coder` tier.
 - `claude` CLI on `PATH` (logged in via `claude login`) if your workflow uses the `claude_code` tier.
