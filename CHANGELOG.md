@@ -531,12 +531,18 @@ experience.
 
 - **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.1.0/>
 - **Wheel:** `jmdl_ai_workflows-0.1.0-py3-none-any.whl`
-- **SHA256:** `<filled-in-post-publish>`
-- **Publish-side commit:** `<filled-in-post-publish>` (the commit on
-  `main` that produced the wheel `uv publish` uploaded).
+- **SHA256:** `1087075fb90d3ae9e760366620f118e37eb4325264cc1c96133c1acc1def6fa8`
+- **Publish-side commit:** `56cedd5` (the commit on `main` that produced
+  the wheel `uv publish` uploaded — the distribution-rename commit after
+  the original `ai-workflows` name hit pypi.org's similarity-check reject).
 - **Pre-publish release-smoke:** `scripts/release_smoke.sh` green from
   `main` at `8f1fd8e` (T06 close-out) and from the T07 publish-side
-  commit itself (logged in `release_runbook.md §5`).
+  commit `56cedd5` itself (logged in `release_runbook.md §5`,
+  `design_branch` only).
+- **Post-publish live smoke:** `uvx --refresh --from
+  jmdl-ai-workflows==0.1.0 aiw version` from `/tmp` prints `0.1.0`;
+  `uv` resolved 122 packages and the `aiw` entry point ran successfully
+  from a fresh uvx cache against real pypi.org.
 
 ## [M14 MCP HTTP Transport] - 2026-04-22
 
