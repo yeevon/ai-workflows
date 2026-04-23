@@ -17,6 +17,17 @@ The package is split into four strictly layered sub-packages per
 Layer boundaries are enforced at lint time by ``import-linter``
 contracts declared in ``pyproject.toml`` (M1 Task 12 installs the
 four-layer shape).
+
+0.1.2 patch: ``__version__`` below is the **single source of truth**
+for the package's version string. ``pyproject.toml`` declares
+``dynamic = ["version"]`` and ``[tool.hatch.version]`` points at this
+module — hatchling parses the ``__version__`` assignment at build
+time and writes it into the wheel's metadata. Consumers that need
+the version at runtime can read either ``ai_workflows.__version__``
+(this dunder, direct) or
+``importlib.metadata.version("jmdl-ai-workflows")`` (the installed
+wheel's metadata); both resolve to the same string. A regression
+test pins that invariant.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"

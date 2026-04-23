@@ -4,7 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jmdl-ai-workflows"
-version = "0.1.1"
+# 0.1.2 patch: version is declared dynamic so hatchling reads the single
+# source of truth from ``ai_workflows/__init__.py:__version__``. Prevents
+# the 0.1.1 regression where the hardcoded literal here drifted out of
+# sync with the Python dunder and the shipped wheel reported the wrong
+# ``aiw version``. ``tests/test_version_dunder.py`` pins the invariant
+# that the two never diverge again.
+dynamic = ["version"]
 description = "Composable AI workflow framework built on LangGraph + MCP."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -54,6 +60,15 @@ dev = [
 [project.scripts]
 aiw = "ai_workflows.cli:app"
 aiw-mcp = "ai_workflows.mcp.__main__:main"
+
+# 0.1.2 patch: hatchling's built-in regex version source parses the
+# ``__version__ = "..."`` assignment from ``ai_workflows/__init__.py``
+# at build time and writes it into the wheel's metadata. Single source
+# of truth — edit the Python dunder, rebuild, publish. The old
+# ``[project] version = "..."`` literal was dropped at 0.1.2 in favour
+# of ``dynamic = ["version"]`` above.
+[tool.hatch.version]
+path = "ai_workflows/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ai_workflows"]

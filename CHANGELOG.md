@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-04-23
+
+Fix-forward for a version-reporting regression in 0.1.1. The
+dotenv auto-load behaviour 0.1.1 shipped is functionally correct and
+present in the 0.1.2 wheel; this release only corrects the
+package's self-reported version string and closes the possibility of
+the dunder drifting from `pyproject.toml` again.
+
+### Fixed
+
+- **`aiw version` prints the correct version after install.** 0.1.1's
+  release-prep commit bumped `pyproject.toml` from `0.1.0` to `0.1.1`
+  but forgot to bump the literal `ai_workflows/__init__.py:__version__`,
+  so a `uvx`-installed 0.1.1 reported `0.1.0` via `aiw version` and
+  `ai_workflows.__version__`. The wheel metadata (what PyPI / `uv tool
+  list` show) was correct; only the in-Python dunder drifted. PyPI
+  does not permit re-uploading `0.1.1`, so this fix rides forward in
+  `0.1.2`.
+
+### Changed
+
+- **Single source of truth for the package version.** The Python
+  dunder at `ai_workflows/__init__.py:__version__` is now
+  authoritative; `pyproject.toml` declares
+  `dynamic = ["version"]` and a `[tool.hatch.version]` section with
+  `path = "ai_workflows/__init__.py"`. Hatchling parses the Python
+  assignment at build time and stamps it into the wheel metadata.
+  Bumping the release version is now a single-line edit; the two
+  locations cannot diverge again.
+
+### Added
+
+- **`tests/test_version_dunder.py`** — two regression tests that pin
+  the new invariant: (1) `ai_workflows.__version__` equals
+  `importlib.metadata.version("jmdl-ai-workflows")`; (2) the dunder
+  is well-formed SemVer. Either side drifting away from the other
+  is a 0.1.2 regression.
+
+### Published
+
+<!-- stamped post-publish, same shape as the [0.1.0] block -->
+- **PyPI:** _pending_
+- **Wheel:** _pending_
+- **SHA256:** _pending_
+- **Publish-side commit:** _pending_
+- **Post-publish live smoke:** _pending_
+
 ## [0.1.1] — 2026-04-23
 
 First-run onboarding patch. 0.1.0 shipped without end-user setup guidance
