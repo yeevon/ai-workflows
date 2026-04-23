@@ -3,7 +3,7 @@
 **Source task:** [../task_07_changelog_publish.md](../task_07_changelog_publish.md)
 **Audited on:** 2026-04-22 (pre-publish audit; close-out amendment to follow per §Execution step 15)
 **Audit scope:** At this pre-publish pass, scope covers the `design_branch`-side work that lands in the step-6 commit — `CHANGELOG.md` `[0.1.0]` block draft + T07 `[Unreleased]` mirror entry, T07 spec file, this issue file. ACs verifiable on `design_branch` alone are graded now; `main`-side work + the destructive `uv publish` + the post-publish live smoke + the `### Published` footer stamping are deferred to the post-publish audit amendment and marked `⏳ pending-<step>` below.
-**Status:** 🟡 PARTIAL — pre-publish scope clean; first `uv publish` attempt at 2026-04-22 rejected with `400 The name 'ai-workflows' is too similar to an existing project.` Distribution renamed to `jmdl-ai-workflows` (`pyproject.toml` + install docs + CHANGELOG block on both branches; see spec §Rename addendum and the `[Unreleased]` entry on `CHANGELOG.md`). Pre-publish re-smoke green at `main` `56cedd5` / `design_branch` `146c9fe`. AC-7, AC-8, AC-9 remain `⏳ pending-publish` (publish retry pending operator approval).
+**Status:** ✅ PASS — `jmdl-ai-workflows==0.1.0` is live on pypi.org (`https://pypi.org/project/jmdl-ai-workflows/0.1.0/`); post-publish `uvx --refresh --from jmdl-ai-workflows==0.1.0 aiw version` from `/tmp` prints `0.1.0` against a fresh uvx cache. All 11 ACs ✅. Rename footnote: first `uv publish` on 2026-04-22 was rejected with `400 The name 'ai-workflows' is too similar to an existing project.` Renamed to `jmdl-ai-workflows` (spec §Rename addendum; CHANGELOG `[Unreleased] ### Changed — M13 Task 07: PyPI distribution renamed…`). Zero HIGH findings; zero deferred-to-nice_to_have. Release-commits pair: `main:9fe1898`, `design_branch:2771580`.
 
 ---
 
@@ -22,21 +22,21 @@ Cross-referenced against [design_docs/architecture.md](../../../architecture.md)
 
 ---
 
-## Acceptance criteria grading (pre-publish pass)
+## Acceptance criteria grading (post-publish close-out)
 
 | AC | Grade | Evidence |
 | --- | --- | --- |
-| AC-1 | ⏳ pending-step-7 | `CHANGELOG.md` on `main` needs the cherry-picked `[0.1.0]` block. Not yet applied — spec §Execution step 7 lands it after the design-branch commit (step 6). Will be graded in the post-publish amendment. |
-| AC-2 | ⏳ pending-step-7 | `main`-side absorbs the free-standing T05 block into `[0.1.0]`. Same gate as AC-1. |
-| AC-3 | 🟡 partial-pass | `CHANGELOG.md` on `design_branch` has the `## [0.1.0] — 2026-04-22` block with the full `### Added` user-surface inventory per Deliverable 1 (verified: lines `<design-branch-line-N>`–`<N+M>` of the current working tree; see `git diff CHANGELOG.md`). The "byte-identical to main's block" half waits on step 7's cherry-pick — the pre-publish pass asserts the design-branch half; the post-publish amendment verifies the diff between branches is zero on the `[0.1.0]` block body. |
-| AC-4 | ✅ PASS | `CHANGELOG.md` on `design_branch` preserves the T06 + T05 free-standing entries under `## [Unreleased]` byte-identical (verified: the T06 entry block `### Changed — M13 Task 06 …` is present unchanged; T05 mirror block below it is intact). A new T07 design-branch mirror entry is now at the top of `[Unreleased]` above T06. |
-| AC-5 | ⏳ pending-step-9 | `scripts/release_smoke.sh` needs re-running from `main` at the T07 CHANGELOG commit. The T06 entry at SHA `8f1fd8e` is in place in `release_runbook.md §5`; the T07 entry gets appended in step 9. |
-| AC-6 | ⏳ pending-step-8 | `AIW_BRANCH=main uv run pytest tests/test_wheel_contents.py -v` needs running from `main` post-cherry-pick. Not yet applicable. |
-| AC-7 | ⏳ pending-publish | `uv publish` is the destructive step at §Execution step 11; gated on operator pause 2. |
-| AC-8 | ⏳ pending-publish | Post-publish live smoke at §Execution step 12. |
-| AC-9 | ⏳ pending-publish | `### Published` footer stamping at §Execution steps 13–14. |
-| AC-10 | 🟡 partial-pass | `design_branch` side green: `AIW_BRANCH=design uv run pytest` reports **623 passed, 6 skipped** (unchanged from T06 close baseline); `uv run lint-imports` 4/4 contracts kept; `uv run ruff check` clean. `main` side deferred to step 8. |
-| AC-11 | 🟡 partial-pass | `design_branch` post-T07-mirror diff scope is exactly: `CHANGELOG.md` (+`[0.1.0]` block + T07 mirror entry), `task_07_changelog_publish.md` (new spec), `task_07_issue.md` (this file). No `ai_workflows/` / `pyproject.toml` / test-tree edits on `design_branch` ✓. `main` scope verified in step 7+8+13. |
+| AC-1 | ✅ PASS | `CHANGELOG.md` on `main` carries the `## [0.1.0] — 2026-04-22` block with the full `### Added` inventory + `### Published` footer. Landed in three commits: `00968cc` (block created, T01-T05 builder entries absorbed), `56cedd5` (rename cherry-pick), `9fe1898` (footer stamped post-publish). |
+| AC-2 | ✅ PASS | `main`'s `[Unreleased]` was emptied of the T01-T05 per-task entries by `00968cc` — diff shows -391 / +60 on `CHANGELOG.md` for that commit. Only `[Unreleased]` + `[0.1.0]` + historical `[MNN …]` blocks remain on `main`. |
+| AC-3 | ✅ PASS | `design_branch` `[0.1.0]` block body is byte-identical to `main`'s on the `### Added` inventory. Diff check: `git show main:CHANGELOG.md` vs `git show design_branch:CHANGELOG.md` for the `[0.1.0]` block body produces zero diff lines on the `### Added` bullets (the `### Published` footer is also byte-identical post `2771580` cherry-pick). |
+| AC-4 | ✅ PASS | `CHANGELOG.md` on `design_branch` preserves the T01–T06 free-standing entries under `## [Unreleased]` byte-identical. T07 design-branch mirror entry + rename entry are above them. |
+| AC-5 | ✅ PASS | `scripts/release_smoke.sh` logged twice in `release_runbook.md §5`: 2026-04-22 T06 pre-publish at `main` `8f1fd8e` (original entry) + 2026-04-22 T07 post-rename pre-publish at `main` `56cedd5` / `design_branch` `146c9fe` (rename entry). Both green, all six stage headers emitted. |
+| AC-6 | ✅ PASS | Full gate green on both branches: `uv run pytest` → `main` 610 passed + 9 skipped; `design_branch` 623 passed + 6 skipped. `uv run lint-imports` → 4 contracts kept. `uv run ruff check` → clean. |
+| AC-7 | ✅ PASS | `uv publish dist/jmdl_ai_workflows-0.1.0-py3-none-any.whl` returned 200; `curl /pypi/jmdl-ai-workflows/0.1.0/json` returns 200. Project page at `https://pypi.org/project/jmdl-ai-workflows/0.1.0/` resolves. **Caveat:** first attempt under name `ai-workflows` returned 400 similarity-reject; rename to `jmdl-ai-workflows` documented in spec §Rename addendum. |
+| AC-8 | ✅ PASS | `cd /tmp && uvx --refresh --from jmdl-ai-workflows==0.1.0 aiw version` printed `0.1.0` (stdout). `uv` resolved 122 packages into a fresh cache against real pypi.org and the `aiw` entry point ran successfully. |
+| AC-9 | ✅ PASS | `### Published` footer on both branches carries: PyPI URL `https://pypi.org/project/jmdl-ai-workflows/0.1.0/`, wheel `jmdl_ai_workflows-0.1.0-py3-none-any.whl`, SHA256 `1087075fb90d3ae9e760366620f118e37eb4325264cc1c96133c1acc1def6fa8`, publish-side commit `56cedd5`, pre-publish smoke log reference, post-publish live-smoke line. Stamped by `main:9fe1898` / `design_branch:2771580` (cherry-pick). |
+| AC-10 | ✅ PASS | Gate green on both branches per AC-6; no runtime-code regression from the rename (pytest + lint-imports + ruff all green). |
+| AC-11 | ✅ PASS | Final diff scope: `main` touched `pyproject.toml`, `README.md`, `CHANGELOG.md`, `docs/writing-a-workflow.md`, `scripts/release_smoke.sh`, `tests/test_wheel_contents.py`, `uv.lock`. `design_branch` additionally touched `design_docs/phases/milestone_9_skill/skill_install.md`, `design_docs/phases/milestone_13_v0_release/release_runbook.md`, `design_docs/phases/milestone_13_v0_release/task_07_changelog_publish.md`, `design_docs/phases/milestone_13_v0_release/issues/task_07_issue.md`. No `ai_workflows/` runtime-code edits on either branch ✓. |
 
 **Carry-over from prior audits (none):** T06 audit closed with zero forward-deferrals; T07 spec §"Carry-over from prior audits" confirms.
 

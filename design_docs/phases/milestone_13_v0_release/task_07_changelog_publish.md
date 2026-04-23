@@ -1,6 +1,6 @@
 # Task 07 — `CHANGELOG.md [0.1.0]` section + first PyPI publish (manual)
 
-**Status:** 🚧 In progress — pre-publish work complete; first `uv publish` rejected 2026-04-22 with `400 The name 'ai-workflows' is too similar to an existing project.` Distribution renamed to `jmdl-ai-workflows` (see §Rename addendum below); publish retry pending.
+**Status:** ✅ Complete (2026-04-22) — `jmdl-ai-workflows==0.1.0` live on pypi.org; post-publish `uvx --refresh --from jmdl-ai-workflows==0.1.0 aiw version` from `/tmp` green. All 11 ACs ✅ per [issues/task_07_issue.md](issues/task_07_issue.md). Release-commits pair: `main:9fe1898`, `design_branch:2771580`. See §Rename addendum for the `ai-workflows` → `jmdl-ai-workflows` decision trail.
 **Grounding:** [milestone README §Exit-criteria-10 + §Exit-criteria-11](README.md) · [task_06 close](issues/task_06_issue.md) · [release_runbook.md](release_runbook.md) · [scripts/release_smoke.sh](../../../scripts/release_smoke.sh) · [architecture.md §9 KDR-002 (surface portability)](../../architecture.md) · [architecture.md §9 KDR-008 (MCP schema public contract)](../../architecture.md) · [pyproject.toml](../../../pyproject.toml).
 
 ## Rename addendum (2026-04-22)
