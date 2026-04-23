@@ -1,7 +1,38 @@
 # Milestone 13 — v0.1.0 release + PyPI packaging
 
-**Status:** 📝 Planned (drafted 2026-04-21).
+**Status:** ✅ Complete (2026-04-22).
 **Grounding:** [roadmap.md](../../roadmap.md) · [architecture.md §6](../../architecture.md) · [pyproject.toml](../../../pyproject.toml) · [M11 README](../milestone_11_gate_review/README.md) (precondition) · [M14 README](../milestone_14_mcp_http/README.md) (precondition).
+
+## Outcome
+
+M13 landed clean across eight tasks. `jmdl-ai-workflows==0.1.0` is live on pypi.org at <https://pypi.org/project/jmdl-ai-workflows/0.1.0/>; `uvx --refresh --from jmdl-ai-workflows==0.1.0 aiw version` from `/tmp` prints `0.1.0` against a fresh uvx cache. All 13 exit criteria satisfied.
+
+**Task summary.**
+
+- **T01 — pyproject polish + wheel-contents fix ([task_01](task_01_pyproject_polish.md), [audit](issues/task_01_issue.md)).** `authors`, `urls.*`, `classifiers`, `keywords` populated; `[tool.hatch.build.targets.wheel.force-include]` hook added so `migrations/` ships in the wheel (shipping-bug fix — first-run `yoyo` on any `uvx` install would have failed otherwise).
+- **T02 — PyPI name claim + clean-venv install smoke ([task_02](task_02_name_claim_release_smoke.md), [audit](issues/task_02_issue.md)).** `curl /pypi/ai-workflows/json` returned 404 (exact-name available); `scripts/release_smoke.sh` landed as the manual release gate with six hermetic stages + optional live-provider stage; `tests/test_wheel_contents.py` added as the hermetic regression guard for the `force-include` hook. **Caveat:** the exact-name 404 is necessary but not sufficient — PyPI's stricter confusable-name check rejected the upload at T07 (see T07 notes below).
+- **T03 — `docs/` populated ([task_03](task_03_populate_docs.md), [audit](issues/task_03_issue.md)).** User-facing `docs/architecture.md`, `docs/writing-a-workflow.md`, and renamed `docs/writing-a-graph-primitive.md` (was `writing-a-component.md` — pre-pivot vocabulary) rewritten against the current four-layer architecture; `tests/docs/test_docs_links.py` pins every relative link.
+- **T04 — root `README.md` trimmed ([task_04](task_04_readme_trim.md), [audit](issues/task_04_issue.md)).** Post-M9 ~15-bullet narrative collapsed to a three-paragraph user-facing intro; **Install** section added (`uvx` + `uv tool install`); `tests/docs/test_readme_shape.py` pins line-count cap + section presence + single-`design_docs/` link invariant.
+- **T05 — branch split ([task_05](task_05_branch_split.md), [audit](issues/task_05_issue.md)).** `design_branch` created from `main` tip; `design_docs/`, `CLAUDE.md`, `.claude/commands/`, `scripts/spikes/`, and the builder-mode `release_runbook.md` deleted from `main`; `.github/CONTRIBUTING.md` added to both branches; `tests/test_main_branch_shape.py` pins the branch-invariant (env-flag gated via `AIW_BRANCH=design`).
+- **T06 — `skill_install.md` uvx option + pre-publish release-smoke ([task_06](task_06_skill_uvx_release_smoke.md), [audit](issues/task_06_issue.md)).** Option A-bis sub-section added to `skill_install.md §2` with the `uvx --from … aiw-mcp` registration line; `release_runbook.md §5 "Release smoke invocation log"` added with the 2026-04-22 T06 pre-publish smoke entry at `main:8f1fd8e`.
+- **T07 — `CHANGELOG.md [0.1.0]` + first PyPI publish ([task_07](task_07_changelog_publish.md), [audit](issues/task_07_issue.md)).** `[0.1.0] — 2026-04-22` block on both branches; `### Added` inventory for the user-surface release narrative; **PyPI name rename** — first `uv publish` of `ai-workflows` rejected with `400 The name 'ai-workflows' is too similar to an existing project`; renamed distribution to `jmdl-ai-workflows` (author's initials prefix) across `pyproject.toml`, install docs, CHANGELOG block, and wheel-discovery globs (see [task_07 §Rename addendum](task_07_changelog_publish.md#rename-addendum-2026-04-22) for the full decision trail). Retry succeeded; post-publish `uvx --refresh --from jmdl-ai-workflows==0.1.0 aiw version` round-trip green.
+- **T08 — this close-out.** Milestone README Outcome, roadmap flip, CHANGELOG promote on `design_branch`, root README table flip on both branches. Zero runtime-code diff.
+
+**Release artefact.**
+
+- **PyPI URL:** <https://pypi.org/project/jmdl-ai-workflows/0.1.0/>
+- **Wheel:** `jmdl_ai_workflows-0.1.0-py3-none-any.whl` (157723 bytes).
+- **SHA256:** `1087075fb90d3ae9e760366620f118e37eb4325264cc1c96133c1acc1def6fa8`.
+- **Publish-side commit:** `main:56cedd5` (the rename commit that produced the uploaded wheel).
+- **Pre-T08 release tips:** `main:9fe1898` (CHANGELOG `### Published` footer stamped), `design_branch:6cd43e6` (T07 audit close-out).
+
+**Green-gate snapshot (2026-04-22, pre-T08):**
+
+- `uv run pytest` — `main` 610 passed + 9 skipped; `design_branch` 623 passed + 6 skipped. T07 baseline unchanged.
+- `uv run lint-imports` — 4 contracts kept, 0 broken on both branches (no new layer contract at M13).
+- `uv run ruff check` — clean on both branches.
+
+**PyPI token hygiene.** The first `uv publish` used an account-wide token sourced from `.env`. Post-publish, the operator rotated to a project-scoped `jmdl-ai-workflows` token and deleted the account-wide one (recorded in-session; not in this file's audit trail).
 
 ## Why this milestone exists
 
@@ -110,11 +141,10 @@ Per-task spec files land as each predecessor closes (same convention as M10 / M1
 
 ## Propagation status
 
-Filled in at audit time. Anticipated forward-deferrals:
-
-- A CI-gated publish-on-tag job — `nice_to_have.md` candidate with trigger "a second maintainer joins" OR "an out-of-band token is mishandled during manual publish". Not ready to promote at M13.
-- A `pipx`-equivalent install-doc section — add to `nice_to_have.md` only if a user reports that `uvx` / `uv tool install` is insufficient. Solo-dev default is to skip.
-- A Docker image — post-v0.1.0 forward option only; trigger is an integration target that needs a frozen runtime (CI runner, reproducible workshop, etc.).
+- **No forward-deferral to future milestones.** M13 closes with zero open findings; T01–T07 audit issue files are all ✅ PASS per their grading tables. T08's audit file lands ✅ PASS on first cycle (close-out is a doc-only flip).
+- **No `nice_to_have.md` entries generated at T08.** The three anticipated forward-deferrals flagged during M13 drafting (CI publish-on-tag job, `pipx` install-doc section, Docker image) stayed forward-options — none surfaced a concrete trigger during T01–T08, so none were promoted. They remain available to fork out of the backlog when a trigger fires.
+- **Release commits.** `main:9fe1898` (CHANGELOG `### Published` footer post-publish) + `design_branch:6cd43e6` (T07 audit close-out) were the pre-T08 tips. T08 adds one commit on each branch — a single close-out commit on `design_branch` covering the milestone README Outcome, roadmap flip, CHANGELOG promote, root README table flip, and the T08 audit file; and a cherry-pick of the root README table flip onto `main`.
+- **Next load-bearing milestones:** M10 (Ollama fault-tolerance hardening) and M12 (Tiered audit cascade) remain on the roadmap. Neither blocks a patch-level `0.1.x` release; both target the `0.2.0` consolidation.
 
 ## Issues
 

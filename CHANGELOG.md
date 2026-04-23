@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M13 v0.1.0 release - builder audit trail] - 2026-04-22
+
+### Changed — M13 Task 08: Milestone Close-out (2026-04-22)
+
+Flips M13 to `✅ Complete (2026-04-22)`. Promotes the eight
+`[Unreleased]` M13 builder-mode entries (T01 through T07 pre-publish +
+T07 rename + T07 `### Published`-footer stamp) into this dated
+`[M13 v0.1.0 release - builder audit trail] - 2026-04-22` section.
+Zero runtime-code diff in `ai_workflows/` at T08 — all deliverables
+land under `design_docs/`, `CHANGELOG.md`, and the root `README.md`
+milestone-status table.
+
+**Files touched (`design_branch`):**
+
+- `design_docs/phases/milestone_13_v0_release/README.md` — Status
+  flipped to `✅ Complete (2026-04-22)`; `## Outcome` section added
+  covering T01–T08 with the release artefact, PyPI rename footnote,
+  and green-gate snapshot; `## Propagation status` section filled in
+  (no forward-deferral, no `nice_to_have.md` entries generated, next
+  load-bearing milestones M10 + M12).
+- `design_docs/roadmap.md` — M13 row flipped from
+  `planned (depends on M11 + M14 — both complete; unblocked)` to
+  `✅ complete (2026-04-22)`.
+- `CHANGELOG.md` — this entry at the top of the new dated section;
+  the eight `[Unreleased]` M13 entries promoted below it
+  (byte-identical — this is a re-section, not a rewrite).
+- `README.md` — milestone status table row for M13 flipped from
+  `In progress` to `Complete (2026-04-22)` (cherry-picked onto `main`
+  in a separate commit — the root README is the one cross-branch
+  overlap at T08).
+- `design_docs/phases/milestone_13_v0_release/task_08_milestone_closeout.md`
+  — spec (drafted at T08 kickoff 2026-04-22, marked `✅ Complete` at
+  close).
+- `design_docs/phases/milestone_13_v0_release/issues/task_08_issue.md`
+  — audit file, `✅ PASS` on first cycle (close-out is a doc-only
+  flip).
+
+**Green-gate snapshot (2026-04-22, T08 close):**
+
+- `uv run pytest` — `main` 610 passed + 9 skipped; `design_branch`
+  623 passed + 6 skipped (T07 baseline unchanged).
+- `uv run lint-imports` — 4 contracts kept, 0 broken on both branches
+  (no new layer contract at M13).
+- `uv run ruff check` — clean on both branches.
+
+**Release-commits pair (pre-T08 tips):**
+
+- `main:9fe1898` — CHANGELOG `### Published` footer stamped
+  post-publish.
+- `design_branch:6cd43e6` — T07 audit close-out with post-publish
+  artefact values.
+
+**Zero CHANGELOG change on `main` at T08.** The `[0.1.0]` block there
+already carries the user-facing release narrative; M13's builder-mode
+audit trail does not belong on `main`.
+
+**ACs satisfied (spec §Acceptance Criteria):** AC-1 through AC-10.
+
 ### Changed — M13 Task 07: PyPI distribution renamed to `jmdl-ai-workflows` (2026-04-22)
 
 First `uv publish` against pypi.org returned `400 The name 'ai-workflows'

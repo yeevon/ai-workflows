@@ -20,7 +20,7 @@ A LangGraph-native workflow framework for solo developers. Orchestrates multi-st
 | M10 — Ollama fault-tolerance hardening | Planned |
 | **M11 — MCP gate-review surface** | Complete (2026-04-22) |
 | M12 — Tiered audit cascade | Planned |
-| M13 — v0.1.0 release + PyPI packaging | In progress |
+| **M13 — v0.1.0 release + PyPI packaging** | Complete (2026-04-22) |
 | **M14 — MCP HTTP transport** | Complete (2026-04-22) |
 
 ## What it is
