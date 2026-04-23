@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-04-23
+
+Post-0.1.2 audit patch. Three parallel agent audits against 0.1.2
+surfaced 20 findings; 0.1.3 absorbs the doc-drift + observability
+drift + onboarding-hygiene subset. The remaining findings map to
+M15/M16/M17 milestones or `nice_to_have.md` entries with concrete
+triggers — all recorded in the builder-mode audit disposition on the
+`design_branch`. No new runtime surface; no KDR change; no API break.
+
+### Fixed
+
+- **`aiw-mcp` CLI `--host 0.0.0.0` exposure** — the loopback default + the foot-gun are now spelled out in the root README's new `## MCP server → Security notes` subsection. The flag behaviour is unchanged; this is documentation of the existing surface.
+- **`docs/writing-a-workflow.md` cited a non-existent MCP tool** — `get_run_status` was referenced but the actual MCP surface is four tools (`run_workflow`, `resume_run`, `list_runs`, `cancel_run`). A CS300-class consumer following the docs verbatim would have hit "unknown tool." Rewritten to name only the real surface, with `list_runs(--status ...)` as the status-query path.
+- **Tier-name references in `docs/writing-a-workflow.md` were stale.** The doc cited pre-pivot names (`orchestrator`, `gemini_flash`, `claude_code`); the runtime names are per-workflow (e.g. `planner-explorer` + `planner-synth` for the shipped `planner`), declared in Python via `<workflow>_tier_registry()` helpers. Added a new "Where tiers come from" section that names the authoritative source: per-workflow Python registries, not `tiers.yaml` (which is a schema-smoke fixture, not loaded at dispatch).
+- **Observability drift — dual logging.** `ai_workflows/graph/ollama_fallback_gate.py` dual-logged a WARN event through both `logging.getLogger(__name__).warning(...)` and a structlog emit; the stdlib call was removed (KDR observability discipline: `StructuredLogger` only).
+- **Observability drift — stdlib logger for eval-capture errors.** `ai_workflows/evals/capture_callback.py` used `logging.getLogger(__name__)`; switched to `structlog.get_logger(__name__)`, event renamed to snake-case `eval_capture_failed`, `extra=` kwarg replaced by structlog's native kwargs.
+- **Claude Code CLI stderr was silently dropped on non-retryable failures.** `ai_workflows/primitives/retry.py:classify()` now emits a structlog warning with the CLI's `stderr` body (truncated at 2000 chars) before the `subprocess.CalledProcessError` is classified as `NonRetryable`. Debug signal for CLI-version mismatch / OAuth expiry is preserved.
+
+### Changed
+
+- **Root `README.md`** — `## MCP server` gained a `Security notes` subsection (loopback default + `0.0.0.0` foot-gun + TLS posture + CORS semantics). The `## Contributing / from source` example trimmed its stale `# prints 0.1.0` comment to `# prints the installed package version`.
+- **`tiers.yaml` clarified as a schema-smoke fixture.** The header comment now names the file as a schema-sanity fixture and points at each workflow's `<workflow>_tier_registry()` helper as the authoritative source. Deleted the `planner` and `implementer` entries that mapped to `gemini/gemini-2.5-flash` — those bindings were never used at runtime (dispatch calls the workflow's Python helper, never `TierRegistry.load()`) and misrepresented the project's tier plan. `tests/primitives/test_tiers_loader.py` expectations updated in lockstep. M15 (planned) relocates the file to `docs/tiers.example.yaml` and introduces the `AIW_TIERS_PATH` user-overlay mechanism.
+
+### Added
+
+- **`.env.example`** at repo root. Documents required (`GEMINI_API_KEY` with [Google AI Studio link](https://aistudio.google.com/apikey)) + optional (`OLLAMA_BASE_URL`, `AIW_STORAGE_DB`, `AIW_CHECKPOINT_DB`, `AIW_LOG_LEVEL`) env vars. Also notes the Claude-Code tier is OAuth-only (no `ANTHROPIC_API_KEY` — KDR-003) and covers the testing gates (`AIW_E2E`, `AIW_EVAL_LIVE`, `AIW_EVALS_ROOT`, `AIW_CAPTURE_EVALS`). `PYPI_TOKEN` deliberately not included — release-maintainer-only. The repo's `.gitignore` gains a `!.env.example` negation so the new file is tracked (previous `.env.*` pattern would have swept it).
+
+### Published
+
+<!-- stamped post-publish, same shape as the [0.1.0] / [0.1.1] / [0.1.2] blocks -->
+- **PyPI:** _pending_
+- **Wheel:** _pending_
+- **SHA256:** _pending_
+- **Publish-side commit:** _pending_
+- **Post-publish live smoke:** _pending_
+
 ## [0.1.2] — 2026-04-23
 
 Fix-forward for a version-reporting regression in 0.1.1. The

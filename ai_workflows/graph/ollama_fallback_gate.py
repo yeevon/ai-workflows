@@ -39,7 +39,6 @@ Relationship to sibling modules
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable, Mapping
 from enum import StrEnum
 from typing import Any
@@ -96,11 +95,6 @@ def parse_fallback_choice(raw: str) -> FallbackChoice:
         "ollama_fallback_unknown_response",
         raw=raw,
         default=FallbackChoice.RETRY.value,
-    )
-    logging.getLogger(__name__).warning(
-        "ollama_fallback_unknown_response raw=%r default=%s",
-        raw,
-        FallbackChoice.RETRY.value,
     )
     return FallbackChoice.RETRY
 

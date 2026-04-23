@@ -56,12 +56,20 @@ def _write(path: Path, text: str) -> None:
 
 
 def test_committed_tiers_yaml_parses_into_tier_config_mapping():
-    """AC-1: the checked-in ``tiers.yaml`` parses into the expected mapping."""
+    """AC-1: the checked-in ``tiers.yaml`` parses into the expected mapping.
+
+    0.1.3 patch: dropped the `planner` + `implementer` entries from
+    `tiers.yaml`. They were never loaded at runtime (dispatch calls
+    `<workflow>_tier_registry()` directly) and their Gemini-Flash
+    bindings misrepresented the project's tier plan. The committed
+    YAML is now a schema-smoke fixture only; the authoritative tier
+    definitions live in each workflow's Python module. See
+    [post_0.1.2_audit_disposition.md](../../design_docs/analysis/
+    post_0.1.2_audit_disposition.md) finding #6.
+    """
     tiers = TierRegistry.load(REPO_ROOT)
-    # AC-1: mapping keys match the committed tier names exactly.
+    # Mapping keys match the committed tier names exactly.
     assert set(tiers) == {
-        "planner",
-        "implementer",
         "local_coder",
         "opus",
         "sonnet",
@@ -77,9 +85,8 @@ def test_committed_tiers_resolve_to_the_correct_route_variant():
     """AC-2: each route is the correct discriminated variant."""
     tiers = TierRegistry.load(REPO_ROOT)
     # LiteLLM-routed tiers.
-    for name in ("planner", "implementer", "local_coder"):
-        assert isinstance(tiers[name].route, LiteLLMRoute), name
-        assert tiers[name].route.kind == "litellm"
+    assert isinstance(tiers["local_coder"].route, LiteLLMRoute)
+    assert tiers["local_coder"].route.kind == "litellm"
     # Claude Code CLI-routed tiers.
     for name in ("opus", "sonnet", "haiku"):
         assert isinstance(tiers[name].route, ClaudeCodeRoute), name
@@ -94,11 +101,15 @@ def test_claude_code_tiers_carry_the_expected_cli_model_flags():
     assert tiers["haiku"].route.cli_model_flag == "haiku"
 
 
-def test_litellm_tiers_carry_gemini_and_ollama_model_strings():
-    """Gemini via LiteLLM, Ollama via LiteLLM — KDR-007 tier strings."""
+def test_litellm_tier_carries_ollama_model_string():
+    """The one LiteLLM-routed tier in the committed YAML carries an Ollama model.
+
+    0.1.3 patch: pre-patch this test covered Gemini-routed `planner` +
+    `implementer` entries too. Those entries were dropped — the project's
+    Gemini routing lives inside individual workflow registries, not in
+    this schema-smoke file.
+    """
     tiers = TierRegistry.load(REPO_ROOT)
-    assert tiers["planner"].route.model.startswith("gemini/")
-    assert tiers["implementer"].route.model.startswith("gemini/")
     assert tiers["local_coder"].route.model.startswith("ollama/")
 
 

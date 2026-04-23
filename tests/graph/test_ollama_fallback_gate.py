@@ -8,11 +8,11 @@ canonical values.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, TypedDict
 from unittest.mock import patch
 
 import pytest
+import structlog
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
@@ -127,14 +127,23 @@ def test_response_parses_canonical_values(
     assert parse_fallback_choice(raw) is expected
 
 
-def test_unknown_response_defaults_to_retry(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger="ai_workflows.graph.ollama_fallback_gate"):
+def test_unknown_response_defaults_to_retry() -> None:
+    """Unknown resume strings log via structlog + default to RETRY.
+
+    0.1.3 patch: pre-patch this module dual-logged via stdlib `logging`,
+    which `caplog` fixtured against. The stdlib call was removed as a
+    KDR observability-discipline fix (structlog only). The test now
+    asserts via `structlog.testing.capture_logs` — the idiomatic path
+    for testing structlog output.
+    """
+    with structlog.testing.capture_logs() as captured:
         choice = parse_fallback_choice("maybe?")
 
     assert choice is FallbackChoice.RETRY
     assert any(
-        "ollama_fallback_unknown_response" in record.getMessage()
-        for record in caplog.records
+        event.get("event") == "ollama_fallback_unknown_response"
+        and event.get("log_level") == "warning"
+        for event in captured
     )
 
 

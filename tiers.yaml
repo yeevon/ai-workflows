@@ -1,37 +1,42 @@
-# Model tier configuration for ai-workflows.
+# Tier-schema smoke fixture for ai-workflows.
 #
-# Each top-level key is a tier name. Its value is a TierConfig (see
-# `ai_workflows/primitives/tiers.py`): a discriminated `route` plus
-# concurrency/timeout knobs. Two route kinds exist:
+# **This file is NOT the authoritative tier configuration at runtime.**
 #
+# Each shipped workflow defines its own tier registry in Python via a
+# `<workflow>_tier_registry()` function. The dispatch layer
+# (`ai_workflows.workflows._dispatch._resolve_tier_registry()`) calls
+# that function to resolve tier bindings for a run — `tiers.yaml` is
+# never loaded on the dispatch path.
+#
+# This file exists so `tests/primitives/test_tiers_loader.py` has a
+# real on-disk example to parse against the `TierRegistry.load()`
+# schema — an M1 schema-smoke check that guards against silent
+# regressions in the `TierConfig` / `LiteLLMRoute` / `ClaudeCodeRoute`
+# pydantic models. The entries below cover every route kind the
+# project currently supports so the parse is exhaustive.
+#
+# Authoritative tier registries — read the workflow modules:
+#   * `ai_workflows/workflows/planner.py` — `planner_tier_registry()`
+#     (`planner-explorer` → Qwen/Ollama; `planner-synth` → Claude Opus).
+#   * `ai_workflows/workflows/slice_refactor.py` — composes the planner
+#     registry + adds `slice-worker` → Qwen/Ollama.
+#
+# Two route kinds exist:
 #   * kind: litellm      — routed through LiteLLM (Gemini, Ollama/Qwen).
 #                          `model` is a LiteLLM model string.
 #   * kind: claude_code  — routed through the `claude` CLI subprocess;
 #                          `cli_model_flag` is forwarded as `--model`.
 #
-# This file is committed and represents the project default. Machine- or
-# user-specific overrides go in `tiers.local.yaml` (gitignored) and are
-# deep-merged on top at load time.
-#
-# Provider strategy (KDR-003 / KDR-007, architecture.md §4.1)
-# -----------------------------------------------------------
-# * `planner` / `implementer` — Gemini via LiteLLM (GEMINI_API_KEY).
-# * `local_coder` — Qwen via a LAN Ollama instance (zero-cost, private).
+# Provider strategy (KDR-003 / KDR-007 / KDR-011, architecture.md §4.1)
+# --------------------------------------------------------------------
+# * `local_coder` — Qwen via Ollama (local, zero-cost).
 # * `opus` / `sonnet` / `haiku` — Claude Code CLI subprocess using the
 #    developer's Claude Max subscription (OAuth; no Anthropic API key).
-
-planner:
-  route:
-    kind: litellm
-    model: gemini/gemini-2.5-flash
-  max_concurrency: 2
-  per_call_timeout_s: 180
-
-implementer:
-  route:
-    kind: litellm
-    model: gemini/gemini-2.5-flash
-  max_concurrency: 2
+#
+# Forward-looking: M15 introduces `AIW_TIERS_PATH` + `~/.ai-workflows/
+# tiers.yaml` as a user-supplied overlay that merges with workflow
+# registries at dispatch time. This file becomes the reference/example
+# `docs/tiers.example.yaml` once M15 ships.
 
 local_coder:
   route:

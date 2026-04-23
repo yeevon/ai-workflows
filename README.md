@@ -104,7 +104,7 @@ aiw resume demo --approve
 aiw list-runs
 ```
 
-The planner workflow composes two LLM tiers (Qwen explorer via Ollama + Claude Code Opus synth). If you only want the Gemini path for a smoke, pass `--tier-override planner-synth=planner-explorer` or omit the Ollama + Claude Code prerequisites and stub the `gemini_flash` tier.
+The planner workflow composes two LLM tiers (Qwen explorer via Ollama + Claude Code Opus synth). If you want to swap either tier, pass `--tier-override planner-synth=planner-explorer` (route both steps through Qwen for a fully-local smoke) or edit the workflow's tier registry in `ai_workflows/workflows/planner.py` on a clone.
 
 ## MCP server
 
@@ -116,6 +116,11 @@ claude mcp add ai-workflows --scope user -- uvx --from jmdl-ai-workflows aiw-mcp
 
 The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport http --port 8080 --cors-origin http://localhost:3000`. Full skill-install walkthrough (builder-only, on design branch).
 
+### Security notes
+
+- **Loopback default** — `aiw-mcp --transport http` binds to `127.0.0.1`; unreachable from other machines. `--host 0.0.0.0` exposes the server to every process on the host and to the LAN. `aiw-mcp` has no built-in auth; the bind address is the only access boundary. Only pass `0.0.0.0` on a machine you own every process on, and put a reverse proxy in front if you need TLS.
+- **CORS is opt-in, exact-match** — `--cors-origin <url>` adds one origin; without any flags the server emits no `Access-Control-Allow-Origin` header (same-origin only).
+
 ## Contributing / from source
 
 Clone the repo for development or to modify the framework itself:
@@ -124,7 +129,7 @@ Clone the repo for development or to modify the framework itself:
 git clone https://github.com/yeevon/ai-workflows.git
 cd ai-workflows
 uv sync              # install runtime + dev dependencies
-uv run aiw version   # prints 0.1.0
+uv run aiw version   # prints the installed package version
 ```
 
 For the full builder/auditor workflow — task specs, audit issue files, Builder / Auditor mode conventions — switch to the [`design_branch`](https://github.com/yeevon/ai-workflows/tree/design_branch) (builder-only, on design branch).

@@ -41,12 +41,12 @@ Relationship to sibling modules
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import structlog
 from pydantic import BaseModel
 
 from ai_workflows.evals.schemas import EvalCase
@@ -54,7 +54,7 @@ from ai_workflows.evals.storage import default_evals_root, fixture_path, save_ca
 
 __all__ = ["CaptureCallback", "output_schema_fqn"]
 
-_LOG = logging.getLogger(__name__)
+_LOG = structlog.get_logger(__name__)
 
 
 def output_schema_fqn(schema: type[BaseModel] | None) -> str | None:
@@ -144,13 +144,11 @@ class CaptureCallback:
             return path
         except Exception:  # noqa: BLE001 — capture must never break a live run
             _LOG.warning(
-                "eval capture failed",
-                extra={
-                    "dataset": self._dataset_name,
-                    "workflow": self._workflow_id,
-                    "node": node_name,
-                    "run_id": run_id,
-                },
+                "eval_capture_failed",
+                dataset=self._dataset_name,
+                workflow=self._workflow_id,
+                node=node_name,
+                run_id=run_id,
                 exc_info=True,
             )
             return None
