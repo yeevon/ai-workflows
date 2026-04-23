@@ -2,6 +2,10 @@
 .venv/
 .env
 .env.*
+# ...but DO commit the tracked placeholder example so users know what env
+# vars the runtime reads (0.1.3 patch). The pattern above would otherwise
+# sweep it.
+!.env.example
 
 # IDE
 .vscode/

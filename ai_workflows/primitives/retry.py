@@ -46,7 +46,16 @@ from __future__ import annotations
 import subprocess
 
 import litellm
+import structlog
 from pydantic import BaseModel, Field
+
+_LOG = structlog.get_logger(__name__)
+
+# 0.1.3 patch: stderr captured from a Claude Code CLI subprocess
+# (CalledProcessError) can be a crucial debugging signal (CLI version
+# mismatch, OAuth expiry, transient auth refresh). Cap the logged
+# length so a runaway error does not flood logs.
+_STDERR_LOG_CAP = 2_000
 
 __all__ = [
     "NonRetryable",
@@ -160,5 +169,42 @@ def classify(
     if isinstance(exc, subprocess.TimeoutExpired):
         return RetryableTransient
     if isinstance(exc, subprocess.CalledProcessError):
+        # 0.1.3 patch: surface the CLI's own stderr before classifying.
+        # Without this, auth-expiry / version-mismatch signals from the
+        # `claude` subprocess are silently dropped once the exception is
+        # reclassified. Truncate to cap log volume.
+        stderr = _extract_stderr(exc)
+        if stderr:
+            _LOG.warning(
+                "subprocess_called_process_error_stderr",
+                cmd=_stringify_cmd(exc.cmd),
+                returncode=exc.returncode,
+                stderr_excerpt=stderr[:_STDERR_LOG_CAP],
+                stderr_truncated=len(stderr) > _STDERR_LOG_CAP,
+            )
         return NonRetryable
     return NonRetryable
+
+
+def _extract_stderr(exc: subprocess.CalledProcessError) -> str:
+    """Decode ``exc.stderr`` into a short string; return ``""`` when unusable."""
+    stderr = exc.stderr
+    if stderr is None:
+        return ""
+    if isinstance(stderr, bytes):
+        try:
+            return stderr.decode("utf-8", errors="replace").strip()
+        except Exception:  # noqa: BLE001 — never raise from a log site
+            return ""
+    if isinstance(stderr, str):
+        return stderr.strip()
+    return ""
+
+
+def _stringify_cmd(cmd: object) -> str:
+    """Render ``exc.cmd`` (list[str] | str | None) as a one-line string."""
+    if cmd is None:
+        return ""
+    if isinstance(cmd, (list, tuple)):
+        return " ".join(str(part) for part in cmd)
+    return str(cmd)

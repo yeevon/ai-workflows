@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
 import pytest
+import structlog
 from pydantic import BaseModel, ConfigDict
 
 from ai_workflows.evals import CaptureCallback, EvalCase, output_schema_fqn
@@ -124,8 +124,17 @@ def test_appends_numeric_suffix_on_duplicate_case_id(
 def test_capture_failure_logs_warning_but_does_not_raise(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """A disk-write failure emits a structlog warning + returns None.
+
+    0.1.3 patch: pre-patch this module logged via stdlib `logging` and the
+    test asserted against `caplog`. The 0.1.3 observability fix switched
+    the logger to structlog (KDR observability discipline); the assertion
+    now uses `structlog.testing.capture_logs`. Event name also changed
+    from free-text ``"eval capture failed"`` to snake-case
+    ``"eval_capture_failed"`` matching the structlog convention used
+    elsewhere in the package.
+    """
     callback = _make_callback(tmp_path)
 
     def _boom(*_args: Any, **_kwargs: Any) -> None:
@@ -135,7 +144,7 @@ def test_capture_failure_logs_warning_but_does_not_raise(
 
     monkeypatch.setattr(mod, "fixture_path", _boom)
 
-    with caplog.at_level(logging.WARNING, logger=mod.__name__):
+    with structlog.testing.capture_logs() as captured:
         result = callback.on_node_complete(
             run_id="run-001",
             node_name="explorer",
@@ -144,7 +153,11 @@ def test_capture_failure_logs_warning_but_does_not_raise(
             output_schema=None,
         )
     assert result is None
-    assert any("eval capture failed" in rec.message for rec in caplog.records)
+    assert any(
+        event.get("event") == "eval_capture_failed"
+        and event.get("log_level") == "warning"
+        for event in captured
+    )
 
 
 def test_root_defaults_to_evals_root_slash_dataset(

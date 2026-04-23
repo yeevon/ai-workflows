@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — 0.1.3 patch: post-0.1.2 audit fixes (2026-04-23)
+
+Three parallel audit agents run against 0.1.2 surfaced 20 findings.
+0.1.3 absorbs the "code/doc drift + observability drift + onboarding
+hygiene" subset; the remaining findings are mapped to M15/M16/M17
+milestones or `nice_to_have.md` entries with triggers in
+[post_0.1.2_audit_disposition.md](design_docs/analysis/post_0.1.2_audit_disposition.md).
+
+**Observability drift (KDR StructuredLogger-only):**
+
+- `ai_workflows/graph/ollama_fallback_gate.py` — dropped the redundant
+  `logging.getLogger(__name__).warning(...)` call that dual-logged next
+  to the structlog emit; removed the now-unused `import logging`.
+- `ai_workflows/evals/capture_callback.py` — switched `_LOG` from
+  `logging.getLogger(__name__)` to `structlog.get_logger(__name__)`;
+  rewrote the `.warning(...)` call shape (snake-case event name,
+  kwargs instead of `extra=`). Eval-capture errors now emit
+  structured JSON events consistent with the rest of the package.
+- `ai_workflows/primitives/retry.py` — `classify()` now surfaces the
+  `stderr` body of a `subprocess.CalledProcessError` (e.g. from the
+  `claude` CLI subprocess) via a structlog warning **before** the
+  error is reclassified as `NonRetryable`. Hard-to-diagnose CLI-version
+  mismatches / OAuth-expiry signals are no longer silently dropped.
+  Truncated at 2000 chars to cap log volume.
+
+**`tiers.yaml` dead-config cleanup:**
+
+- Deleted the `planner:` and `implementer:` entries (both mapped to
+  `gemini/gemini-2.5-flash` — never the actual runtime plan). `tiers.yaml`
+  is **not loaded by the dispatch path** — each shipped workflow
+  defines its own tier registry in Python via
+  `<workflow>_tier_registry()`. The file was a schema-smoke fixture
+  pretending to be authoritative; the header comment now names it as
+  such and points at the Python registries as the source of truth.
+  `tests/primitives/test_tiers_loader.py` expectations updated in
+  lockstep. M15 T04 relocates the file to `docs/tiers.example.yaml`
+  once the `AIW_TIERS_PATH` overlay ships.
+
+**Onboarding hygiene:**
+
+- New `.env.example` at repo root documenting required + optional
+  env vars (`GEMINI_API_KEY` with Google-AI-Studio link;
+  `OLLAMA_BASE_URL` / `AIW_STORAGE_DB` / `AIW_CHECKPOINT_DB`; the
+  Claude-Code-OAuth no-API-key note per KDR-003; testing gates
+  `AIW_E2E` / `AIW_EVAL_LIVE` / `AIW_EVALS_ROOT` / `AIW_CAPTURE_EVALS`).
+  `PYPI_TOKEN` deliberately omitted — release-maintainer-only.
+
+**Version:**
+
+- `ai_workflows/__init__.py` — `__version__` bumped to `0.1.3`.
+- `uv.lock` regenerated.
+
+**Gates green on `design_branch`:** `uv run pytest` 629 passed + 6
+skipped (unchanged test count; two structlog-capture tests rewritten
+from `caplog` to `structlog.testing.capture_logs`); `uv run
+lint-imports` 4 kept, 0 broken; `uv run ruff check` clean.
+
+**`design_branch`-only:** this mirror entry under `[Unreleased]`.
+`main` gets the `[0.1.3]` release block plus README (version claim
+trim + MCP security notes) and `docs/writing-a-workflow.md` rewrite
+(tier names + phantom `get_run_status` removal + "Where tiers come
+from" subsection) in a separate release-prep commit.
+
 ### Fixed — 0.1.2 patch: single-source-of-truth version config (2026-04-23)
 
 0.1.1 shipped with a stale `ai_workflows/__init__.py:__version__ =
