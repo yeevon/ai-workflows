@@ -35,6 +35,13 @@ Relationship to other modules
 The CLI never imports the Anthropic SDK and never reads provider API
 keys directly — every env-var lookup stays at the LiteLLM / Claude
 Code adapter boundary (KDR-003).
+
+0.1.1 patch: :func:`load_dotenv` is invoked at module import so a
+`.env` file sitting in the user's current working directory is picked
+up before any :mod:`ai_workflows` submodule resolves an env-var
+lookup. ``override=False`` keeps a shell-exported variable winning
+over the `.env` value — right precedence for production and for
+release-smoke scripts that export vars explicitly.
 """
 
 from __future__ import annotations
@@ -46,28 +53,35 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from dotenv import load_dotenv
 
-from ai_workflows import workflows
-from ai_workflows.evals import EvalRunner, load_suite
-from ai_workflows.evals._capture_cli import (
+# 0.1.1 patch: load a cwd-local ``.env`` before any ``ai_workflows``
+# submodule import so provider adapters (LiteLLM / Claude Code) see the
+# values. ``override=False`` keeps shell-exported vars winning — same
+# precedence the test conftest uses.
+load_dotenv(override=False)
+
+from ai_workflows import workflows  # noqa: E402
+from ai_workflows.evals import EvalRunner, load_suite  # noqa: E402
+from ai_workflows.evals._capture_cli import (  # noqa: E402
     CaptureNotCompletedError,
     UnknownRunError,
     WorkflowCaptureUnsupportedError,
     capture_completed_run,
 )
-from ai_workflows.primitives.logging import configure_logging
-from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path
-from ai_workflows.workflows._dispatch import (
+from ai_workflows.primitives.logging import configure_logging  # noqa: E402
+from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path  # noqa: E402
+from ai_workflows.workflows._dispatch import (  # noqa: E402
     _CROCKFORD,
     ResumePreconditionError,
     UnknownTierError,
     UnknownWorkflowError,
     _generate_ulid,
 )
-from ai_workflows.workflows._dispatch import (
+from ai_workflows.workflows._dispatch import (  # noqa: E402
     resume_run as _dispatch_resume_run,
 )
-from ai_workflows.workflows._dispatch import (
+from ai_workflows.workflows._dispatch import (  # noqa: E402
     run_workflow as _dispatch_run_workflow,
 )
 

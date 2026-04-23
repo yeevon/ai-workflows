@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — 0.1.1 patch: `.env` auto-load at CLI + MCP entry points (2026-04-23)
+
+A post-publish review of `jmdl-ai-workflows==0.1.0` surfaced a first-run
+onboarding gap: `python-dotenv` was declared in `pyproject.toml` but
+`load_dotenv()` was invoked **only** from `tests/conftest.py`. A
+`uvx`-installed user with a `.env` in their current directory got
+nothing — the process only saw shell-exported vars. Reported as a
+"declared dep that doesn't do what users expect" trap.
+
+**Code diff (both branches, byte-identical):**
+
+- `ai_workflows/cli.py` — `from dotenv import load_dotenv` + module-top
+  `load_dotenv(override=False)` before any `ai_workflows` submodule
+  import. `override=False` keeps shell-exported vars winning — same
+  precedence the test conftest uses.
+- `ai_workflows/mcp/__main__.py` — same, since `aiw-mcp` is a separate
+  process entry and does not share `aiw`'s module-import graph.
+- Module docstrings updated in both files to cite the 0.1.1 patch.
+
+**Tests (both branches):**
+
+- `tests/test_dotenv_autoload.py` (new) — three subprocess-isolated
+  tests: (1) `ai_workflows.cli` picks up cwd-local `.env`; (2)
+  `ai_workflows.mcp.__main__` picks up cwd-local `.env`; (3) a
+  shell-exported var wins over the `.env` value (override=False
+  precedence). Subprocess isolation is load-bearing — the repo's own
+  conftest already loads the repo-root `.env` into the test process,
+  so an in-process reload would not exercise the user-facing cwd
+  lookup.
+- `tests/test_wheel_contents.py` — extended with
+  `test_built_wheel_excludes_dotenv_and_loose_yaml` (belt-and-braces
+  that no `.env*` or bare-root `*.yaml` can ship in the wheel).
+
+**Version bump:** `pyproject.toml` `0.1.0` → `0.1.1`; `uv.lock`
+regenerated.
+
+**`design_branch`-side-only:** this mirror entry under `[Unreleased]`
++ no other files.
+
+**Gates green on `design_branch`:** pending sweep at commit time.
+
+**Release flow:** `main` gets the `[0.1.1]` block + README `## Setup`
+section rewrite in a separate release-prep commit; `uv publish` runs
+from `main` with the project-scoped PyPI token rotated at T07 close.
+
+### Changed — 0.1.1 patch: README `## Setup` section (main only — mirrored here for audit trail) (2026-04-23)
+
+Root `README.md` on `main` gains a new `## Setup` section between
+`## Install` and `## Getting started`. Content:
+
+- Required env vars — `GEMINI_API_KEY` with link to Google AI Studio
+  (`https://aistudio.google.com/apikey`).
+- Optional env vars — `OLLAMA_BASE_URL`, `AIW_STORAGE_DB`,
+  `AIW_CHECKPOINT_DB`.
+- Claude Code tier note — `claude` CLI via OAuth; no API key needed
+  (KDR-003).
+- `.env` auto-load behaviour — documented as the primary
+  key-configuration path, with the `override=False` precedence spelled
+  out.
+- Troubleshooting one-liner for the `401 Unauthorized` case.
+
+Plus the `## Getting started` section's `export GEMINI_API_KEY=...`
+line is trimmed (redundant with the new `## Setup` section).
+
+`design_branch`-side entry is this note for audit trail only — the
+`README.md` on `design_branch` is unchanged (the `main`-side diff
+cherry-picks the code + tests + version bump; the README rewrite is
+`main`-only per the two-branch model).
+
 ## [M13 v0.1.0 release - builder audit trail] - 2026-04-22
 
 ### Changed — M13 Task 08: Milestone Close-out (2026-04-22)
