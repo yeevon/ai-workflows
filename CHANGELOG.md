@@ -39,6 +39,19 @@ with the cosmetic regression and `0.1.2` is the fix-forward release.
 skipped (+2 over 0.1.1 baseline of 627); `uv run lint-imports` 4
 kept, 0 broken; `uv run ruff check` clean.
 
+**Published (post-release stamp, cherry-pick from `main:0f97f7f`):**
+
+- **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.1.2/>
+- **Wheel:** `jmdl_ai_workflows-0.1.2-py3-none-any.whl` (159198 bytes).
+- **SHA256:** `9a5a6108f2c362a63b121bccbf95e70ffe180e13493058129dee60a98d95ba1b`
+- **Publish-side commit:** `main:a0f3fd0` (the release-prep commit
+  whose wheel was uploaded).
+- **Post-publish live smoke:** `uvx --refresh --from
+  jmdl-ai-workflows==0.1.2 aiw version` from `/tmp` prints `0.1.2`
+  (the `__version__` regression fix verified end-to-end). Companion
+  dotenv smoke round-tripped green — the 0.1.1 auto-load stays
+  intact across the version-config rewire.
+
 ### Fixed — 0.1.1 patch: `.env` auto-load at CLI + MCP entry points (2026-04-23)
 
 A post-publish review of `jmdl-ai-workflows==0.1.0` surfaced a first-run
