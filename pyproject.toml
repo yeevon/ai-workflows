@@ -10,6 +10,17 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{name = "Jose de Lima", email = "delimajm@gmail.com"}]
+keywords = ["langgraph", "mcp", "claude-code", "ai-workflow", "litellm", "ollama"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries",
+]
 dependencies = [
   "langgraph>=0.2",
   "langgraph-checkpoint-sqlite>=1.0",
@@ -22,6 +33,11 @@ dependencies = [
   "typer>=0.12",
   "yoyo-migrations>=9.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/yeevon/ai-workflows"
+Repository = "https://github.com/yeevon/ai-workflows"
+Issues = "https://github.com/yeevon/ai-workflows/issues"
 
 [dependency-groups]
 # Dev tooling — installed via `uv sync` by default but not shipped with the
@@ -41,6 +57,19 @@ aiw-mcp = "ai_workflows.mcp.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ai_workflows"]
+
+# M13 Task 01 — force-include the repo-root ``migrations/`` directory
+# in the wheel. ``packages = ["ai_workflows"]`` sweeps the source
+# package only; ``yoyo-migrations`` reads migration scripts from an
+# on-disk path, so a wheel without ``migrations/`` breaks first-run
+# ``aiw`` / ``aiw-mcp`` on any ``uvx`` / ``uv tool install`` install.
+# ``Path(__file__).parent.parent.parent / "migrations"`` in
+# ``ai_workflows/primitives/storage.py`` resolves to
+# ``site-packages/migrations/`` after install — mirroring the repo
+# layout. Keep ``migrations/`` at repo root, not under
+# ``ai_workflows/``, to preserve the four-layer contract.
+[tool.hatch.build.targets.wheel.force-include]
+"migrations" = "migrations"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
