@@ -384,6 +384,156 @@ Re-evaluated during the 2026-04-21 [M9 post-close-out deep-analysis](phases/mile
 
 ---
 
+## 17. Public release-steps playbook at repo root (`RELEASE_STEPS.md`)
+
+**Role:** A concise, public-facing "how to cut a patch release" document committed at repo root (main-branch, user-visible). Captures the ceremony that's currently spread across [`design_docs/phases/milestone_13_v0_release/release_runbook.md`](phases/milestone_13_v0_release/release_runbook.md) (builder-only, design-branch only) + the M13 T07 + 0.1.1 + 0.1.2 commit histories.
+
+**Replaces / subsumes:**
+
+- Nothing committed today. The release playbook lives in commit messages + the builder-only runbook. Reproducible by reading git log; not reproducible without it.
+
+**Adds:**
+
+- One markdown file at repo root: steps to bump `ai_workflows/__init__.py:__version__`, update `CHANGELOG.md [Unreleased]` → `[0.1.x]` + date, commit, run `bash scripts/release_smoke.sh`, `uv build`, `uv publish --token $UV_PUBLISH_TOKEN`, stamp the `### Published` footer with pypi.org URL + wheel SHA256 + publish-side commit SHA, cherry-pick footer to design_branch, push both branches.
+- Cross-reference from the root README's Contributing section.
+
+**Trigger to adopt** — any one of:
+
+- **Fourth patch release** (after 0.1.3). After three patches the ceremony is proven; it's worth promoting to a public doc instead of oral history.
+- **A patch-release postmortem** (a step missed or mis-ordered that caused a visible incident, e.g. the 0.1.1 `__version__` dunder regression — though that was caught post-publish).
+- **A second maintainer joins** the project — onboarding requires the ceremony be documented.
+
+**Why not now:** 0.1.0 → 0.1.2 followed the M13 T07 runbook + ad-hoc adjustments (rename, dep promotion, dunder-fix). The pattern is recent; documenting it prematurely risks encoding the 0.1.x idiosyncrasies as canonical. Surfaced in the [post-0.1.2 audit disposition](analysis/post_0.1.2_audit_disposition.md) finding #15.
+
+**Related history:** [post_0.1.2_audit_disposition.md](analysis/post_0.1.2_audit_disposition.md) finding #15 (2026-04-23).
+
+---
+
+## 18. CI trigger on `design_branch` pushes
+
+**Role:** Extend [.github/workflows/ci.yml](../.github/workflows/ci.yml) so `push` events on `design_branch` run the full pytest + lint-imports + ruff + eval-replay + secret-scan pipeline. Currently the workflow fires on `push` to `main` + on every PR — `design_branch` direct pushes are ungated.
+
+**Replaces / subsumes:**
+
+- Nothing functional today. The operator runs `uv run pytest` locally before cherry-picking design_branch work to main, per M13 T08 release discipline. Local runs catch regressions; CI would catch them without the operator remembering.
+
+**Adds:**
+
+- One line in `.github/workflows/ci.yml` (`branches: [main, design_branch]` in the `on.push` section).
+- More CI runs per week (design_branch sees more touches than main now that the release is out).
+
+**Trigger to adopt** — any one of:
+
+- **A design_branch edit regresses main** without being caught locally. The postmortem would want CI to have caught it at the design_branch push.
+- **The operator stops running local pytest before cherry-picking** (e.g. quick doc-only edits get cherry-picked without a gate run, then one turns out to be a silent code change).
+- **A second maintainer joins** the project — their design_branch pushes should be gated.
+
+**Why not now:** single-maintainer discipline covers it. `uv run pytest` is fast (~25s); skipping it is the risk, not a missing CI step. Design_branch churn is mostly doc edits (design_docs, CHANGELOG mirrors) that don't run real code paths.
+
+**Related history:** [post_0.1.2_audit_disposition.md](analysis/post_0.1.2_audit_disposition.md) finding #16 (2026-04-23).
+
+---
+
+## 19. Dependency lower-bound refresh on minor releases
+
+**Role:** Run `uv update` + commit the refreshed `uv.lock` as a pre-release step for every minor version (0.2.0 → 0.3.0 → ...). Ensures the wheel's declared dependencies pull current versions at install time.
+
+**Replaces / subsumes:**
+
+- Ad-hoc bumps that happen only when something breaks. Today's [`pyproject.toml`](../pyproject.toml) lower bounds are conservative (`litellm>=1.40`, `langgraph>=0.2`, `pydantic>=2.0`, `fastmcp>=0.2`) — all were current at M1 / M14 respectively, now ~6 months stale.
+
+**Adds:**
+
+- One entry in the (forthcoming) `RELEASE_STEPS.md` (§17) instructing the maintainer to run `uv update` before the minor-version bump.
+- Potentially breaking behaviour if a transitive dep bumps a major version; compensated by running the full test suite + `release_smoke.sh` against the refreshed lockfile before publish.
+
+**Trigger to adopt** — any one of:
+
+- **Security advisory for a pinned dependency** that the lockfile would have caught in a refresh.
+- **The next minor release cycle** (M15 → 0.2.0 or later). At that point the 0.1.x refresh discipline either exists or gets codified.
+- **A wheel consumer reports a dep conflict** traceable to a stale lower bound.
+
+**Why not now:** `uv`-driven installs (the dominant path for a `uvx` consumer) resolve to latest-matching by default, so the lockfile staleness doesn't bite `uvx` / `uv tool install` users — they pull current dep versions automatically. Risk only materialises if a consumer pins `jmdl-ai-workflows==0.1.2` alongside an older resolver that respects the lockfile literally.
+
+**Related history:** [post_0.1.2_audit_disposition.md](analysis/post_0.1.2_audit_disposition.md) finding #18 (2026-04-23).
+
+---
+
+## 20. `StubAdapterMissingCaseError` test coverage
+
+**Role:** Add a test in `tests/evals/` that intentionally exhausts a `StubLLMAdapter` script and asserts `StubAdapterMissingCaseError` ([`ai_workflows/evals/_stub_adapter.py:54`](../ai_workflows/evals/_stub_adapter.py#L54)) fires with a descriptive message. Today the exception class exists but no test invokes it.
+
+**Replaces / subsumes:**
+
+- Nothing functional. The exception exists as a defensive error path; it would fire if an eval capture's scripted LLM turns run out mid-replay.
+
+**Adds:**
+
+- One pytest test, ~20 lines. No new fixture.
+
+**Trigger to adopt** — any one of:
+
+- **An eval-replay flake** traces back to a stub exhaustion the existing test suite didn't catch.
+- **M7 eval harness evolves** (e.g. adds a new replay mode) and the stub adapter's error surface changes shape.
+- **A scaffold-workflow test at M17** uses the stub adapter in a new context — if adding the test is already a touch-point, fold this in.
+
+**Why not now:** the exception is cheap defensive code. Adding a test for it in isolation is ceremony without a forcing function. Deferred until a related touch happens organically. Surfaced in the [post-0.1.2 audit disposition](analysis/post_0.1.2_audit_disposition.md) finding #19.
+
+**Related history:** [post_0.1.2_audit_disposition.md](analysis/post_0.1.2_audit_disposition.md) finding #19 (2026-04-23).
+
+---
+
+## 21. Entry-point discovery for workflows (PEP 621 `[project.entry-points]`)
+
+**Role:** Augment M16's directory-scan loader (`AIW_WORKFLOWS_PATH`) with PEP 621 entry-point discovery, so a user can pip-publish a workflow package that registers via `[project.entry-points.'ai_workflows.workflows']` instead of requiring an `AIW_WORKFLOWS_PATH` env var at each invocation.
+
+**Replaces / subsumes:**
+
+- Nothing shipped. Composes over M16's directory scan — entry points become an *additional* discovery channel, not a replacement. A user who wants edit-in-place iteration stays on directory scan; a user who wants a reusable distributable package gets entry points.
+
+**Adds:**
+
+- `importlib.metadata.entry_points(group="ai_workflows.workflows")` scan at `aiw` / `aiw-mcp` startup alongside the existing directory scan.
+- Documentation for the pip-publish path (what `pyproject.toml` needs to declare, how collision with directory-scan entries is resolved).
+- More careful collision-handling semantics (entry-point vs. directory-scan vs. in-package — three-way precedence).
+
+**Trigger to adopt** — any one of:
+
+- **A user wants to pip-publish their workflow package** and sees the directory-scan path as friction for distributing to others.
+- **A workflow-ecosystem pattern emerges** where multiple users publish workflow packages that build on each other (e.g. `pypi install cs300-question-gen`). Entry points make this sustainable.
+- **A `scaffold_workflow` output becomes pip-distributable** (not the current model — M17 writes to user disk, not a pip package).
+
+**Why not now:** deliberately rejected at M16 kickoff (2026-04-23) because entry points force a reinstall on every iteration — "scaffold, tweak, re-run" becomes "scaffold, tweak, reinstall, re-run." That friction kills M17's scaffold dev loop. Directory scan is the right default for the current user mental model (edit in place, restart, try again). Entry points are the right addition once workflows are mature artefacts being distributed rather than iterated. M16's [README](phases/milestone_16_external_workflows/README.md) § Non-goals records this decision explicitly.
+
+**Related history:** M16 kickoff (2026-04-23) — [post_0.1.2_audit_disposition.md](analysis/post_0.1.2_audit_disposition.md) frames the M15/M16/M17 split.
+
+---
+
+## 22. Hot-reload for `aiw-mcp --transport http` external workflows
+
+**Role:** A long-running MCP HTTP server watches `$AIW_WORKFLOWS_PATH` directories for new / modified files and re-imports them without requiring a process restart.
+
+**Replaces / subsumes:**
+
+- The current M16 load-once-at-startup behaviour, for the specific case of a long-lived MCP HTTP session (e.g. CS300's Astro dev-server hitting `aiw-mcp` repeatedly).
+
+**Adds:**
+
+- A file-watcher (likely `watchdog`) dependency or a polling loop.
+- More complex `sys.modules` management — unloading old versions, invalidating `register()` entries, handling in-flight requests against the old workflow version.
+- Test coverage for the reload paths + concurrent-dispatch edge cases.
+
+**Trigger to adopt** — any one of:
+
+- **A workflow author iterates against a running HTTP server** and hits the restart-to-see-edits friction repeatedly.
+- **CS300's dev loop** wants edit-save-refresh semantics for its own workflow file without killing the MCP server.
+
+**Why not now:** explicit M16 non-goal. The restart-after-edit model is clear + debuggable; hot-reload introduces concurrent-state hazards (an in-flight resume hitting an unloaded module, stale state-dicts, etc.). Deferred until a concrete iteration-speed complaint.
+
+**Related history:** [M16 README § Non-goals](phases/milestone_16_external_workflows/README.md).
+
+---
+
 ## Revisit cadence
 
 Re-read this file:
