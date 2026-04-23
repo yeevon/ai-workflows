@@ -70,6 +70,19 @@ trim + MCP security notes) and `docs/writing-a-workflow.md` rewrite
 (tier names + phantom `get_run_status` removal + "Where tiers come
 from" subsection) in a separate release-prep commit.
 
+**Published (post-release stamp, cherry-pick from `main:7145c34`):**
+
+- **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.1.3/>
+- **Wheel:** `jmdl_ai_workflows-0.1.3-py3-none-any.whl` (160070 bytes).
+- **SHA256:** `9a54e566a00e89e3e024890eec5990458cc725dff3b15ada6da5e4df3c5f428d`
+- **Publish-side commit:** `main:b01b1ec` (the release-prep commit
+  whose wheel was uploaded).
+- **Post-publish live smoke:** `uvx --refresh --from
+  jmdl-ai-workflows==0.1.3 aiw version` from `/tmp` prints `0.1.3`.
+  Companion `python -c "import ai_workflows.cli; ..."` round-tripped
+  the `.env` sentinel — 0.1.1 dotenv auto-load + 0.1.2 version
+  contract both survive the 0.1.3 observability-cleanup diff.
+
 ### Fixed — 0.1.2 patch: single-source-of-truth version config (2026-04-23)
 
 0.1.1 shipped with a stale `ai_workflows/__init__.py:__version__ =
