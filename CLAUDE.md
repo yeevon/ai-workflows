@@ -2,8 +2,6 @@
 
 Loaded into every Claude Code conversation. Defines Builder and Auditor modes and shared project conventions. Step-by-step procedures live in [.claude/commands/](.claude/commands/):
 
-- `/implement <task>` — Builder, single pass.
-- `/audit <task>` — Auditor, single pass.
 - `/clean-implement <task>` — Builder → Auditor loop, up to 10 cycles.
 
 When a skill says "follow Builder / Auditor mode from CLAUDE.md," the rules below are what it means.
