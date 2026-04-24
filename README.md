@@ -17,11 +17,10 @@ A LangGraph-native workflow framework for solo developers. Orchestrates multi-st
 | **M7 — Eval harness** | Complete (2026-04-21) |
 | **M8 — Ollama infrastructure** | Complete (2026-04-21) |
 | **M9 — Claude Code skill packaging** | Complete (2026-04-21) |
-| M10 — Ollama fault-tolerance hardening | Planned |
 | **M11 — MCP gate-review surface** | Complete (2026-04-22) |
-| M12 — Tiered audit cascade | Planned |
 | **M13 — v0.1.0 release + PyPI packaging** | Complete (2026-04-22) |
 | **M14 — MCP HTTP transport** | Complete (2026-04-22) |
+| **M16 — External workflow module discovery** | Complete (2026-04-24) |
 
 ## What it is
 
@@ -115,6 +114,8 @@ claude mcp add ai-workflows --scope user -- uvx --from jmdl-ai-workflows aiw-mcp
 ```
 
 The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport http --port 8080 --cors-origin http://localhost:3000`. Full skill-install walkthrough (builder-only, on design branch).
+
+Registering your own workflow modules from a downstream package? `AIW_EXTRA_WORKFLOW_MODULES=pkg.workflows.your_workflow` (or `--workflow-module pkg.workflows.your_workflow`, repeatable) imports them at startup. See [docs/writing-a-workflow.md §External workflows from a downstream consumer](docs/writing-a-workflow.md#external-workflows-from-a-downstream-consumer).
 
 ### Security notes
 

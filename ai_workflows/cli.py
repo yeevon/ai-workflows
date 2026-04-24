@@ -71,6 +71,10 @@ from ai_workflows.evals._capture_cli import (  # noqa: E402
 )
 from ai_workflows.primitives.logging import configure_logging  # noqa: E402
 from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path  # noqa: E402
+from ai_workflows.workflows import (  # noqa: E402
+    ExternalWorkflowImportError,
+    load_extra_workflow_modules,
+)
 from ai_workflows.workflows._dispatch import (  # noqa: E402
     _CROCKFORD,
     ResumePreconditionError,
@@ -102,16 +106,39 @@ app = typer.Typer(
 
 
 @app.callback()
-def _root() -> None:
+def _root(
+    workflow_module: list[str] = typer.Option(
+        [],
+        "--workflow-module",
+        help=(
+            "Dotted Python path of an extra workflow module to import at "
+            "startup (repeatable). Composes with AIW_EXTRA_WORKFLOW_MODULES "
+            "(env-var entries import first, then --workflow-module entries). "
+            "The module must be importable via the interpreter's sys.path "
+            "and is expected to call ai_workflows.workflows.register(...) "
+            "at module top level. See docs/writing-a-workflow.md."
+        ),
+    ),
+) -> None:
     """ai-workflows CLI.
 
-    Kept as an empty callback so Typer treats ``aiw`` as a
-    multi-command app. Commands revived across M3: ``run`` (T04),
-    ``resume`` (T05), ``list-runs`` (T06). The T06 spec originally
-    also paired ``cost-report``; that half was dropped at reframe
-    (2026-04-20) and deferred to ``nice_to_have.md §9``. The MCP
-    mirrors of these commands landed in M4 (`ai_workflows.mcp`).
+    Typer runs this callback before every subcommand. M16 Task 01
+    threads :data:`AIW_EXTRA_WORKFLOW_MODULES` + ``--workflow-module``
+    through :func:`ai_workflows.workflows.load_extra_workflow_modules`
+    so external workflows land in the registry before ``run`` /
+    ``resume`` / ``list-runs`` / ``eval *`` resolve their
+    ``workflow_id``. Earlier commands revived across M3: ``run``
+    (T04), ``resume`` (T05), ``list-runs`` (T06). The T06 spec
+    originally also paired ``cost-report``; that half was dropped at
+    reframe (2026-04-20) and deferred to ``nice_to_have.md §9``. The
+    MCP mirrors of these commands landed in M4
+    (``ai_workflows.mcp``).
     """
+    try:
+        load_extra_workflow_modules(cli_modules=workflow_module)
+    except ExternalWorkflowImportError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from None
 
 
 @app.command()

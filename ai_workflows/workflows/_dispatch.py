@@ -59,6 +59,7 @@ import contextlib
 import importlib
 import os
 import secrets
+import sys
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -200,14 +201,38 @@ def _generate_ulid() -> str:
 
 
 def _import_workflow_module(workflow: str) -> Any:
-    """Import ``ai_workflows.workflows.<workflow>`` or raise :class:`UnknownWorkflowError`.
+    """Return the module object backing a registered workflow.
 
-    The registered-workflows list in the error is eagerly populated by
-    re-importing ``ai_workflows.workflows.planner`` — M3's only
-    registered workflow — so a typo on first invocation still yields an
-    actionable list instead of an empty ``[]``. M5 / M6 additions get
-    the same surface for free once their modules register themselves.
+    M16 Task 01 extension: external workflows pre-imported by
+    :func:`ai_workflows.workflows.load_extra_workflow_modules` at
+    startup already populated ``_REGISTRY`` from their own dotted
+    paths (e.g. ``cs300.workflows.question_gen``). For those,
+    ``ai_workflows.workflows.<workflow>`` would ``ModuleNotFoundError``;
+    instead return the registered builder's source module via
+    ``sys.modules[builder.__module__]`` so
+    :func:`_resolve_tier_registry` / :func:`_build_initial_state` /
+    :func:`_resolve_final_state_key` find the workflow's helpers on it.
+
+    In-package workflows preserve their lazy-import fallback: first
+    dispatch for ``planner`` imports ``ai_workflows.workflows.planner``,
+    which triggers the module's top-level
+    ``register("planner", build_planner)``. The eager-planner-import
+    on the error branch is retained so a typo on first invocation
+    still yields an actionable registered-workflows list instead of
+    an empty ``[]``.
     """
+    existing = workflows._REGISTRY.get(workflow)
+    if existing is not None:
+        module_name = getattr(existing, "__module__", None)
+        if module_name:
+            module = sys.modules.get(module_name)
+            if module is not None:
+                return module
+            # Fallthrough: the registered builder's module is somehow
+            # no longer in sys.modules (explicit del, a reload gone
+            # wrong). Re-import via its dotted path.
+            return importlib.import_module(module_name)
+
     module_path = f"ai_workflows.workflows.{workflow}"
     try:
         return importlib.import_module(module_path)

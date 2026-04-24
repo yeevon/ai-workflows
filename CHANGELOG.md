@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-24
+
+First CS-300-forced minor release. Downstream consumers can now
+register their own workflow modules against `aiw` and `aiw-mcp`
+without forking the wheel — dotted Python module paths via
+`AIW_EXTRA_WORKFLOW_MODULES` (env, comma-separated) or
+`--workflow-module` (repeatable CLI flag on both surfaces, composes
+with the env). The server-side registry-dispatch path now consults
+the registry first and routes externally-registered workflows via
+`sys.modules[builder.__module__]`, so a workflow sitting at
+`cs300.workflows.question_gen` resolves identically to the shipped
+`planner`.
+
+Ships as a minor bump (0.1.3 → 0.2.0) because the surface is
+**additive** — unset env + absent flag means zero behavioural
+change from 0.1.3. Backwards-compatible with every existing MCP-host
+registration and every existing `uvx --from jmdl-ai-workflows aiw …`
+command.
+
+User code is user-owned (KDR-013): the framework surfaces
+`ExternalWorkflowImportError` with the failing dotted path + the
+underlying cause, but does not lint, test, or sandbox imported
+modules. In-package workflows cannot be shadowed — eager pre-import
+primes the registry so the existing `register()` collision check
+fires loudly when an external module tries to take a shipped name.
+
+### Added
+
+- `AIW_EXTRA_WORKFLOW_MODULES` env var — comma-separated dotted
+  Python module paths. Unset / empty = no extra load. Whitespace
+  trimmed per-entry; empty entries from trailing commas skipped.
+- `--workflow-module <dotted>` CLI flag on both `aiw` (root
+  callback) and `aiw-mcp` (root command). Repeatable. Composes with
+  the env var — env imports first, CLI entries appended.
+- `ai_workflows.workflows.load_extra_workflow_modules()` +
+  `ExternalWorkflowImportError` (a subclass of `ImportError`) —
+  both re-exported from the `ai_workflows.workflows` package.
+- Dispatch routing extension: `_dispatch._import_workflow_module`
+  consults `workflows._REGISTRY` first and returns
+  `sys.modules[builder.__module__]` for externally-registered
+  workflows. In-package lazy-import fallback preserved.
+- `docs/writing-a-workflow.md` gains a new **§External workflows
+  from a downstream consumer** section with the env-var + CLI-flag
+  surfaces, the worked CS-300 shape, and the user-owned-code
+  contract.
+- `README.md` gains a one-line pointer at the bottom of the MCP
+  server section for downstream consumers.
+
+### Not in this release
+
+No `AIW_WORKFLOWS_PATH` directory-scan loader, no
+`AIW_PRIMITIVES_PATH`, no `aiw inspect <workflow>` command, no
+programmatic-import logging default, no entry-point discovery
+(PEP 621), no hot-reload, no sandboxing, no linting of user code
+— all deferred with triggers that have not fired. See the builder
+branch's `design_docs/phases/milestone_16_external_workflows/`
+(builder-only, on design branch) for the forcing-function notes on
+each.
+
+### Notes
+
+- Setting **any** entry on `AIW_EXTRA_WORKFLOW_MODULES` or
+  `--workflow-module` triggers eager pre-import of the shipped
+  workflows (`planner` + `slice_refactor`) at startup so the
+  collision check is armed before externals load. Invocations with
+  no external entry bypass this — the existing lazy-import path for
+  shipped workflows is preserved exactly as 0.1.3.
+- `ExternalWorkflowImportError` subclasses `ImportError`, so
+  existing `except ImportError` handlers compose unchanged. The
+  underlying cause is available via `__cause__`.
+- Startup is **not atomic** across multiple entries. If entry *k*
+  fails, entries *0..k-1* have already executed their top-level
+  side effects (including any `register()` calls). This is the same
+  semantic Python itself uses for partial module imports; the CLI /
+  MCP surfaces do not fake atomicity.
+
 ## [0.1.3] — 2026-04-23
 
 Post-0.1.2 audit patch. Three parallel agent audits against 0.1.2

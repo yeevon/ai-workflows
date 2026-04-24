@@ -36,6 +36,18 @@ crosses the boundary.
 
 Architectural rule: workflows are the top of the stack. Nothing imports
 from this package — it's strictly an entry-point layer.
+
+## External workflow discovery (M16 Task 01)
+
+Downstream consumers register their own workflow modules via dotted
+Python paths through :data:`ai_workflows.workflows.loader.ENV_VAR_NAME`
+(``AIW_EXTRA_WORKFLOW_MODULES``) or the ``--workflow-module`` CLI flag
+on both surfaces. :func:`load_extra_workflow_modules` imports each
+entry once at startup; the module's top-level :func:`register` call
+fires as a side effect. :class:`ExternalWorkflowImportError` (a
+subclass of :class:`ImportError`) surfaces import failures with a
+single actionable message. See KDR-013 / ADR-0007 for the
+user-owned-code contract.
 """
 
 from __future__ import annotations
@@ -43,11 +55,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from ai_workflows.workflows.loader import (
+    ExternalWorkflowImportError,
+    load_extra_workflow_modules,
+)
+
 __all__ = [
     "WorkflowBuilder",
     "register",
     "get",
     "list_workflows",
+    "ExternalWorkflowImportError",
+    "load_extra_workflow_modules",
 ]
 
 WorkflowBuilder = Callable[[], Any]
