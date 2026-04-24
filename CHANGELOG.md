@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M16 Task 01: external workflow module discovery (2026-04-24)
+
+Downstream consumers (CS-300 is the first) register their own workflow
+modules against `aiw` and `aiw-mcp` without forking the wheel. Dotted
+Python module paths via `AIW_EXTRA_WORKFLOW_MODULES` (env var,
+comma-separated) or `--workflow-module` (repeatable CLI flag on both
+surfaces). Ships as **0.2.0** — pure additive surface, unset env +
+absent flag = zero behavioural change from 0.1.3.
+
+**New files:**
+
+- `ai_workflows/workflows/loader.py` — `ExternalWorkflowImportError`
+  (`ImportError` subclass) + `load_extra_workflow_modules(*, cli_modules=None)`.
+  Imports each dotted path once via `importlib.import_module`; the
+  module's top-level `register(...)` call populates the existing
+  registry. Eagerly pre-imports shipped workflows so the existing
+  `register()` collision check catches external modules trying to
+  shadow in-package names.
+- `tests/workflows/test_external_module_loader.py` — 10 loader tests
+  (env-unset, single-env, comma-separated, env+CLI compose, import
+  failure, idempotent, non-registering-module is non-fatal,
+  shipped-name collision raises via `register()`, `_eager_import_…`
+  helper requests the shipped modules, dispatch routing to external
+  registrations).
+- `tests/cli/test_external_workflow.py` — 3 integration tests (env-var
+  round-trip, `--workflow-module` flag round-trip, bad-module-path
+  exits 2 with the module name + `ModuleNotFoundError` cause).
+- `tests/mcp/test_external_workflow.py` — 4 surface-parity tests
+  (stdio via `tool.fn`, HTTP via `fastmcp.Client`, `--workflow-module`
+  option exposed on the MCP Typer command, flag threads through to
+  the loader).
+- `design_docs/adr/0007_user_owned_code_contract.md` — records the
+  dotted-path-over-directory-scan decision + the user-owned-code risk
+  posture + rejected alternatives (entry points, directory scan,
+  plugin protocol, sandboxing, linting user code).
+
+**Touched:**
+
+- `ai_workflows/workflows/__init__.py` — re-exports
+  `ExternalWorkflowImportError` + `load_extra_workflow_modules`.
+- `ai_workflows/workflows/_dispatch.py::_import_workflow_module` —
+  consults `_REGISTRY` first; external workflows resolve via
+  `sys.modules[builder.__module__]`. In-package lazy-import fallback
+  preserved.
+- `ai_workflows/cli.py` — root Typer callback gains
+  `--workflow-module`; calls `load_extra_workflow_modules` and maps
+  `ExternalWorkflowImportError` to `typer.Exit(code=2)`.
+- `ai_workflows/mcp/__main__.py` — `_cli` gains `--workflow-module`;
+  same error handling as the CLI root.
+- `design_docs/architecture.md` §9 — KDR-013 row (external workflow
+  module discovery contract).
+- `docs/writing-a-workflow.md` — new §External workflows from a
+  downstream consumer with the CS-300 worked example.
+- `README.md` — one-line pointer in the MCP server section.
+
+**ACs satisfied (AC-1 through AC-18 per task spec).** Four-layer
+contract preserved (`import-linter` 4 kept). `uv run pytest` 640
+passed / 6 skipped; `uv run ruff check` clean.
+
+**Not in this release:**
+
+- No `AIW_WORKFLOWS_PATH` directory scan (superseded).
+- No `AIW_PRIMITIVES_PATH` (deferred).
+- No `aiw inspect` / `aiw list-workflows` external-source flag (deferred).
+- No programmatic-import logging default in `ai_workflows/__init__.py` (deferred).
+- No entry-point discovery, hot-reload, sandboxing, or user-code linting (all deferred to triggers that have not fired).
+
 ### Fixed — 0.1.3 patch: post-0.1.2 audit fixes (2026-04-23)
 
 Three parallel audit agents run against 0.1.2 surfaced 20 findings.

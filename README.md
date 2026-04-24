@@ -83,6 +83,8 @@ claude mcp add ai-workflows --scope user -- uvx --from jmdl-ai-workflows aiw-mcp
 
 The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport http --port 8080 --cors-origin http://localhost:3000`. Full skill-install walkthrough (builder-only, on design branch).
 
+Registering your own workflow modules from a downstream package? `AIW_EXTRA_WORKFLOW_MODULES=pkg.workflows.your_workflow` (or `--workflow-module pkg.workflows.your_workflow`, repeatable) imports them at startup. See [docs/writing-a-workflow.md §External workflows from a downstream consumer](docs/writing-a-workflow.md#external-workflows-from-a-downstream-consumer).
+
 ## Contributing / from source
 
 Clone the repo for development or to modify the framework itself:

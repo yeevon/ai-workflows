@@ -52,6 +52,10 @@ load_dotenv(override=False)
 
 from ai_workflows.mcp.server import build_server  # noqa: E402
 from ai_workflows.primitives.logging import configure_logging  # noqa: E402
+from ai_workflows.workflows import (  # noqa: E402
+    ExternalWorkflowImportError,
+    load_extra_workflow_modules,
+)
 
 app = typer.Typer(add_completion=False, help="ai-workflows MCP server.")
 
@@ -89,13 +93,28 @@ def _cli(
             "same-origin only. Exact-match; no regex."
         ),
     ),
+    workflow_module: list[str] = typer.Option(
+        [],
+        "--workflow-module",
+        help=(
+            "Dotted Python path of an extra workflow module to import at "
+            "server startup (repeatable). Composes with "
+            "AIW_EXTRA_WORKFLOW_MODULES (env-var entries import first, "
+            "then --workflow-module entries). See the aiw CLI help or "
+            "docs/writing-a-workflow.md for details."
+        ),
+    ),
 ) -> None:
     """Start the MCP server on the selected transport.
 
     Logs route to stderr (``configure_logging``). On stdio the JSON-RPC
     channel owns stdout; on HTTP the uvicorn loop owns the socket and
-    stdout is unused for framing. Returns when the peer closes the
-    connection (stdio) or the HTTP server shuts down (http).
+    stdout is unused for framing. M16 Task 01 imports any extra
+    workflow modules named via ``AIW_EXTRA_WORKFLOW_MODULES`` or
+    ``--workflow-module`` before ``build_server()`` so ``run_workflow``
+    resolves external workflows identically to in-package ones.
+    Returns when the peer closes the connection (stdio) or the HTTP
+    server shuts down (http).
     """
     if transport not in ("stdio", "http"):
         raise typer.BadParameter(
@@ -103,6 +122,12 @@ def _cli(
         )
 
     configure_logging(level="INFO")
+    try:
+        load_extra_workflow_modules(cli_modules=workflow_module)
+    except ExternalWorkflowImportError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from None
+
     server = build_server()
     if transport == "stdio":
         server.run()

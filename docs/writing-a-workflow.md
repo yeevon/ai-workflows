@@ -118,3 +118,64 @@ Once `register("<name>", build)` fires at module-import time, the workflow is re
 - MCP tools: `run_workflow`, `resume_run`, `list_runs`, `cancel_run`, `get_run_status` — identical semantics over the MCP surface.
 
 No per-workflow CLI code to write, no per-workflow MCP schema edit. The `workflows` registry is the single coupling point; every surface reads from it.
+
+## External workflows from a downstream consumer
+
+A consumer of the published `jmdl-ai-workflows` wheel can register their own workflow modules without forking the package. Two surfaces, both honoured by `aiw` and `aiw-mcp`:
+
+1. **`AIW_EXTRA_WORKFLOW_MODULES`** — comma-separated dotted Python module paths.
+2. **`--workflow-module <dotted>`** — repeatable CLI flag on both commands; composes with the env var (env entries import first, then CLI entries).
+
+Each entry is imported via `importlib.import_module(...)` at startup; the module's top-level `register("name", build)` call lands the workflow in the shared registry. The module must already be importable via the running interpreter's `sys.path` — the typical layout is a pip-installable package, editable or otherwise.
+
+### Minimum module shape
+
+```python
+# cs300/workflows/question_gen.py
+
+from langgraph.graph import StateGraph
+
+from ai_workflows.workflows import register
+
+
+def build() -> StateGraph:
+    ...  # your StateGraph definition
+
+
+def question_gen_tier_registry() -> dict:
+    """Optional. Return {tier_name: TierConfig, ...} for any LLM tiers
+    the workflow dispatches. Omit the helper if the workflow makes no
+    LLM calls."""
+    return {}
+
+
+register("question_gen", build)
+```
+
+### Worked example — the CS-300 shape
+
+```bash
+# Your own package, editable-installed into the same environment as ai-workflows:
+uv pip install -e .
+
+# Run via env var:
+AIW_EXTRA_WORKFLOW_MODULES=cs300.workflows.question_gen \
+  aiw run question_gen --goal 'write 10 questions about chapter 4' --run-id qg-1
+
+# Or serve via MCP HTTP for an Astro / React / Vue frontend:
+AIW_EXTRA_WORKFLOW_MODULES=cs300.workflows.question_gen,cs300.workflows.grade \
+  aiw-mcp --transport http --port 8080 --cors-origin http://localhost:4321
+
+# Or use the CLI flag instead of the env var:
+aiw --workflow-module cs300.workflows.question_gen run question_gen --goal '...'
+```
+
+### Failure mode
+
+If any module named in the env var or flag fails to import, startup aborts with `ExternalWorkflowImportError` (a subclass of `ImportError`) naming the dotted path and the chained cause. Earlier entries in the list have already executed their top-level `register()` side effects by the time a later entry raises — Python's import system does not roll back partial loads, and the framework does not fake atomicity. In practice this is the same semantic Python itself uses for `from pkg import a, b, c` with a broken `b`.
+
+### User-owned code
+
+Imported modules run in-process with full Python privileges. The framework surfaces import errors but does not lint, test, or sandbox user code — that is the user's risk surface, not ai-workflows' (see [ADR-0007](../design_docs/adr/0007_user_owned_code_contract.md) (builder-only, on design branch)). Name collisions with shipped workflows are caught by the existing `register()` re-binding check and fail loudly.
+
+Entry-point discovery (PEP 621 `[project.entry-points.'ai_workflows.workflows']`) is a future layer on top of this one; it is not currently implemented. The trigger would be a consumer wanting to ship their workflows as a distributable pip package.
