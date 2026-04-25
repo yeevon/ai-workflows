@@ -7,9 +7,11 @@ If you have not read the [architecture overview](architecture.md) yet, start the
 ## Prerequisites
 
 - `ai-workflows` installed (`uv tool install jmdl-ai-workflows` for a persistent install, or working from a clone with `uv sync`).
-- `GEMINI_API_KEY` exported if your workflow uses the Gemini-backed tiers (`orchestrator`, `implementer`, `gemini_flash`).
-- `ollama serve` reachable at `http://127.0.0.1:11434` if your workflow uses the `local_coder` tier.
-- `claude` CLI on `PATH` (logged in via `claude login`) if your workflow uses the `claude_code` tier.
+- `GEMINI_API_KEY` exported if any tier in your workflow's tier registry routes to Gemini via LiteLLM.
+- `ollama serve` reachable at `http://127.0.0.1:11434` if any tier routes to Ollama (e.g. `ollama/qwen2.5-coder:32b` via LiteLLM).
+- `claude` CLI on `PATH` (logged in via `claude login`) if any tier uses `ClaudeCodeRoute` (the OAuth subprocess path).
+
+Tier names are per-workflow and declared by the workflow itself (see the worked example below). The shipped `planner` calls `planner-explorer` (Qwen via Ollama) and `planner-synth` (Claude Code Opus via OAuth subprocess); `slice_refactor` adds `slice-worker` on top of the planner's two. There is no global "supported tier names" list — your workflow declares whatever names it needs in its `<workflow>_tier_registry()` helper.
 
 ## The `StateGraph` shape
 
@@ -28,7 +30,7 @@ Every `TieredNode` must be followed by a `ValidatorNode` — this is KDR-004, en
 
 The four building blocks, in order of typical use:
 
-**`TieredNode`** — from [`ai_workflows/graph/tiered_node.py`](../ai_workflows/graph/tiered_node.py). Wraps one LLM call. Takes a `tier` name (one of `orchestrator`, `implementer`, `gemini_flash`, `local_coder`, `claude_code`), a prompt template, and a Pydantic `response_format` class. At runtime it routes to the right provider adapter — Gemini via LiteLLM, Ollama via the local HTTP API, or Claude Code via the OAuth CLI subprocess.
+**`TieredNode`** — from [`ai_workflows/graph/tiered_node.py`](../ai_workflows/graph/tiered_node.py). Wraps one LLM call. Takes a `tier` name (a string the workflow chooses; must match a key in the workflow's `<workflow>_tier_registry()` helper), a prompt template, and a Pydantic `response_format` class. At runtime dispatch reads the registry and routes the call to the matching `TierConfig.route` — `LiteLLMRoute` for Gemini / Ollama / any other LiteLLM-supported provider, or `ClaudeCodeRoute` for the OAuth CLI subprocess (KDR-007).
 
 **`ValidatorNode`** — from [`ai_workflows/graph/validator_node.py`](../ai_workflows/graph/validator_node.py). Takes the LLM output and validates it against a Pydantic schema. On success, writes the validated object to state and routes forward. On failure, routes to a `RetryingEdge` which classifies the failure and decides whether to retry or stop.
 
@@ -44,7 +46,7 @@ Registration is idempotent under re-import and raises `ValueError` on a name col
 
 ## Worked example — the `echo` workflow
 
-A minimal workflow: take a goal string, send it to the `gemini_flash` tier, validate the response shape, return the echoed text.
+A minimal workflow: take a goal string, send it to a Gemini-backed tier the workflow declares, validate the response shape, return the echoed text.
 
 ```python
 from typing import TypedDict
@@ -54,6 +56,7 @@ from langgraph.graph import END, START, StateGraph
 
 from ai_workflows.graph.tiered_node import TieredNode
 from ai_workflows.graph.validator_node import ValidatorNode
+from ai_workflows.primitives.tiers import LiteLLMRoute, TierConfig
 from ai_workflows.workflows import register
 
 
@@ -67,13 +70,25 @@ class EchoResponse(BaseModel):
     echoed: str
 
 
+def echo_tier_registry() -> dict[str, TierConfig]:
+    """Tiers this workflow calls. Dispatch reads this at run time."""
+    return {
+        "echo-llm": TierConfig(
+            name="echo-llm",
+            route=LiteLLMRoute(model="gemini/gemini-2.5-flash"),
+            max_concurrency=1,
+            per_call_timeout_s=60,
+        ),
+    }
+
+
 def build() -> StateGraph:
     graph = StateGraph(EchoState)
 
     graph.add_node(
         "call",
         TieredNode(
-            tier="gemini_flash",
+            tier="echo-llm",
             prompt_template="Echo this back verbatim: {goal}",
             response_format=EchoResponse,
         ),
@@ -92,6 +107,8 @@ def build() -> StateGraph:
 
 register("echo", build)
 ```
+
+The `<workflow>_tier_registry()` naming is a convention (`_dispatch.py` resolves it via `getattr(module, f"{workflow}_tier_registry", None)`). A workflow that makes no LLM calls can omit the helper entirely — dispatch falls back to an empty registry.
 
 Save as `ai_workflows/workflows/echo.py`. Run it:
 
@@ -115,7 +132,7 @@ Once `register("<name>", build)` fires at module-import time, the workflow is re
 - `aiw resume <run_id> --approve` — resume a paused run through the next `HumanGate`.
 - `aiw list-runs` / `aiw list-runs --workflow <name> --status completed` — query the run registry.
 - `aiw cancel <run_id>` — mark a run cancelled.
-- MCP tools: `run_workflow`, `resume_run`, `list_runs`, `cancel_run`, `get_run_status` — identical semantics over the MCP surface.
+- MCP tools: `run_workflow`, `resume_run`, `list_runs`, `cancel_run` — identical semantics over the MCP surface. Status queries use `list_runs(status=...)`; there is no separate `get_run_status` tool.
 
 No per-workflow CLI code to write, no per-workflow MCP schema edit. The `workflows` registry is the single coupling point; every surface reads from it.
 

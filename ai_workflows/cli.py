@@ -21,8 +21,13 @@ Relationship to other modules
 * :mod:`ai_workflows` — the package ``__version__`` dunder read by
   ``aiw version``.
 * :mod:`ai_workflows.workflows` — registry the ``run`` command resolves
-  workflow builders from. Workflow modules are imported lazily so
-  registration fires only when the caller names the workflow.
+  workflow builders from. In-package modules import lazily on first
+  dispatch (registration fires when the caller names the workflow);
+  external modules registered via ``--workflow-module`` /
+  :data:`AIW_EXTRA_WORKFLOW_MODULES` import eagerly at startup
+  (:func:`load_extra_workflow_modules`), and that path also pre-imports
+  the shipped modules so the :func:`register` collision guard is armed
+  before externals load (M16 Task 01 / KDR-013).
 * :mod:`ai_workflows.graph.checkpointer` — the ``AsyncSqliteSaver``
   factory ``run`` compiles the graph against (KDR-009).
 * :mod:`ai_workflows.primitives.storage` —
