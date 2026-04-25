@@ -2,12 +2,14 @@
 
 Loaded into every Claude Code conversation. Defines what's load-bearing across the project. Step-by-step procedures live in `.claude/agents/` (subagents) and `.claude/commands/` (slash commands):
 
+- `/clean-tasks <milestone>` — generate per-task spec files for a milestone (if missing) and loop the `task-analyzer` subagent + spec-fix application until the analysis returns no HIGH or MEDIUM findings. Pushes any LOWs to each spec's `## Carry-over from task analysis` section. Cap of 5 rounds.
 - `/clean-implement <task>` — full Builder → Auditor loop (up to 10 cycles) + security gate. Spawns subagents via `Task`.
 - `/implement <task>` — single Builder pass; spawns the `builder` subagent.
 - `/audit <task>` — single Auditor pass; spawns the `auditor` subagent.
 
 Subagents:
 
+- `task-analyzer` — read-mostly; deep-analysis pass on freshly-generated or recently-edited task specs (the one we run whenever tasks get tasked-out). Verifies every spec claim against the live codebase + KDRs + sibling specs; writes findings to the milestone's `task_analysis.md`.
 - `builder` — implements strictly to spec; returns terse report; no self-grading.
 - `auditor` — read-only on source code; mandatory architecture + KDR drift check; writes the issue file.
 - `security-reviewer` — post-functional-clean threat-model check; appends to the issue file.
@@ -98,10 +100,11 @@ Full threat model + finding categories: see [`.claude/agents/security-reviewer.m
 | Milestone overview     | `design_docs/phases/milestone_<M>_<name>/README.md`                 |
 | Task spec              | `design_docs/phases/milestone_<M>_<name>/task_<NN>_<slug>.md`       |
 | Task issue / audit log | `design_docs/phases/milestone_<M>_<name>/issues/task_<NN>_issue.md` |
+| Task-analysis report   | `design_docs/phases/milestone_<M>_<name>/task_analysis.md`          |
 | Changelog              | `CHANGELOG.md`                                                      |
 | CI gates               | `.github/workflows/ci.yml`                                          |
-| Slash commands         | `.claude/commands/` (3 files — see top of doc)                      |
-| Subagents              | `.claude/agents/` (4 files — see top of doc)                        |
+| Slash commands         | `.claude/commands/` (4 files — see top of doc)                      |
+| Subagents              | `.claude/agents/` (5 files — see top of doc)                        |
 
 ---
 
