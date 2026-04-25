@@ -5,95 +5,138 @@ thinking: max
 
 # /clean-implement
 
-You are running the **Clean Implementation loop** for: $ARGUMENTS
+You are the **Clean Implementation loop controller** for: $ARGUMENTS
 
-This loop drives a task to a clean audit by cycling implement → audit up to 10 times. You are the loop controller — execute the Builder and Auditor steps **inline** in this conversation. Do **not** call `/implement` or `/audit` as separate skills; follow the steps described below directly.
+`$ARGUMENTS` is a task identifier — a task ID, spec file path, or shorthand like "m16 t1". You orchestrate a Builder → Auditor loop up to 10 cycles, then run a Security gate (security-reviewer + dependency-auditor when relevant) before declaring the task shippable. **All substantive work runs in dedicated subagents via `Task` spawns** — your job is orchestration and stop-condition evaluation only. Do not implement, do not audit, do not write the issue file yourself.
+
+(This is `Task`-based subagent dispatch, not slash-command chaining. The orchestration loop below stays inlined here so the loop controller never halts after a sub-step returns.)
 
 ---
 
-## Stop conditions (check after every audit phase, in priority order)
+## Project setup (run once at the start of cycle 1)
 
-1. **BLOCKER** — The audit issue file contains a HIGH issue marked `🚧 BLOCKED` that requires user input to resolve. Stop immediately. Surface the blocker verbatim to the user. Do not start another iteration.
-2. **USER INPUT REQUIRED** — The audit identified any issue (any severity) where the recommended resolution says "stop and ask the user" or "user decision needed". Stop immediately. List every such issue to the user. Do not start another iteration.
-3. **CLEAN** — The audit issue file status line reads `✅ PASS` with no OPEN issues (no `ISS-XX` entries marked OPEN, 🟡, or 🟢). Stop and report success.
-4. **CYCLE LIMIT** — 10 implement→audit cycles completed without hitting conditions 1–3. Stop and present the outstanding issue list to the user.
+Resolve `$ARGUMENTS` to concrete paths:
 
-At the start of the very first cycle only: if the issue file already contains an unresolved BLOCKER from a prior session, treat that as condition 1 immediately — don't run the implement phase against an open blocker.
+- **Spec path:** `design_docs/phases/milestone_<M>_<name>/task_<NN>_<slug>.md`. Resolve shorthand by glob: "m16 t1" → `design_docs/phases/milestone_16_*/task_01_*.md`. If multiple matches, ask the user.
+- **Issue file path:** `design_docs/phases/milestone_<M>_<name>/issues/task_<NN>_issue.md`. May not exist on cycle 1.
+- **Parent milestone README:** `design_docs/phases/milestone_<M>_<name>/README.md`.
+
+Build the **project context brief** — pass verbatim to every subsequent `Task` spawn so subagents don't have to rediscover conventions:
+
+```text
+Project: ai-workflows (Python, MIT, published as jmdl-ai-workflows on PyPI)
+Layer rule: primitives → graph → workflows → surfaces (enforced by `uv run lint-imports`)
+Gate commands: `uv run pytest`, `uv run lint-imports`, `uv run ruff check`
+Architecture: design_docs/architecture.md (especially §3 four-layer rule, §6 dep table, §9 KDRs)
+ADRs: design_docs/adr/*.md
+Deferred-ideas file: design_docs/nice_to_have.md (out-of-scope by default)
+Changelog convention: ## [Unreleased] → ### Added — M<N> Task <NN>: <Title> (YYYY-MM-DD)
+Dep manifests: pyproject.toml + uv.lock — either changing triggers the dependency-auditor
+Load-bearing KDRs: 002 (MCP-as-substrate), 003 (no Anthropic API), 004 (validator pairing),
+                   006 (three-bucket retry via RetryingEdge), 008 (FastMCP + pydantic schema as
+                   public contract), 009 (SqliteSaver-only checkpoints),
+                   013 (user-owned external workflow code)
+Issue file path: <resolved above>
+Status surfaces (must flip together at task close): per-task spec **Status:** line,
+                   milestone README task table row, tasks/README.md row if present,
+                   milestone README "Done when" checkboxes
+```
+
+If anything material is unclear (spec missing, milestone README absent, ambiguous shorthand) — **stop and ask the user** before spawning agents.
+
+---
+
+## Stop conditions (check after every audit, in priority order)
+
+1. **BLOCKER** — Issue file contains a HIGH issue marked `🚧 BLOCKED` requiring user input. Stop, surface verbatim.
+2. **USER INPUT REQUIRED** — Any issue recommends "stop and ask the user" / "user decision needed". Stop, list all such issues.
+3. **FUNCTIONALLY CLEAN** — Issue file status line reads `✅ PASS` with no OPEN issues. Proceed to the **security gate** below. Only after the security gate passes is the task fully CLEAN.
+4. **CYCLE LIMIT** — 10 build → audit cycles without 1–3. Stop, present outstanding issues. **Do not run the security gate against an unclean task.**
+
+**At the start of cycle 1 only:** if the issue file already contains an unresolved BLOCKER from a prior session, treat as condition 1 immediately — don't spawn the Builder against an open blocker.
 
 ---
 
 ## Loop procedure
 
-For each cycle (1 … 10), run the implement phase and the audit phase **back-to-back in the same conversation**. The audit phase must run after every implement phase — no text summary, no verdict, no todo update between them. The audit phase is the only thing that can decide whether the task is clean; your self-assessment does not count.
+For cycles 1..10:
 
-### Implement phase — Builder mode (CLAUDE.md)
+### Step 1 — Builder
 
-**Before implementing:** open the issue file at `design_docs/phases/milestone_<N>_<name>/issues/task_<NN>_issue.md`. If a HIGH issue is marked `🚧 BLOCKED`, stop immediately and surface it (stop condition 1). Do not run the implement phase against an open blocker.
+Spawn the `builder` subagent via `Task` with: task identifier, spec path, issue file path, project context brief, parent milestone README path. Wait for completion. Capture the Builder's report.
 
-Otherwise, follow Builder-mode from CLAUDE.md exactly:
+### Step 2 — Auditor
 
-1. Read the task file in full.
-2. Read the matching issue file if it exists — treat it as an authoritative amendment to the task file. If the two disagree, the task file wins; call out the conflict first. Deviations go into the issue file.
-3. Read the milestone `README.md` for scope context and the task-order dependency graph.
-4. Read any carry-over section at the bottom of the task file — these are extra ACs from prior audits and must be ticked off as they land.
-5. Implement strictly against the task file + issue file + carry-over. No invented scope, no drive-by refactors, no adoption of items from `design_docs/nice_to_have.md`.
-6. Write tests for every acceptance criterion (including carry-over) under `tests/`, mirroring the package path. Scaffolding tests may live at `tests/test_*.py`.
-7. Run the full gate locally: `uv run pytest`, `uv run lint-imports`, `uv run ruff check`. Fix anything red before handing off to the audit phase.
-8. Update `CHANGELOG.md` under `## [Unreleased]` with a `### Added — M<N> Task <NN>: <Title> (YYYY-MM-DD)` entry listing files touched, ACs satisfied, and deviations from spec.
-9. Every new module gets a docstring citing the task and its relationship to other modules. Every public class and function gets a docstring. Inline comments only where the *why* is non-obvious.
-10. No commits, PRs, or pushes unless the user asks.
-11. **Stop and ask** if the spec is ambiguous, an AC is unsatisfiable as written, or implementing would break prior task behaviour. Do not invent direction.
+Spawn the `auditor` subagent via `Task` with: task identifier, spec path, issue file path, architecture docs + KDR paths, gate commands, project context brief, the Builder's report from Step 1. Wait for completion.
 
-### Audit phase — Auditor mode (CLAUDE.md)
+### Step 3 — Read issue file and evaluate stop conditions
 
-The moment the implement phase finishes, move straight into the audit phase. Forbidden between phases:
+**Read the issue file on disk.** Do not trust the Auditor's chat summary — the issue file is the source of truth. Evaluate the four stop conditions in order against what's actually written. If condition 3 (FUNCTIONALLY CLEAN) triggers, go to the **security gate**. If none trigger and cycles remain, loop to Step 1 targeting only the OPEN issues the audit identified.
 
-- A summary of what the implement phase did.
-- A verdict on the gates ("gates pass, so the cycle is clean…").
-- A "ready for audit" or self-predicted cycle status.
-- Any todo-list update.
-- Editing the issue file to flip its status line to `✅ PASS` — that is the audit's output, not a prediction.
+**Between Step 1 and Step 2, forbidden:**
 
-Follow Auditor-mode from CLAUDE.md exactly:
+- Summary of what the Builder did.
+- Verdict on the gates ("gates pass, so the cycle is clean").
+- Self-predicted cycle status.
+- A "ready for audit" todo update.
+- Editing the issue file yourself.
 
-1. **Load the full project scope — not just the diff.** Task file, milestone `README.md`, sibling task files and their issue files if present, `pyproject.toml`, `CHANGELOG.md`, `.github/workflows/ci.yml`, every claimed file, the `tests/` tree, **plus `design_docs/architecture.md` and every KDR the task cites**. Opening `architecture.md` is mandatory — skipping it is an incomplete audit.
-2. **Design-drift check (before grading ACs).** Cross-reference every change against `architecture.md`:
-   - New dependency? It must appear in `architecture.md §6` or be justified by an ADR. Items in `design_docs/nice_to_have.md` are a hard stop — flag HIGH.
-   - New module or layer? It must fit the four-layer contract from `architecture.md §3`. Import-linter violations are HIGH.
-   - LLM call added? Must route through `TieredNode` paired with a `ValidatorNode` (KDR-004); must not import the `anthropic` SDK or read `ANTHROPIC_API_KEY` (KDR-003).
-   - Checkpoint / resume logic? Must delegate to LangGraph's `SqliteSaver` — no hand-rolled checkpoint writes (KDR-009).
-   - Retry logic? Must use the three-bucket taxonomy (KDR-006) via `RetryingEdge`; no bespoke try/except retry loops.
-   - Observability? Must use `StructuredLogger` only. External backends (Langfuse, OTel, LangSmith) are `nice_to_have.md` items — HIGH if pulled in without trigger.
+The Auditor is the only thing that can decide whether the task is functionally clean.
 
-   Any drift is logged as HIGH with a `Violates KDR-XXX` or `Contradicts architecture.md §X` line. A drift HIGH blocks audit pass.
-3. **Run every gate locally — don't trust prior output.** `uv run pytest`, `uv run lint-imports`, `uv run ruff check`, plus any task-specific verification the spec calls out (e.g. `grep -r pydantic_ai` for M1.03, the four-layer contract for M1.12).
-4. **Grade each AC individually.** Passing tests ≠ done. Carry-over items count as ACs and are graded individually.
-5. **Be extremely critical.** Look for ACs that look met but aren't, silently skipped deliverables, additions beyond spec that add coupling, test gaps, doc drift, secrets shortcuts, `nice_to_have.md` scope creep, silent architecture drift.
-6. **Write or update the issue file** at `design_docs/phases/milestone_<N>_<name>/issues/task_<NN>_issue.md` — update in place on re-audit, never create a `_v2`. Structure per CLAUDE.md: status line, design-drift check section, AC grading table, HIGH / MEDIUM / LOW sections, additions-beyond-spec, gate summary, issue log, deferred-to-nice_to_have, propagation status. Every finding (any severity) carries an **Action** / **Recommendation** line with the file to edit, test to add, or task to own follow-up. Every drift finding cites the violated KDR or architecture section.
-7. **Forward-deferral propagation.** If a finding is deferred to a future task: log it as `DEFERRED` in this issue file with explicit owner (milestone + task number); append a `## Carry-over from prior audits` entry to the **target** task's spec file with issue ID, severity, concrete "what to implement" line, and back-link; and close the loop with a `## Propagation status` footer. Without propagation, the target Builder can't see the deferral. Findings that map to `nice_to_have.md` are recorded under a `## Deferred to nice_to_have` section with the §N reference — they are **not** forward-deferred to a task.
-8. **Do not modify code during the audit** unless the user explicitly asks.
+---
 
-### After the audit phase
+## Security gate (runs once, after FUNCTIONALLY CLEAN)
 
-Evaluate the four stop conditions, in order, against **what the audit actually wrote in the issue file** — not what the implement phase claimed. If none apply and cycles remain, start the next cycle at the implement phase, targeting only the OPEN issues the audit identified.
+The functional audit confirmed the task does what the spec says. The security gate confirms it doesn't introduce risks the spec didn't address. Runs **after** the loop reaches FUNCTIONALLY CLEAN, not on every cycle.
+
+### Step S1 — Security reviewer (always runs)
+
+Spawn `security-reviewer` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task (aggregate from all Builder reports), architecture docs + KDR paths.
+
+The security-reviewer writes findings into the same issue file under `## Security review`. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+
+### Step S2 — Dependency auditor (conditional)
+
+Run **only if** the aggregated diff across this task touched `pyproject.toml` or `uv.lock`. Check by inspecting Builder reports for manifest edits.
+
+If triggered, spawn `dependency-auditor` via `Task` with: task identifier, list of dep-manifest files changed, project context brief, lockfile path. Output appends under `## Dependency audit` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+
+If not triggered, note in the issue file: `Dependency audit: skipped — no manifest changes.`
+
+### Step S3 — Read issue file and evaluate security verdicts
+
+Re-read the issue file. Evaluate in priority order:
+
+1. **SECURITY BLOCKER** — Either reviewer's verdict is `BLOCK`. Stop and surface findings verbatim. The task is **not** CLEAN. Next action is another Builder → Auditor cycle targeting these findings (security-relevant code changes must be re-audited for functional regressions), not a retry of the security gate alone.
+2. **SECURITY FIX-THEN-SHIP** — Either reviewer's verdict is `FIX-THEN-SHIP`. Stop and surface findings. Same re-loop rule.
+3. **CLEAN** — All applicable reviewers' verdicts are `SHIP`. Report the task fully CLEAN.
+
+When re-looping from a security verdict, the Builder's next-cycle inputs include the security findings as carry-over ACs (the Auditor grades them as ACs on re-audit — which is what you want; security fixes get the same "re-verify the whole scope" treatment as any other change).
 
 ---
 
 ## Reporting
 
-At the end of each cycle, print a one-line status:
+End-of-cycle one-liner for build → audit cycles:
 
-`Cycle N/10 — [CLEAN | OPEN: <count> issues | BLOCKED: <issue-id> | USER INPUT: <issue-id>]`
+`Cycle N/10 — [FUNCTIONALLY CLEAN | OPEN: <count> issues | BLOCKED: <issue-id> | USER INPUT: <issue-id>]`
 
-On final stop, summarise:
+End-of-security-gate one-liner:
 
-- Which stop condition triggered.
-- Cycle count reached.
-- Any remaining OPEN issues (id + one-line description).
-- What the user needs to do next, if anything.
+`Security gate — [CLEAN | SEC-BLOCK: <count> | SEC-FIX: <count>]`
+
+Final-stop summary: stop condition triggered (functional or security), total cycle count (build → audit + re-loops from security), remaining OPEN issues (id + one-liner), what the user needs to do next.
 
 ---
 
-## Why the implement → audit ordering is absolute
+## Why the security gate is separate, not per-cycle
 
-Implementers self-grade optimistically — "I fixed both issues, so it should be clean" is the exact wrong-but-plausible voice the audit exists to check against. Gates alone aren't an audit (gates are a subset). Re-grading only the lines you just edited isn't an audit (a fix to one AC can regress another). Editing the issue file yourself isn't an audit result. The audit phase's re-load of the full task scope, `architecture.md`, and every cited KDR is the part that catches design drift — and none of that happens unless the audit phase is actually executed, in full, after every implement phase. When in doubt: run the audit phase.
+Running security-reviewer every cycle would burn tokens on the same code twice — once when it's broken and noisy, once when it's stable. A Critical-severity security finding before the code even compiles is useless signal. The functional loop gets the code correct; the security gate then checks the corrected code against a threat model the functional Auditor doesn't own. Security findings still re-enter the functional loop as carry-over ACs — so a security fix doesn't skip the Auditor.
+
+## Why the reviewers don't run inline
+
+The security-reviewer and dependency-auditor have narrower scopes and more opinionated threat models than the Auditor. Fresh context, their own system prompts, and read-only-ish tooling is what makes their output worth the spend. Running their logic inside the Auditor's context would dilute both.
+
+## Why the Builder and Auditor are subagents (not inline)
+
+Inline implementation pollutes the orchestrator's context with every Builder edit + every Auditor re-read. The orchestrator only needs the issue file's status line + the Builder's terse report to drive the loop. Moving each phase into a `Task` spawn keeps the orchestrator's context small (so 10 cycles fit in budget) and lets the auditor's read-only stance be enforced by its agent definition rather than relying on inline self-discipline.

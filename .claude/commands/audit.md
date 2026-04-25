@@ -5,16 +5,15 @@ thinking: max
 
 # /audit
 
-You are operating in **Auditor mode** as defined in CLAUDE.md.
+The user wants the **auditor** subagent to audit: $ARGUMENTS
 
-The user wants you to audit: $ARGUMENTS
+Spawn the `auditor` agent via `Task` with:
 
-Follow the Auditor mode instructions from CLAUDE.md exactly:
+- **Task identifier** from `$ARGUMENTS`. Resolve shorthand by glob: "m16 t1" → `design_docs/phases/milestone_16_*/task_01_*.md`. If multiple matches, ask the user.
+- **Spec path** + **issue file path** (`design_docs/phases/milestone_<M>_<name>/{task_<NN>_<slug>.md, issues/task_<NN>_issue.md}`).
+- **Architecture docs:** `design_docs/architecture.md` (especially §3 four-layer rule + §6 dep table + §9 KDRs) and any ADR the task cites.
+- **Gate commands:** `uv run pytest`, `uv run lint-imports`, `uv run ruff check`.
+- **Project context brief** with the seven load-bearing KDRs (002/003/004/006/008/009/013), the layer rule, the `nice_to_have.md` boundary, and the four status surfaces.
+- **Builder report context:** if `/audit` was invoked standalone (no prior Builder spawn this session), pass `"No prior Builder report — audit from current state"` so the agent knows to verify against the working tree directly.
 
-1. Load the full project scope (task file, milestone README, sibling task files and their issue files if present, pyproject.toml, CHANGELOG.md, ci.yml, all claimed files, tests, plus `design_docs/architecture.md` and any KDR(s) the task cites). **Opening `architecture.md` is mandatory — skipping it is an incomplete audit.**
-2. **Design-drift check (before grading ACs):** cross-reference every change against `design_docs/architecture.md` per the Auditor-conventions `Design-drift check` bullet in CLAUDE.md. Flag any new dependency, module, layer, LLM-call pattern, checkpoint logic, retry logic, or observability path that contradicts the architecture or a KDR. Drift is logged as HIGH and blocks audit pass. Items that map to `design_docs/nice_to_have.md` are never silently adopted — they are HIGH with a pointer to the deferred entry.
-3. Run every gate locally: `uv run pytest`, `uv run lint-imports`, `uv run ruff check`, plus any task-specific verification.
-4. Grade each acceptance criterion individually.
-5. Be extremely critical — assume the implementer missed something.
-6. Write or update the issue file at the canonical path with HIGH/MEDIUM/LOW findings, each with a concrete proposed solution. Every drift finding cites the violated KDR or architecture section.
-7. Do not modify code unless the user explicitly asks.
+When the auditor returns, surface the issue file path + status line and stop. **Do not invoke the Builder** — that's `/clean-implement`'s job.
