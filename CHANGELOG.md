@@ -83,6 +83,19 @@ each.
   semantic Python itself uses for partial module imports; the CLI /
   MCP surfaces do not fake atomicity.
 
+### Published
+
+- **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.2.0/>
+- **Wheel:** `jmdl_ai_workflows-0.2.0-py3-none-any.whl` (164600 bytes).
+- **SHA256:** `1b761093d68bbb9e331c0646c54d2192f1bd277356482b51cccc599cbfef4065`
+- **Publish-side commit:** `main:e3607a9` (the release-prep commit whose
+  wheel was uploaded).
+- **Post-publish live smoke:** `uvx --refresh --from
+  jmdl-ai-workflows==0.2.0 aiw version` from `/tmp` prints `0.2.0`; a
+  companion `aiw --help` + `aiw-mcp --help` from `/tmp` both surface the
+  new `--workflow-module` flag, confirming the M16 external-workflow
+  registration path is live in the published wheel.
+
 ## [0.1.3] — 2026-04-23
 
 Post-0.1.2 audit patch. Three parallel agent audits against 0.1.2
