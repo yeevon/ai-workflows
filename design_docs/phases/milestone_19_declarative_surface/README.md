@@ -156,7 +156,7 @@ Both shapes are derivable from the M19-shipped doc set alone — no `_dispatch.p
 |---|---|---|---|
 | 01 | [`WorkflowSpec` + step-type taxonomy + custom-step extension hook + `register_workflow` entry point](task_01_workflow_spec.md) | code + test | — |
 | 02 | [Spec → `StateGraph` compiler — synthesises state class, edges, hooks; pairs validators by construction](task_02_compiler.md) | code + test | T01 |
-| 03 | [Result-shape correctness: artefact-field bug fix + `plan` → `artifact` rename with deprecation alias (folded from M18 T01)](task_03_result_shape.md) | code + test | — (independent of T01/T02) |
+| 03 | [Result-shape correctness: artefact-field bug fix + `plan` → `artifact` rename with deprecation alias (folded from M18 T01)](task_03_result_shape.md) | code + test | — (independent of T01/T02) | ✅ Implemented (2026-04-26) |
 | 04 | [Ship `summarize` workflow as in-tree spec-API proof point + wire-level e2e verification](task_04_summarize_proof_point.md) | code + test | T01 + T02 + T03 |
 | 05 | [Rewrite `docs/writing-a-workflow.md` declarative-first (Tier 1 + Tier 2)](task_05_writing_workflow_rewrite.md) | doc | T01 + T03 |
 | 06 | [New `docs/writing-a-custom-step.md` (Tier 3 dedicated guide) + `compile_step_in_isolation` testing fixture](task_06_writing_custom_step.md) | doc + code (fixture) | T01 |

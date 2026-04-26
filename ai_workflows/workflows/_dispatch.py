@@ -8,11 +8,30 @@ dict that matches the shape of
 :class:`ai_workflows.mcp.schemas.RunWorkflowOutput` / the CLI's existing
 stdout contract:
 
-``{run_id, status, awaiting?, plan?, total_cost_usd?, error?}``
+``{run_id, status, awaiting?, artifact?, plan?, total_cost_usd?, error?}``
 
 Surfaces reformat / re-wrap this dict into whatever their transport
 wants (``typer.echo`` lines for the CLI, a :class:`RunWorkflowOutput`
 pydantic model for the MCP tool).
+
+M19 Task 03 (ADR-0008 fold-in from M18 T01): fixes a bug where the five
+``final.get("plan")`` call sites in :func:`_build_result_from_final` and
+:func:`_build_resume_result_from_final` hardcoded the planner workflow's
+state key for artefact surfacing.  Any workflow whose ``FINAL_STATE_KEY
+!= "plan"`` (e.g. ``FINAL_STATE_KEY = "questions"`` from CS-300) had its
+terminal artefact silently dropped from the response even though
+completion detection one level up correctly used the configurable key.
+All five sites now read ``final.get(final_state_key)``.
+
+The internal helper :func:`_dump_artifact` (renamed from ``_dump_plan``
+in the same task for consistency — the helper serialises any workflow
+artefact, not only planner plans) is shared by both result-build
+functions.  Result dicts now always include **both** ``artifact``
+(canonical) and ``plan`` (deprecated backward-compat alias) populated
+with the same value so existing 0.2.0 callers reading ``result["plan"]``
+continue to work; new callers read ``result["artifact"]``.  See
+:class:`ai_workflows.mcp.schemas.RunWorkflowOutput` for the schema
+rename + deprecation notice (removal target: 1.0).
 
 ``ainvoke`` is always called with ``durability="sync"`` so the
 last-completed-step checkpoint hits SQLite before a
@@ -511,10 +530,15 @@ async def run_workflow(
       or a downstream exception the graph's error handler captured).
     * ``awaiting`` — ``"gate"`` when ``status == "pending"``; otherwise
       ``None``.
-    * ``plan`` — ``dict`` (``model_dump()`` of the pydantic plan) when
-      ``status == "completed"`` (terminal artefact) or when
+    * ``artifact`` — ``dict`` (``model_dump()`` / ``dict()`` of the
+      workflow's terminal artefact — the value of the state field named
+      by ``FINAL_STATE_KEY``) when ``status == "completed"`` or when
       ``status == "pending"`` and ``awaiting == "gate"`` (in-flight
-      draft, M11 T01); otherwise ``None``.
+      draft, M11 T01); otherwise ``None``.  M19 T03 canonical name;
+      see also the ``plan`` alias below.
+    * ``plan`` — deprecated backward-compat alias for ``artifact``.
+      Populated with the same value as ``artifact`` through the 0.2.x
+      line; removal target is 1.0. Prefer ``artifact`` for new callers.
     * ``total_cost_usd`` — rolled-up per-run cost (may be ``0.0``).
     * ``error`` — descriptive error string when
       ``status == "errored"`` / ``"aborted"``; otherwise ``None``.
@@ -583,6 +607,7 @@ async def run_workflow(
                 "run_id": run_id_resolved,
                 "status": "errored",
                 "awaiting": None,
+                "artifact": None,
                 "plan": None,
                 "total_cost_usd": tracker.total(run_id_resolved),
                 "error": error_msg,
@@ -601,23 +626,37 @@ async def run_workflow(
         await checkpointer.conn.close()
 
 
-def _dump_plan(plan: Any) -> dict[str, Any] | None:
-    """Serialise an in-flight or terminal plan for transport.
+def _dump_artifact(artefact: Any) -> dict[str, Any] | None:
+    """Serialise an in-flight or terminal workflow artefact for transport.
 
     Accepts a pydantic model (``.model_dump()``), a mapping
-    (``dict(plan)``), or ``None``. Returns ``None`` when the plan is
-    unset so the MCP output field stays strictly-optional. Shared
-    between :func:`_build_result_from_final` and
+    (``dict(artefact)``), a JSON-serialisable scalar (wrapped as
+    ``{"value": artefact}`` so the MCP output's ``dict[str, Any] | None``
+    typing is always honoured), or ``None``.  Returns ``None`` when the
+    artefact is unset so the MCP output field stays strictly-optional.
+    Shared between :func:`_build_result_from_final` and
     :func:`_build_resume_result_from_final` so the pending / completed /
-    gate_rejected branches cannot drift in what they emit — surfaces in
-    M11 T01 when the interrupt branches started dumping the draft plan
-    alongside the existing terminal dumps.
+    gate_rejected branches cannot drift in what they emit.
+
+    The scalar-wrap path exists because compiler-synthesised workflows
+    (M19 T02) may use a non-dict ``FINAL_STATE_KEY`` value (e.g. a count
+    integer like ``slice_refactor``'s ``applied_artifact_count``).  The
+    ``{"value": ...}`` envelope keeps the MCP wire type uniform without
+    discarding the value.
+
+    Renamed from ``_dump_plan`` in M19 T03 (ADR-0008): the helper
+    serialises any workflow artefact, not only planner plans.  Call sites
+    updated across both result-build functions in the same task.
     """
-    if plan is None:
+    if artefact is None:
         return None
-    if hasattr(plan, "model_dump"):
-        return plan.model_dump()
-    return dict(plan)
+    if hasattr(artefact, "model_dump"):
+        return artefact.model_dump()
+    if isinstance(artefact, dict):
+        return dict(artefact)
+    # Scalar or other non-mapping value — wrap so the wire type stays
+    # dict[str, Any] | None throughout.
+    return {"value": artefact}
 
 
 def _extract_gate_context(
@@ -687,9 +726,10 @@ async def _build_result_from_final(
 
     * ``__interrupt__`` in state → HumanGate pause. Stamp
       ``runs.total_cost_usd`` so ``aiw resume`` / ``resume_run`` can
-      reseed the cost tracker, project the in-flight draft ``plan``
-      and a ``gate_context`` review payload (M11 T01), and return
-      ``status="pending"`` + ``awaiting="gate"``.
+      reseed the cost tracker, project the in-flight draft ``artifact``
+      (and the ``plan`` deprecated alias) and a ``gate_context`` review
+      payload (M11 T01), and return ``status="pending"`` +
+      ``awaiting="gate"``.
     * ``state["hard_stop_failing_slice_ids"]`` populated → double-failure
       hard-stop fired upstream of the aggregator (M6 T07,
       architecture.md §8.2). Flip ``runs.status`` to ``"aborted"`` with
@@ -699,7 +739,7 @@ async def _build_result_from_final(
       ``final_state_key`` is the workflow's :data:`FINAL_STATE_KEY`
       constant (``"plan"`` for planner, ``"applied_artifact_count"`` for
       slice_refactor — M6 T06 resolves T01-CARRY-DISPATCH-COMPLETE).
-      Return ``status="completed"`` with the plan dumped to a plain
+      Return ``status="completed"`` with the artefact dumped to a plain
       dict for transport when the workflow produces one.
     * Otherwise — the graph finished with neither outcome (usually a
       captured ``NonRetryable`` sitting in ``state["last_exception"]``).
@@ -709,16 +749,27 @@ async def _build_result_from_final(
     ``workflow`` is the registered workflow name; threaded through so
     the gate-pause branch can stamp it into ``gate_context.workflow_id``
     without a second registry lookup (M11 T01).
+
+    M19 T03 (ADR-0008): all five ``final.get("plan")`` call sites changed
+    to ``final.get(final_state_key)`` and ``_dump_plan`` renamed to
+    ``_dump_artifact``.  Every result dict now carries both ``artifact``
+    (canonical) and ``plan`` (deprecated alias — same value).  Error-path
+    branches that return ``None`` for the artefact emit both
+    ``artifact: None`` and ``plan: None`` (lockstep).  This preserves
+    backward compatibility for 0.2.0 callers reading ``result["plan"]``
+    while exposing the canonical field for new callers.
     """
     total = tracker.total(run_id)
 
     if "__interrupt__" in final:
         await storage.update_run_status(run_id, "pending", total_cost_usd=total)
+        _artefact = _dump_artifact(final.get(final_state_key))
         return {
             "run_id": run_id,
             "status": "pending",
             "awaiting": "gate",
-            "plan": _dump_plan(final.get("plan")),
+            "artifact": _artefact,
+            "plan": _artefact,  # deprecated alias — same value (M19 T03)
             "total_cost_usd": total,
             "error": None,
             "gate_context": _extract_gate_context(final, workflow=workflow),
@@ -741,6 +792,7 @@ async def _build_result_from_final(
             "run_id": run_id,
             "status": "aborted",
             "awaiting": None,
+            "artifact": None,  # error path — both fields None (M19 T03)
             "plan": None,
             "total_cost_usd": total,
             "error": (
@@ -763,6 +815,7 @@ async def _build_result_from_final(
             "run_id": run_id,
             "status": "aborted",
             "awaiting": None,
+            "artifact": None,  # error path — both fields None (M19 T03)
             "plan": None,
             "total_cost_usd": total,
             "error": (
@@ -774,11 +827,13 @@ async def _build_result_from_final(
         }
 
     if final.get(final_state_key) is not None:
+        _artefact = _dump_artifact(final.get(final_state_key))
         return {
             "run_id": run_id,
             "status": "completed",
             "awaiting": None,
-            "plan": _dump_plan(final.get("plan")),
+            "artifact": _artefact,
+            "plan": _artefact,  # deprecated alias — same value (M19 T03)
             "total_cost_usd": total,
             "error": None,
             "gate_context": None,
@@ -790,6 +845,7 @@ async def _build_result_from_final(
             "run_id": run_id,
             "status": "errored",
             "awaiting": None,
+            "artifact": None,  # error path — both fields None (M19 T03)
             "plan": None,
             "total_cost_usd": total,
             "error": str(last) if not isinstance(last, NonRetryable) else str(last),
@@ -799,6 +855,7 @@ async def _build_result_from_final(
         "run_id": run_id,
         "status": "errored",
         "awaiting": None,
+        "artifact": None,  # error path — both fields None (M19 T03)
         "plan": None,
         "total_cost_usd": total,
         "error": "workflow ended without plan or gate interrupt",
@@ -897,6 +954,7 @@ async def resume_run(
                 "run_id": run_id,
                 "status": "errored",
                 "awaiting": None,
+                "artifact": None,
                 "plan": None,
                 "total_cost_usd": tracker.total(run_id),
                 "error": error_msg,
@@ -970,11 +1028,13 @@ async def _build_resume_result_from_final(
 
     if "__interrupt__" in final:
         await storage.update_run_status(run_id, "pending", total_cost_usd=total)
+        _artefact = _dump_artifact(final.get(final_state_key))
         return {
             "run_id": run_id,
             "status": "pending",
             "awaiting": "gate",
-            "plan": _dump_plan(final.get("plan")),
+            "artifact": _artefact,
+            "plan": _artefact,  # deprecated alias — same value (M19 T03)
             "total_cost_usd": total,
             "error": None,
             "gate_context": _extract_gate_context(final, workflow=workflow),
@@ -996,6 +1056,7 @@ async def _build_resume_result_from_final(
             "run_id": run_id,
             "status": "aborted",
             "awaiting": None,
+            "artifact": None,  # error path — both fields None (M19 T03)
             "plan": None,
             "total_cost_usd": total,
             "error": (
@@ -1024,6 +1085,7 @@ async def _build_resume_result_from_final(
             finished_at=finished_at,
             total_cost_usd=total,
         )
+        _artefact = _dump_artifact(final.get(final_state_key))
         return {
             "run_id": run_id,
             "status": "gate_rejected",
@@ -1031,7 +1093,8 @@ async def _build_resume_result_from_final(
             # M11 T01: project the last-draft plan for audit review.
             # ``gate_context`` stays ``None`` — the gate has already
             # resolved, no pending prompt to surface.
-            "plan": _dump_plan(final.get("plan")),
+            "artifact": _artefact,
+            "plan": _artefact,  # deprecated alias — same value (M19 T03)
             "total_cost_usd": total,
             "error": None,
             "gate_context": None,
@@ -1041,11 +1104,13 @@ async def _build_resume_result_from_final(
         await storage.update_run_status(
             run_id, "completed", total_cost_usd=total
         )
+        _artefact = _dump_artifact(final.get(final_state_key))
         return {
             "run_id": run_id,
             "status": "completed",
             "awaiting": None,
-            "plan": _dump_plan(final.get("plan")),
+            "artifact": _artefact,
+            "plan": _artefact,  # deprecated alias — same value (M19 T03)
             "total_cost_usd": total,
             "error": None,
             "gate_context": None,
@@ -1057,6 +1122,7 @@ async def _build_resume_result_from_final(
             "run_id": run_id,
             "status": "errored",
             "awaiting": None,
+            "artifact": None,  # error path — both fields None (M19 T03)
             "plan": None,
             "total_cost_usd": total,
             "error": str(last),
@@ -1066,6 +1132,7 @@ async def _build_resume_result_from_final(
         "run_id": run_id,
         "status": "errored",
         "awaiting": None,
+        "artifact": None,  # error path — both fields None (M19 T03)
         "plan": None,
         "total_cost_usd": total,
         "error": "resume produced no plan and no interrupt",

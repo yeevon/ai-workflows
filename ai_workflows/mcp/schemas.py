@@ -24,6 +24,12 @@ Relationship to other modules
   rule (they never cross into an LLM's ``response_format``). Bounds on
   fields like :attr:`ListRunsInput.limit` are *permitted* and used where
   they add contract-at-boundary value.
+
+M19 T03 (ADR-0008): :attr:`RunWorkflowOutput.artifact` and
+:attr:`ResumeRunOutput.artifact` are the canonical field names for the
+workflow's terminal artefact.  The ``plan`` field on each model is
+preserved as a deprecated alias through the 0.2.x line (removal target
+1.0) so existing 0.2.0 callers reading ``result.plan`` continue to work.
 """
 
 from __future__ import annotations
@@ -82,19 +88,24 @@ class RunWorkflowOutput(BaseModel):
     ``status`` is the run's state post-dispatch:
 
     * ``"pending"`` — the graph yielded at a :class:`HumanGate` interrupt
-      (``awaiting='gate'``). ``plan`` carries the in-flight draft for
+      (``awaiting='gate'``). ``artifact`` carries the in-flight draft for
       the operator to review; ``gate_context`` carries the gate prompt,
       id, workflow id, and a projection-time ISO-8601 timestamp.
     * ``"completed"`` — the graph reached its terminal artifact node.
-      ``plan`` carries the final artefact.
+      ``artifact`` carries the final artefact.
     * ``"aborted"`` — the Ollama-fallback circuit-breaker gate resolved
       to ABORT (M8 T04) or the double-failure slice hard-stop fired
-      (M6 T07 / architecture.md §8.2). ``plan`` is ``None``; ``error``
+      (M6 T07 / architecture.md §8.2). ``artifact`` is ``None``; ``error``
       carries the distinguishing message.
     * ``"errored"`` — a dispatch-level failure (budget breach, validator
-      exhaust, uncaught graph exception). ``plan`` is ``None``; ``error``
+      exhaust, uncaught graph exception). ``artifact`` is ``None``; ``error``
       carries a descriptive message so MCP clients see the reason
       in-band rather than through a raw Python exception (M4 T02 AC).
+
+    ``artifact`` (M19 T03 — ADR-0008) is the canonical field name for the
+    workflow's terminal artefact, replacing the original ``plan`` field name
+    which was planner-specific.  ``plan`` is preserved as a deprecated alias
+    (same value) through the 0.2.x line; removal target 1.0.
 
     ``gate_context`` (M11 T01) is populated iff ``status="pending"`` and
     ``awaiting="gate"`` — see the field's ``description`` for the dict
@@ -107,7 +118,32 @@ class RunWorkflowOutput(BaseModel):
     run_id: str
     status: Literal["pending", "completed", "aborted", "errored"]
     awaiting: Literal["gate"] | None = None
-    plan: dict[str, Any] | None = None
+    artifact: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "The workflow's terminal artefact — the value of the state field "
+            "named by the workflow's FINAL_STATE_KEY (declarative spec: the "
+            "first field of output_schema). For the in-tree planner this is "
+            "the approved PlannerPlan; for slice_refactor it is the applied-"
+            "artefact count; for an external workflow it is whatever the "
+            "workflow declares. At a gate-pause-resume response, reports the "
+            "value of the workflow's FINAL_STATE_KEY channel — which may be "
+            "``None`` if the workflow's terminal artefact has not been computed "
+            "yet (e.g. slice_refactor's ``applied_artifact_count`` is ``None`` "
+            "at the ``slice_refactor_review`` gate). Surfaced through the "
+            "deprecated ``plan`` field alias for backward compatibility through "
+            "the 0.2.x line; removal target is 1.0."
+        ),
+    )
+    plan: dict[str, Any] | None = Field(
+        default=None,
+        deprecated=True,
+        description=(
+            "Deprecated alias for ``artifact``. Deprecated alias preserved "
+            "for backward compatibility through the 0.2.x line; removal "
+            "target 1.0. Read ``artifact`` instead."
+        ),
+    )
     total_cost_usd: float | None = None
     error: str | None = None
     gate_context: dict[str, Any] | None = Field(
@@ -139,22 +175,26 @@ class ResumeRunOutput(BaseModel):
     ``status``:
 
     * ``"pending"`` — another gate fired post-resume
-      (``awaiting="gate"``). ``plan`` carries the re-gated draft;
+      (``awaiting="gate"``). ``artifact`` carries the re-gated draft;
       ``gate_context`` carries the new gate's prompt, id, workflow
       id, and projection-time ISO-8601 timestamp.
-    * ``"completed"`` — approved → plan persisted to the artifact
-      store. ``plan`` carries the final artefact.
-    * ``"gate_rejected"`` — caller rejected at the gate. ``plan``
-      carries the last-draft plan (for audit review);
+    * ``"completed"`` — approved → artefact persisted.
+      ``artifact`` carries the final artefact.
+    * ``"gate_rejected"`` — caller rejected at the gate. ``artifact``
+      carries the last-draft artefact (for audit review);
       ``gate_context`` is ``None`` because the gate has already
       resolved.
     * ``"aborted"`` — the Ollama-fallback gate resolved to ABORT on
-      the resume path (M8 T04). ``plan`` is ``None``; ``error``
+      the resume path (M8 T04). ``artifact`` is ``None``; ``error``
       carries the distinguishing message.
     * ``"errored"`` — a post-gate fault (M4 T03 AC, parallel to
-      ``RunWorkflowOutput.error``). ``plan`` is ``None``; ``error``
+      ``RunWorkflowOutput.error``). ``artifact`` is ``None``; ``error``
       carries a descriptive message so MCP clients see the reason
       in-band.
+
+    ``artifact`` (M19 T03 — ADR-0008) is the canonical field name for the
+    workflow's terminal artefact.  ``plan`` is preserved as a deprecated
+    alias (same value) through the 0.2.x line; removal target 1.0.
 
     ``awaiting`` (added in M11 T01) mirrors :attr:`RunWorkflowOutput.awaiting`:
     populated iff ``status="pending"``; ``None`` elsewhere. Before M11
@@ -170,7 +210,32 @@ class ResumeRunOutput(BaseModel):
     run_id: str
     status: Literal["pending", "completed", "gate_rejected", "aborted", "errored"]
     awaiting: Literal["gate"] | None = None
-    plan: dict[str, Any] | None = None
+    artifact: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "The workflow's terminal artefact — the value of the state field "
+            "named by the workflow's FINAL_STATE_KEY (declarative spec: the "
+            "first field of output_schema). For the in-tree planner this is "
+            "the approved PlannerPlan; for slice_refactor it is the applied-"
+            "artefact count; for an external workflow it is whatever the "
+            "workflow declares. At a gate-pause-resume response, reports the "
+            "value of the workflow's FINAL_STATE_KEY channel — which may be "
+            "``None`` if the workflow's terminal artefact has not been computed "
+            "yet (e.g. slice_refactor's ``applied_artifact_count`` is ``None`` "
+            "at the ``slice_refactor_review`` gate). Surfaced through the "
+            "deprecated ``plan`` field alias for backward compatibility through "
+            "the 0.2.x line; removal target is 1.0."
+        ),
+    )
+    plan: dict[str, Any] | None = Field(
+        default=None,
+        deprecated=True,
+        description=(
+            "Deprecated alias for ``artifact``. Deprecated alias preserved "
+            "for backward compatibility through the 0.2.x line; removal "
+            "target 1.0. Read ``artifact`` instead."
+        ),
+    )
     total_cost_usd: float | None = None
     error: str | None = None
     gate_context: dict[str, Any] | None = Field(

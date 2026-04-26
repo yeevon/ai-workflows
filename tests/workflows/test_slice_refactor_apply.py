@@ -417,10 +417,12 @@ async def test_dispatch_flips_status_completed_with_finished_at_for_slice_refact
         storage=storage,
     )
     assert result["status"] == "completed"
-    # slice_refactor's final_state_key is ``applied_artifact_count``; the
-    # workflow doesn't produce a pydantic ``plan`` artefact, so the M11-era
-    # ``_dump_plan`` sees ``None`` and the field stays null here.
-    assert result["plan"] is None
+    # M19 T03 (ADR-0008): slice_refactor's FINAL_STATE_KEY is
+    # ``applied_artifact_count``; _dump_artifact wraps the integer count
+    # as {"value": 2} so the wire type is dict[str, Any] | None.
+    # Both artifact and plan carry the same value (plan = deprecated alias).
+    assert result["artifact"] == {"value": 2}
+    assert result["plan"] == result["artifact"]
     row = await storage.get_run("run-dispatch-slice-done")
     assert row is not None
     assert row["status"] == "completed"

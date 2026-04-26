@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Deprecated — M19 Task 03: RunWorkflowOutput.plan / ResumeRunOutput.plan (2026-04-26)
+
+- `ai_workflows/mcp/schemas.py` — `RunWorkflowOutput.plan` and `ResumeRunOutput.plan`
+  are now deprecated aliases. Deprecated alias preserved for backward compatibility
+  through the 0.2.x line; removal target 1.0. Read `artifact` instead.
+
+**KDRs:** KDR-008 (FastMCP schema contract; additive change is non-breaking).
+
+### Changed — M19 Task 03: RunWorkflowOutput / ResumeRunOutput field rename (2026-04-26)
+
+- `ai_workflows/mcp/schemas.py` — `RunWorkflowOutput.artifact` and
+  `ResumeRunOutput.artifact` are now the canonical field names for the workflow's
+  terminal artefact. The `plan` field is preserved as a backward-compatible alias
+  surfaced on the wire alongside `artifact`. Existing 0.2.0 callers reading
+  `result.plan` continue to work.
+- Both models updated with `Field(deprecated=True)` on `plan` and a descriptive
+  `description` on `artifact` naming the deprecated alias framing per TA-LOW-01.
+- Module docstring updated to document the M19 T03 rename rationale (ADR-0008).
+- (Cycle 2) `RunWorkflowOutput.artifact` + `ResumeRunOutput.artifact` field descriptions
+  updated to match spec Deliverable 2 verbatim: restored planner / slice_refactor /
+  external-workflow worked-example framing; replaced stale "in-flight draft at gate
+  pause" wording with honest "FINAL_STATE_KEY channel may be ``None`` at gate time"
+  framing per locked MEDIUM-1 Path A. `plan` alias description updated to canonical
+  TA-LOW-01 phrasing ("deprecated alias preserved for backward compatibility through
+  the 0.2.x line; removal target 1.0").
+- (Cycle 2) `tests/workflows/test_result_shape_correctness.py` module docstring — fixed
+  path typo `milestone_19_workflow_contract` → `milestone_19_declarative_surface`.
+- (Cycle 2) `design_docs/phases/milestone_19_declarative_surface/task_07_extension_model_propagation.md`
+  — carry-over entry added to `## Carry-over from prior milestones` propagating
+  MEDIUM-1 (slice_refactor gate-pause `artifact=None` post-T03, locked Path A
+  2026-04-26) per auditor cross-task propagation instruction.
+
+**KDRs:** KDR-008 (FastMCP schema contract).
+
+### Fixed — M19 Task 03: result-shape artefact-field bug (2026-04-26)
+
+- `ai_workflows/workflows/_dispatch.py` — `_build_result_from_final` and
+  `_build_resume_result_from_final` now read `final.get(final_state_key)` for the
+  response artefact field (five call sites). Previously hardcoded `final.get("plan")`
+  silently dropped the artefact for any workflow whose `FINAL_STATE_KEY != "plan"`.
+  CS-300's 2026-04-25 pre-flight smoke surfaced the bug; in-tree `slice_refactor` was
+  also affected. The `_dump_plan` helper was renamed to `_dump_artifact` for consistency.
+- All error-path branches in both result-build functions now emit `artifact: None`
+  alongside `plan: None` (lockstep). Previously the `artifact` key was absent from
+  error paths in `_build_resume_result_from_final`, causing `KeyError` on callers
+  reading the field.
+- `tests/workflows/test_result_shape_correctness.py` — 5 new hermetic regression tests
+  (Deliverable 5): `test_external_workflow_artifact_round_trips_via_artifact_field`,
+  `test_external_workflow_artifact_also_surfaces_via_plan_alias`,
+  `test_in_tree_planner_unchanged_artifact_path`,
+  `test_resume_path_populates_both_fields`,
+  `test_error_path_emits_none_for_both_fields`.
+
+**Files touched:** `ai_workflows/workflows/_dispatch.py`,
+`ai_workflows/mcp/schemas.py`,
+`tests/workflows/test_result_shape_correctness.py`.
+
+**ACs satisfied:** Deliverable 2 (schema rename), Deliverable 3 (five call sites
+migrated + error-path lockstep), Deliverable 5 (regression tests).
+
+**KDRs:** KDR-008 (schema contract), KDR-013 (external workflow artefact surfaced
+correctly for `FINAL_STATE_KEY != "plan"`).
+
 ### Fixed — M19 Task 02 cycle-2: compiler correctness fixes (2026-04-26)
 
 - `ai_workflows/workflows/_compiler.py` MEDIUM-1: `LLMStep(retry=None)` now wires `retrying_edge`

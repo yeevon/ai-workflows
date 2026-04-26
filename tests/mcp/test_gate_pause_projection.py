@@ -343,8 +343,14 @@ async def test_resume_run_regate_projects_plan_and_gate_context() -> None:
     assert regated.status == "pending"
     assert regated.awaiting == "gate"
     assert regated.error is None
-    assert regated.plan is not None
-    assert isinstance(regated.plan, dict)
+    # M19 T03 (ADR-0008): slice_refactor's FINAL_STATE_KEY is
+    # "applied_artifact_count", which is None at the re-gate interrupt
+    # (the artifact node hasn't run yet — it only runs after the gate
+    # is approved). Both artifact and plan are None here; the canonical
+    # artefact is not yet available and the gate_context carries the
+    # review payload instead.
+    assert regated.artifact is None
+    assert regated.plan is None  # deprecated alias; same value
     assert regated.gate_context is not None
     gc = regated.gate_context
     assert gc["gate_id"] == "slice_refactor_review"

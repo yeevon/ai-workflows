@@ -1,6 +1,6 @@
 # Task 03 — Result-shape correctness: artefact-field bug fix + `plan` → `artifact` rename (folded from M18 T01)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Implemented (Builder cycle 1–2, 2026-04-26). Awaiting audit.
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Consequences (`RunWorkflowOutput` schema redesigned)](../../adr/0008_declarative_authoring_surface.md) · [KDR-008 (FastMCP + pydantic schema is public contract — backward compatibility preserved via `plan` alias)](../../architecture.md) · [`ai_workflows/workflows/_dispatch.py:540-602`](../../../ai_workflows/workflows/_dispatch.py#L540-L602) (the bug site — `final.get("plan")` hardcoded across multiple result-build paths) · [`ai_workflows/workflows/_dispatch.py:670-810`](../../../ai_workflows/workflows/_dispatch.py#L670-L810) (`_build_result_from_final` — primary fix site) · [`ai_workflows/mcp/schemas.py`](../../../ai_workflows/mcp/schemas.py) (the pydantic schemas being renamed) · CS-300 pre-flight smoke 2026-04-25 (the trigger for the bug discovery; recorded in ADR-0008 §Context).
 
 ## What to Build
