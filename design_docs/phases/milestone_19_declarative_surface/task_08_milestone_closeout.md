@@ -220,6 +220,36 @@ Update `~/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory/project_m13_
 - **M18 obsolescence record.** ADR-0008 captured the M18 deletion; T08's project-memory update may reference it.
 - **M10 status carry-forward.** M10 stays cold; the slot-drift defensive clause in M10 T05 will handle the actual `nice_to_have.md` slot range M19 took.
 
+## Carry-over from M19 T01 audit (2026-04-26)
+
+These four items surfaced in M19 T01's `/clean-implement` cycle 1 audit + security review (see [`issues/task_01_issue.md`](issues/task_01_issue.md)). Each is non-blocking for T01's PASS verdict but must land before the 0.3.0 publish. Folded here so T08's pre-publish ceremony absorbs them.
+
+- [ ] **CARRY-T01-HIGH-1 — sdist publish-hygiene gap (security review HIGH-1).** The `.tar.gz` sdist published at the next PyPI release would leak `.claude/settings.local.json` (operator username + full tool-permission allow-list), `CLAUDE.md`, every `.claude/agents/*.md` system prompt, and the entire `design_docs/` tree. The wheel (`.whl` consumed by `uvx`/`uv tool install`) is clean — only the sdist is affected. **Pre-existing** publish-hygiene gap (not introduced by M19 T01); affects every PyPI publish from this repo.
+      **Action at T08 Deliverable 4 (Pre-publish step, before `uv build`):** add a `[tool.hatch.build.targets.sdist]` block to `pyproject.toml` excluding the leak surfaces. Concrete shape:
+      ```toml
+      [tool.hatch.build.targets.sdist]
+      exclude = [
+          "/.claude",
+          "/CLAUDE.md",
+          "/design_docs",
+          "/tests/skill",
+          "/scripts/spikes",
+      ]
+      ```
+      **Verify after `uv build`:** `tar -tzf dist/jmdl_ai_workflows-0.3.0.tar.gz | grep -E '(\.claude|CLAUDE|design_docs|tests/skill|scripts/spikes)'` returns no matches. Add this to T08's existing wheel-contents inspection step (Deliverable 5) — currently inspects the wheel only; extend to inspect the sdist as well.
+
+- [ ] **CARRY-T01-LOW-1 — `ValidateStep.schema` field-shadowing pydantic UserWarning.** Importing `ai_workflows.workflows.spec` emits `UserWarning: Field name "schema" in "ValidateStep" shadows an attribute in parent "Step"`. Cosmetic — the field works correctly; tests are green; the warning is one-time-per-process.
+      **Decision needed at T08:** rename the field (cleaner — aligns with `WorkflowSpec.input_schema` / `output_schema` naming) OR suppress the warning (one-line `warnings.filterwarnings(...)` at `spec.py` module top; preserves the Q1-locked field name).
+      **Recommendation:** suppress at T08 (cheaper than a rename that would propagate through T05's worked example + T06's docs + downstream-consumer-facing API). Land the suppression as part of T08's pre-publish polish pass; document the choice in the T08 Outcome record.
+
+- [ ] **CARRY-T01-LOW-2 — T01 spec internal inconsistency: AC-10 wording vs Deliverable 1 imports.** AC-10 reads *"`spec.py` imports stdlib + `pydantic` + `ai_workflows.workflows` only; no graph or primitives imports."* But Deliverable 1 explicitly requires `primitives.retry` (for `RetryPolicy` re-export per Q1) and `primitives.tiers` (for `TierConfig` typing on `WorkflowSpec.tiers`). The four-layer rule allows `workflows → primitives` so the imports are correct; AC-10's wording is more restrictive than the architecture.
+      **Action at T08 Deliverable 1 (Milestone README close-out flip):** edit `task_01_workflow_spec.md` AC-10 to read *"Layer rule preserved — `uv run lint-imports` reports 4 contracts kept, 0 broken. `spec.py` imports stdlib + `pydantic` + `ai_workflows.primitives.retry` + `ai_workflows.primitives.tiers` only (the permitted `workflows → primitives` direction); no graph or surface imports."* This aligns AC-10 with Deliverable 1 + the four-layer rule. Pure spec amendment; no source-code change.
+
+- [ ] **CARRY-T01-LOW-3 — `Step.compile()` body framing in T01 spec.** Spec Deliverable 3 shows the stub body as `...  # noqa: stub`; Builder shipped `raise NotImplementedError("...lands in M19 T02 (_compiler.py)...")` instead. Builder's choice is **better** (a typed-return method with `Ellipsis` body silently returns `None` if invoked; `NotImplementedError` produces a diagnostic failure) but the spec text doesn't sanction the deviation.
+      **Action at T08 Deliverable 1:** edit `task_01_workflow_spec.md` Deliverable 3 to annotate the stub-body shape — *"`NotImplementedError(...)` or `...` are both acceptable; the locked contract is the signature, not the body."* No source-code change required.
+
+## Carry-over from task analysis
+
 ## Carry-over from task analysis
 
 - [ ] **TA-LOW-05 — CHANGELOG promote convention review** (severity: LOW, source: task_analysis.md round 1)

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M19 Task 01: WorkflowSpec + step-type taxonomy + register_workflow entry point (2026-04-26)
+
+- `ai_workflows/workflows/spec.py` — `WorkflowSpec` pydantic model + `Step` base + built-in step
+  types (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`) + `register_workflow`.
+  KDR-004 enforced by construction: `LLMStep.response_format` is required; an unvalidated LLM step
+  cannot be expressed in the type system. `register_workflow()` validates cross-step invariants
+  (empty step list, unknown tier references with typo-detection, FanOutStep field-resolvability
+  warning) then calls the existing `register(name, builder)`. Builder thunk raises
+  `NotImplementedError("compiler lands in M19 T02")` at T01 time.
+- `ai_workflows/workflows/__init__.py` re-exports the spec surface alongside `RetryPolicy`
+  (re-exported from `ai_workflows.primitives.retry` per locked Q1; the spec API does not invent a
+  parallel retry surface). Existing M16 surface preserved.
+- `tests/workflows/test_spec.py` — 16 hermetic tests covering the data-model surface (spec
+  construction invariants, `LLMStep` prompt-source exclusivity via model validator, `Step.execute`
+  default behaviour, `register_workflow` cross-step validation including the typo-detection contract
+  from Q3 refinement, FanOutStep warn-not-raise, frozen-model invariant, RetryPolicy re-export
+  identity).
+- ADR-0008 (declarative authoring surface) status: Accepted; M19 T01 is the data-model precursor;
+  T02 (compiler) follows.
+
 ### Added — M16 Task 01: external workflow module discovery (2026-04-24)
 
 Downstream consumers (CS-300 is the first) register their own workflow

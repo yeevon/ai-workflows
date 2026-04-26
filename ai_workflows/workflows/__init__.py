@@ -48,6 +48,19 @@ fires as a side effect. :class:`ExternalWorkflowImportError` (a
 subclass of :class:`ImportError`) surfaces import failures with a
 single actionable message. See KDR-013 / ADR-0007 for the
 user-owned-code contract.
+
+## Declarative authoring surface (M19 Task 01)
+
+External workflow authors write a :class:`WorkflowSpec` — a pydantic
+data object that declares the workflow's name, input/output schemas, and
+an ordered list of :class:`Step` instances.  See ADR-0008 for the
+decision rationale.  The five built-in step types cover the most common
+orchestration shapes; custom step types extend :class:`Step` for bespoke
+logic.  :func:`register_workflow` is the primary registration entry
+point; :func:`register` survives as the documented Tier 4 escape hatch.
+
+:data:`RetryPolicy` is re-exported from :mod:`ai_workflows.primitives.retry`
+per locked Q1 — the spec API does not invent a parallel retry surface.
 """
 
 from __future__ import annotations
@@ -55,9 +68,20 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from ai_workflows.primitives.retry import RetryPolicy
 from ai_workflows.workflows.loader import (
     ExternalWorkflowImportError,
     load_extra_workflow_modules,
+)
+from ai_workflows.workflows.spec import (
+    FanOutStep,
+    GateStep,
+    LLMStep,
+    Step,
+    TransformStep,
+    ValidateStep,
+    WorkflowSpec,
+    register_workflow,
 )
 
 __all__ = [
@@ -67,6 +91,16 @@ __all__ = [
     "list_workflows",
     "ExternalWorkflowImportError",
     "load_extra_workflow_modules",
+    # M19 T01 — declarative authoring surface:
+    "WorkflowSpec",
+    "Step",
+    "LLMStep",
+    "ValidateStep",
+    "GateStep",
+    "TransformStep",
+    "FanOutStep",
+    "RetryPolicy",      # re-export from primitives.retry, not a new spec class
+    "register_workflow",
 ]
 
 WorkflowBuilder = Callable[[], Any]
