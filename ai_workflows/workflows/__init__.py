@@ -150,5 +150,22 @@ def list_workflows() -> list[str]:
 
 
 def _reset_for_tests() -> None:
-    """Clear the registry. Test-only — never called from runtime code."""
+    """Clear the registry and any synthetic compiled-spec modules.
+
+    Test-only — never called from runtime code.
+
+    LOW-3 fix: ``compile_spec`` injects a synthetic module into ``sys.modules``
+    under ``ai_workflows.workflows._compiled_<spec.name>`` for every compiled
+    spec.  Without this cleanup, dead ``_compiled_*`` entries accumulate across
+    tests in the same process, causing debugging confusion and (in theory) memory
+    growth on long test runs.  We match conservatively: only keys with the exact
+    ``_compiled_`` prefix inside our package namespace are removed, so unrelated
+    ``sys.modules`` entries are never touched.
+    """
+    import sys
+
     _REGISTRY.clear()
+    prefix = "ai_workflows.workflows._compiled_"
+    stale = [k for k in sys.modules if k.startswith(prefix)]
+    for key in stale:
+        del sys.modules[key]

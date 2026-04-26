@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — M19 Task 02 cycle-2: compiler correctness fixes (2026-04-26)
+
+- `ai_workflows/workflows/_compiler.py` MEDIUM-1: `LLMStep(retry=None)` now wires `retrying_edge`
+  using `RetryPolicy()` defaults (was: retrying_edge skipped entirely when `retry=None`). Resolves
+  doc/code mismatch — docstring always said "When `None` the compiler uses the default
+  `RetryPolicy()`". `validator_node.max_attempts` now derives from `policy.max_semantic_attempts` so
+  both budgets always agree.
+- `ai_workflows/workflows/_compiler.py` MEDIUM-2: tier-registry helper stored under raw `spec.name`
+  (not sanitised `spec.name.replace("-","_")`); `_dispatch._resolve_tier_registry` reads the raw name
+  via `getattr`, so workflows with hyphens in their names now resolve their tier registry correctly.
+- `ai_workflows/workflows/_compiler.py` LOW-1: Tier 1 sugar (`prompt_template=`) synthesised
+  `prompt_fn` now returns `(None, [{"role": "user", "content": rendered}])` instead of
+  `(rendered, [])`. Gemini's API requires at least one user-role message; system-only requests were
+  silently rejected.
+- `ai_workflows/workflows/__init__.py` LOW-3: `_reset_for_tests()` now also removes all
+  `sys.modules["ai_workflows.workflows._compiled_*"]` entries, preventing stale synthetic modules
+  from accumulating across the test suite.
+- `tests/workflows/test_compiler.py` — 4 regression tests added (23 total, up from 20):
+  `test_compile_llm_step_with_retry_none_wires_default_retry_policy` (MEDIUM-1),
+  `test_compile_workflow_name_with_hyphen_resolves_tier_registry` (MEDIUM-2),
+  `test_compile_llm_step_with_prompt_template_synthesizes_prompt_fn` updated to assert
+  `(None, [user-role-message])` tuple shape (LOW-1),
+  `test_reset_for_tests_clears_synthetic_compiled_modules` (LOW-3).
+
+**KDRs:** KDR-006 (default-on RetryingEdge when retry=None), KDR-013 (user workflow names
+with hyphens work correctly).
+
+### Added — M19 Task 02: Spec → StateGraph compiler (2026-04-26)
+
+- `ai_workflows/workflows/_compiler.py` — `compile_spec(spec)` synthesises a LangGraph `StateGraph`
+  from a `WorkflowSpec`. Owns: state-class derivation (`TypedDict` functional form, all input/output
+  schema fields + LLM intermediate output keys + framework-internal keys), START/END wiring,
+  `initial_state` hook synthesis, `FINAL_STATE_KEY` resolution, per-spec synthetic module injection
+  (`sys.modules["ai_workflows.workflows._compiled_{name}"]`) so `_dispatch` can locate the module.
+  KDR-004 enforced by construction: `_assert_kdr004_invariant` raises if any `LLMStep` is stitched
+  without a paired `ValidateStep`. KDR-006: three-bucket retry wired via `retrying_edge` using
+  `max_semantic_attempts` terminology (carry-over TA-LOW-07). Exports `CompiledStep` dataclass
+  (`entry_node_id`, `exit_node_id`, `nodes`, `edges`) and `GraphEdge` dataclass.
+- Each built-in step type (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`)
+  now implements `Step.compile(state_class, step_id)` via `_default_step_compile` / per-type
+  compile helpers. Custom steps that override only `execute()` receive a working single-node
+  `CompiledStep` from the base-class default (locked Q4 in T01).
+- `ai_workflows/workflows/spec.py` — `register_workflow()` stub replaced with the real
+  `compile_spec(spec)` call; `Step.compile()` default delegates to
+  `_compiler._default_step_compile` instead of raising `NotImplementedError`.
+- `tests/workflows/test_spec.py` — two tests updated to reflect T02 behaviour: custom-step
+  `compile()` now returns a `CompiledStep`; `register_workflow` builder now returns a `StateGraph`.
+- `tests/workflows/test_compiler.py` — 20 hermetic tests covering each step type + cross-step
+  stitching + KDR-004 invariant + FanOut Send-pattern + retry wiring (per Deliverable 7). All
+  tests run in < 2 s wall-clock.
+- Carry-over TA-LOW-10 absorbed: `_dispatch.run_workflow` is the correct function name (not
+  `_dispatch._run_workflow`); synthetic module registration verified against actual call site.
+
+**ACs satisfied:** AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8 (compiler), carry-over TA-LOW-07,
+carry-over TA-LOW-10.
+
+**KDRs:** KDR-004 (ValidatorNode by construction), KDR-006 (RetryingEdge/max_semantic_attempts),
+KDR-009 (StateGraph compiles via `builder().compile(checkpointer=...)` unchanged),
+KDR-013 (TransformStep/custom-step bodies are user-owned; framework does not police them).
+
 ### Added — M19 Task 01: WorkflowSpec + step-type taxonomy + register_workflow entry point (2026-04-26)
 
 - `ai_workflows/workflows/spec.py` — `WorkflowSpec` pydantic model + `Step` base + built-in step

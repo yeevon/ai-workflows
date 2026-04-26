@@ -159,7 +159,13 @@ async def test_step_base_class_execute_raises_when_unimplemented() -> None:
 
 
 def test_custom_step_subclass_with_only_execute_works() -> None:
-    """Custom step with execute() only is a valid Step; compile() is inherited."""
+    """Custom step with execute() only is a valid Step; compile() is inherited.
+
+    T02 ships the default compile() body (locked Q4): a custom step that only
+    overrides execute() gets a working single-node CompiledStep from the base
+    class compile() delegation to _compiler._default_step_compile.
+    """
+    from ai_workflows.workflows._compiler import CompiledStep
 
     class MyStep(Step):
         payload: str
@@ -170,11 +176,10 @@ def test_custom_step_subclass_with_only_execute_works() -> None:
     step = MyStep(payload="hi")
     assert isinstance(step, Step)
     assert step.payload == "hi"
-    # compile() body lands in T02; T01 contract: signature is present,
-    # raises NotImplementedError with T02 message.
-    with pytest.raises(NotImplementedError) as exc_info:
-        step.compile(dict, "my_step")
-    assert "M19 T02" in str(exc_info.value)
+    # T02: compile() now works — returns a CompiledStep (no longer raises).
+    cs = step.compile(dict, "my_step")
+    assert isinstance(cs, CompiledStep)
+    assert cs.entry_node_id == cs.exit_node_id  # single-node default
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +243,13 @@ def test_register_workflow_collision_raises() -> None:
 
 
 def test_register_workflow_calls_underlying_register() -> None:
-    """register_workflow adds the name to list_workflows(); builder stub raises."""
+    """register_workflow adds the name to list_workflows(); builder returns a StateGraph.
+
+    T02: the builder is now the real compile_spec builder, not the T01 stub.
+    Calling builder() returns a StateGraph instance.
+    """
+    from langgraph.graph import StateGraph
+
     spec = WorkflowSpec(
         name="listed",
         input_schema=_FooIn,
@@ -248,10 +259,10 @@ def test_register_workflow_calls_underlying_register() -> None:
     )
     register_workflow(spec)
     assert "listed" in workflows.list_workflows()
-    # Builder thunk raises NotImplementedError (T01 stub)
+    # T02: builder() returns a StateGraph (real compiler, not the T01 stub).
     builder = workflows.get("listed")
-    with pytest.raises(NotImplementedError, match="compiler lands in M19 T02"):
-        builder()
+    graph = builder()
+    assert isinstance(graph, StateGraph)
 
 
 # ---------------------------------------------------------------------------

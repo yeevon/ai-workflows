@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -125,17 +125,19 @@ class Step(BaseModel):
         """Wrap ``self.execute()`` in a single LangGraph node.
 
         Built-in step types override this to emit multi-node topologies.
-        Custom step types that subclass only ``execute`` inherit this default.
+        Custom step types that subclass only ``execute`` inherit this default
+        (locked Q4 per ADR-0008 §Extension model — implementation ships in
+        M19 T02 ``_compiler.py`` and is delegated here).
 
-        The wrapping logic lands in T02; the signature is the locked public
-        contract.  At T01 time the body raises ``NotImplementedError`` to
-        surface a clear message if called before the compiler ships.
+        The default wraps ``self.execute()`` in a single LangGraph node so
+        custom-step authors who only override ``execute()`` get a working
+        compile path automatically without overriding ``compile()``.
         """
-        # Implementation lands in M19 T02 (_compiler.py).
-        raise NotImplementedError(
-            "Step.compile() implementation lands in M19 T02 (_compiler.py). "
-            "This stub is the locked public contract for the method signature."
-        )
+        # Delegate to the compiler module (M19 T02).  Lazy import keeps
+        # spec.py graph-free for callers that only need the data classes.
+        from ai_workflows.workflows._compiler import _default_step_compile
+
+        return _default_step_compile(self, state_class, step_id)
 
 
 # ---------------------------------------------------------------------------
@@ -371,9 +373,10 @@ def register_workflow(spec: WorkflowSpec) -> None:
       ``iter_field`` / ``merge_field`` cannot be statically resolved.
     * **Name collision** — defers to ``register()``'s ``ValueError``.
 
-    The builder thunk registered here raises
-    ``NotImplementedError("compiler lands in M19 T02")`` until T02 ships.
-    Registration itself succeeds; dispatch will fail at invocation time.
+    The compiler (M19 T02) synthesises a ``StateGraph`` from the spec at
+    registration time; the resulting builder thunk is passed to
+    ``register(spec.name, builder)`` so dispatch's
+    ``builder().compile(checkpointer=...)`` works unchanged (KDR-009).
 
     Parameters
     ----------
@@ -398,11 +401,15 @@ def register_workflow(spec: WorkflowSpec) -> None:
     _validate_llm_step_tiers(spec)
     _warn_fan_out_unresolvable_fields(spec)
 
-    # --- register with a T01 stub builder ---
-    def _stub_builder() -> Any:
-        raise NotImplementedError("compiler lands in M19 T02")
+    # --- register with the real compiler (M19 T02) ---------------------------
+    # Lazy import: importing _compiler pulls in ai_workflows.graph.* which is
+    # only needed when actually compiling.  Callers that only import spec.py
+    # for the data classes (e.g. introspection tooling, future YAML loaders)
+    # do not pay the graph-layer import cost.
+    from ai_workflows.workflows._compiler import compile_spec
 
-    register(spec.name, _stub_builder)
+    builder = compile_spec(spec)
+    register(spec.name, builder)
 
 
 def _validate_llm_step_tiers(spec: WorkflowSpec) -> None:
