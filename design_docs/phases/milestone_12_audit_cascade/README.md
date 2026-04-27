@@ -23,7 +23,7 @@ The mechanism to close this is a **tiered audit cascade**: pair every generative
 
 ## Exit criteria
 
-1. `ai_workflows/primitives/tiers.py` — `auditor-sonnet` and `auditor-opus` `TierConfig` entries exist in the registry, routing via `ClaudeCodeRoute(cli_model_flag="sonnet")` / `ClaudeCodeRoute(cli_model_flag="opus")`. Paired pricing entries (rates = $0; Max is flat-rate — see ADR-0004 §*Consequences*). KDR-003 guardrail test (grep for `anthropic` SDK + `ANTHROPIC_API_KEY`) extended over the new tier names and passes.
+1. ✅ (T01 complete 2026-04-27) `auditor-sonnet` and `auditor-opus` `TierConfig` entries exist in the workflow tier registries (`planner.py`, `summarize_tiers.py`; `slice_refactor.py` inherits via composition), routing via `ClaudeCodeRoute(cli_model_flag="sonnet")` / `ClaudeCodeRoute(cli_model_flag="opus")`. Pricing covered by existing `pricing.yaml` (rates = $0; Max is flat-rate — see ADR-0004 §*Consequences*). KDR-003 guardrail tests pass. Note: landing site is workflow modules (not `primitives/tiers.py`) per T01 §Deliverables; ADR-0004 §Decision item 1 framing is stale (TA-LOW-03 — flag for milestone close-out).
 2. `ai_workflows/graph/audit_cascade.py` — `AuditCascadeNode` primitive exists, compiles a sub-graph from `(primary_tier, primary_prompt_fn, primary_output_schema, auditor_tier)`, and returns a `CompiledStateGraph` composable into any outer `StateGraph`. Auditor prompt renders the primary's output verbatim + primary prompt context + the verdict schema. The audit verdict is a pydantic model with `passed: bool`, `failure_reasons: list[str]`, `suggested_approach: str | None`. On verdict `passed=False`, the sub-graph raises `AuditFailure` (new exception in `primitives/retry.py` — bucketed `RetryableSemantic` under KDR-006) carrying the verdict payload. `RetryingEdge` is the retry surface; the cascade does not hand-roll a retry loop.
 3. `RetryingEdge` re-fire path renders `failure_reasons` + `suggested_approach` into the primary prompt's `revision_guidance` block on the next attempt — not a raw retry. Hermetic test pins the shape of the re-prompt (a `{primary_original}\n\n<audit-feedback>…</audit-feedback>\n\n{primary_context}` template; exact string asserted).
 4. After `RetryPolicy.max_semantic_attempts` re-fires, the cascade routes to a strict `HumanGate`. The gate carries the full cascade transcript (`{author_attempts: list[str], auditor_verdicts: list[AuditVerdict]}`) in its state channel; the M11 gate-context projection surfaces those keys at MCP boundary.
@@ -59,15 +59,15 @@ The mechanism to close this is a **tiered audit cascade**: pair every generative
 
 ## Task order
 
-| # | Task | Kind |
-| --- | --- | --- |
-| 01 | [Auditor TierConfigs — `auditor-sonnet` + `auditor-opus`](task_01_auditor_tier_configs.md) | code + test |
-| 02 | `AuditCascadeNode` graph primitive + `AuditFailure` exception + RetryingEdge re-prompt template | code + test |
-| 03 | Workflow wiring — `audit_cascade_enabled` config field + planner/slice_refactor integration | code + test |
-| 04 | Telemetry — `TokenUsage.role` tag + `CostTracker.by_role` + cascade-step records | code + test |
-| 05 | `run_audit_cascade` MCP tool + SKILL.md ad-hoc-audit section | code + test + doc |
-| 06 | Eval harness — author/auditor fixture convention + golden cases for one opt-in workflow | code + test + doc |
-| 07 | Milestone close-out | doc |
+| # | Task | Kind | Status |
+| --- | --- | --- | --- |
+| 01 | [Auditor TierConfigs — `auditor-sonnet` + `auditor-opus`](task_01_auditor_tier_configs.md) | code + test | ✅ Complete (2026-04-27) |
+| 02 | `AuditCascadeNode` graph primitive + `AuditFailure` exception + RetryingEdge re-prompt template | code + test | 📝 Planned |
+| 03 | Workflow wiring — `audit_cascade_enabled` config field + planner/slice_refactor integration | code + test | 📝 Planned |
+| 04 | Telemetry — `TokenUsage.role` tag + `CostTracker.by_role` + cascade-step records | code + test | 📝 Planned |
+| 05 | `run_audit_cascade` MCP tool + SKILL.md ad-hoc-audit section | code + test + doc | 📝 Planned |
+| 06 | Eval harness — author/auditor fixture convention + golden cases for one opt-in workflow | code + test + doc | 📝 Planned |
+| 07 | Milestone close-out | doc | 📝 Planned |
 
 Per-task spec files land as each predecessor closes (same convention as M10 / M11 — scope stays calibrated against landed surface). T01 is spec'd below; T02–T07 are written at each predecessor's close-out. The README alone is enough context to start T01.
 

@@ -645,7 +645,7 @@ def planner_eval_node_schemas() -> dict[str, type[BaseModel]]:
 
 
 def planner_tier_registry() -> dict[str, TierConfig]:
-    """Return the two tiers this workflow calls.
+    """Return the tiers this workflow calls plus the auditor pair.
 
     M5 Task 01 repoints ``planner-explorer`` to local Qwen via Ollama
     (``ollama/qwen2.5-coder:32b``) per architecture.md §4.3's two-phase
@@ -662,6 +662,16 @@ def planner_tier_registry() -> dict[str, TierConfig]:
     to 300 s. KDR-003 spirit: this helper never reads API keys — env
     reads stay at the ``LiteLLMAdapter`` / CLI boundary when a provider
     call actually fires.
+
+    M12 Task 01 adds ``auditor-sonnet`` and ``auditor-opus`` — the two
+    auditor tiers for the tiered audit cascade (ADR-0004 / KDR-011).
+    Both route via the existing ``ClaudeCodeSubprocess`` driver with no
+    new dependency. ``max_concurrency=1`` matches ``planner-synth``'s
+    single-OAuth-session constraint. ``per_call_timeout_s=300`` reuses
+    the ``planner-synth`` baseline (same driver, same subprocess spawn
+    characteristics; deviation requires named-evidence comment per spec).
+    ``slice_refactor_tier_registry`` composes this registry, so both
+    auditor tiers are automatically available there too.
     """
     return {
         "planner-explorer": TierConfig(
@@ -675,6 +685,18 @@ def planner_tier_registry() -> dict[str, TierConfig]:
         ),
         "planner-synth": TierConfig(
             name="planner-synth",
+            route=ClaudeCodeRoute(cli_model_flag="opus"),
+            max_concurrency=1,
+            per_call_timeout_s=300,
+        ),
+        "auditor-sonnet": TierConfig(
+            name="auditor-sonnet",
+            route=ClaudeCodeRoute(cli_model_flag="sonnet"),
+            max_concurrency=1,
+            per_call_timeout_s=300,
+        ),
+        "auditor-opus": TierConfig(
+            name="auditor-opus",
             route=ClaudeCodeRoute(cli_model_flag="opus"),
             max_concurrency=1,
             per_call_timeout_s=300,

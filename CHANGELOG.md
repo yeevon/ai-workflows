@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M12 Task 01: Auditor TierConfigs (2026-04-27)
+
+Registers `auditor-sonnet` (`ClaudeCodeRoute(cli_model_flag="sonnet")`) and
+`auditor-opus` (`ClaudeCodeRoute(cli_model_flag="opus")`) in every workflow
+tier registry that exposes a generative tier whose output is read downstream,
+as the foundation for the M12 tiered audit cascade (ADR-0004, KDR-011).
+
+**Files touched:**
+- `ai_workflows/workflows/planner.py` — `planner_tier_registry()` extended
+  with `auditor-sonnet` + `auditor-opus`; docstring updated to name the new
+  entries and cite M12 Task 01 / ADR-0004.
+- `ai_workflows/workflows/summarize_tiers.py` — `summarize_tier_registry()`
+  extended with `auditor-sonnet` + `auditor-opus` declared directly (no
+  planner composition); `ClaudeCodeRoute` added to imports; module docstring
+  updated to cite M12 Task 01.
+- `ai_workflows/workflows/slice_refactor.py` — docstring-only change: names
+  the two new auditor tiers that propagate automatically via the existing
+  `dict(planner_tier_registry())` composition.
+- `tests/workflows/test_auditor_tier_configs.py` — new; workflow-layer shape
+  assertions for all three registries (planner, slice_refactor, summarize).
+- `tests/graph/test_auditor_tier_override.py` — new; graph-layer assertion
+  that `_resolve_tier` resolves the new tiers via `_mid_run_tier_overrides`.
+- `tests/workflows/test_slice_refactor_fanout.py` — updated
+  `test_slice_refactor_tier_registry_composes_planner_tiers` to include
+  `auditor-sonnet` + `auditor-opus` in the expected key set.
+
+**ACs satisfied:**
+- AC-1: `auditor-sonnet` in registry with `ClaudeCodeRoute(cli_model_flag="sonnet")`.
+- AC-2: `auditor-opus` in registry with `ClaudeCodeRoute(cli_model_flag="opus")`.
+- AC-3: Pricing covered by existing `pricing.yaml` (`claude-sonnet-4-6`,
+  `claude-opus-4-7` already at zero rate — Max flat-rate, no edit needed).
+- AC-4: `per_call_timeout_s=300` matches `planner-synth` baseline; no deviation.
+- AC-5: `_resolve_tier` integration test passes — `_mid_run_tier_overrides`
+  resolves new tiers by name unchanged from M8 T04 precedence rules.
+- AC-6: KDR-003 guardrail tests green — `test_kdr_003_no_anthropic_in_production_tree`
+  (tree-wide) and `test_no_anthropic_sdk_import_in_planner_or_claude_code_driver`
+  both pass with no extension required.
+- AC-7: No cascade-wiring diff (no `AuditCascadeNode` integration; T03).
+- AC-8: No `ai_workflows/mcp/` diff (standalone MCP tool is T05).
+- AC-9/10: Gates clean — 759 passed, 4 lint-import contracts kept, ruff clean.
+- AC-11: CHANGELOG entry present (this entry).
+
+**KDR-003 note:** Zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY` reads
+in any modified file. The tree-wide grep test covers the new lines automatically.
+
 ## [0.3.1] - 2026-04-26
 
 ### Fixed

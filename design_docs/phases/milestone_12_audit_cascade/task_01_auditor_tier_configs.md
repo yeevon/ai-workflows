@@ -1,13 +1,13 @@
 # Task 01 — Auditor TierConfigs (`auditor-sonnet` + `auditor-opus`)
 
-**Status:** 📝 Planned (drafted 2026-04-21).
-**Grounding:** [milestone README](README.md) · [ADR-0004](../../adr/0004_tiered_audit_cascade.md) · [architecture.md §4.1 / §4.2](../../architecture.md) · [KDR-003 / KDR-011](../../architecture.md) · [claude_code.py:9,119-129,254](../../../ai_workflows/primitives/llm/claude_code.py).
+**Status:** ✅ Complete (2026-04-27).
+**Grounding:** [milestone README](README.md) · [ADR-0004](../../adr/0004_tiered_audit_cascade.md) · [architecture.md §4.2 (graph adapters where TieredNode resolves the tier) / §4.1 (primitives where TierConfig is defined)](../../architecture.md) · [KDR-003 / KDR-011](../../architecture.md) · [claude_code.py:9,119-129](../../../ai_workflows/primitives/llm/claude_code.py).
 
 ## What to Build
 
 Register two new `TierConfig` entries in the tier registry — `auditor-sonnet` and `auditor-opus` — each routing to the existing `ClaudeCodeSubprocess` driver via a `ClaudeCodeRoute` pinning the CLI model flag. No new dependency. No new driver. No edit to `ClaudeCodeSubprocess` itself.
 
-The entire cascade rides on the fact that the Claude Code CLI accepts `--model sonnet` / `--model haiku` / `--model opus` as first-class flags ([claude_code.py:119-129](../../../ai_workflows/primitives/llm/claude_code.py#L119-L129), [claude_code.py:254](../../../ai_workflows/primitives/llm/claude_code.py#L254)). Today only `planner-synth` uses `ClaudeCodeRoute(cli_model_flag="opus")`; this task makes the missing Sonnet + Opus audit-role tiers available for `AuditCascadeNode` (T02) to resolve.
+The entire cascade rides on the fact that the Claude Code CLI accepts `--model sonnet` / `--model haiku` / `--model opus` as first-class flags ([claude_code.py:119-129](../../../ai_workflows/primitives/llm/claude_code.py#L119-L129)). Today only `planner-synth` uses `ClaudeCodeRoute(cli_model_flag="opus")`; this task makes the missing Sonnet + Opus audit-role tiers available for `AuditCascadeNode` (T02) to resolve.
 
 ## Deliverables
 
@@ -69,17 +69,17 @@ Under `## [Unreleased]`, add a `### Added — M12 Task 01: Auditor TierConfigs (
 
 ## Acceptance Criteria
 
-- [ ] `auditor-sonnet` `TierConfig` exists in the registry with `ClaudeCodeRoute(cli_model_flag="sonnet")`.
-- [ ] `auditor-opus` `TierConfig` exists in the registry with `ClaudeCodeRoute(cli_model_flag="opus")`.
-- [ ] Pricing for both tiers covered by the existing `pricing.yaml` (Max flat-rate; subscription-billed). No `pricing.yaml` edit expected; if the CLI's `modelUsage` returns a model ID not yet in the file, add it at zero rate with a short comment citing the Max flat-rate rationale.
-- [ ] `per_call_timeout_s` matches the `planner-synth` baseline; deviation requires a named-evidence comment.
-- [ ] Mid-run tier-override channel (`_mid_run_tier_overrides`) resolves the new tiers by name (the `ai_workflows.graph.tiered_node._resolve_tier` integration test passes).
-- [ ] KDR-003 guardrail tests pass: the tree-wide `test_kdr_003_no_anthropic_in_production_tree` and the file-scoped `test_no_anthropic_sdk_import_in_planner_or_claude_code_driver` both green (no extension required — the tree-wide grep covers any new lines automatically).
-- [ ] No `ai_workflows/workflows/` diff at T01 (cascade wiring is T03).
-- [ ] No `ai_workflows/mcp/` diff at T01 (standalone MCP tool is T05).
-- [ ] `uv run pytest` + `uv run lint-imports` (4 contracts kept — M12's new contract lands at T02, not T01) + `uv run ruff check` all clean.
-- [ ] CHANGELOG entry under `[Unreleased]` with files + ACs + packaging-scope notes.
-- [ ] Status surfaces flipped together at close: (a) this spec's `**Status:**` line to `✅ Complete (YYYY-MM-DD).`; (b) milestone README task-order table row 01 status indicator; (c) milestone README §Exit-criteria bullet 1 (the `auditor-sonnet`/`auditor-opus` registration row) ticked. There is no `tasks/README.md` for M12.
+- [x] `auditor-sonnet` `TierConfig` exists in the registry with `ClaudeCodeRoute(cli_model_flag="sonnet")`.
+- [x] `auditor-opus` `TierConfig` exists in the registry with `ClaudeCodeRoute(cli_model_flag="opus")`.
+- [x] Pricing for both tiers covered by the existing `pricing.yaml` (Max flat-rate; subscription-billed). No `pricing.yaml` edit expected; if the CLI's `modelUsage` returns a model ID not yet in the file, add it at zero rate with a short comment citing the Max flat-rate rationale.
+- [x] `per_call_timeout_s` matches the `planner-synth` baseline; deviation requires a named-evidence comment.
+- [x] Mid-run tier-override channel (`_mid_run_tier_overrides`) resolves the new tiers by name (the `ai_workflows.graph.tiered_node._resolve_tier` integration test passes).
+- [x] KDR-003 guardrail tests pass: the tree-wide `test_kdr_003_no_anthropic_in_production_tree` and the file-scoped `test_no_anthropic_sdk_import_in_planner_or_claude_code_driver` both green (no extension required — the tree-wide grep covers any new lines automatically).
+- [x] No `ai_workflows/workflows/` cascade-wiring diff at T01 (cascade wiring is T03). Note: tier-registration diffs in workflow files are the intended landing site per §Deliverables; AC-7 targets cascade-wiring changes only.
+- [x] No `ai_workflows/mcp/` diff at T01 (standalone MCP tool is T05).
+- [x] `uv run pytest` + `uv run lint-imports` (4 contracts kept — M12's new contract lands at T02, not T01) + `uv run ruff check` all clean.
+- [x] CHANGELOG entry under `[Unreleased]` with files + ACs + packaging-scope notes.
+- [x] Status surfaces flipped together at close: (a) this spec's `**Status:**` line to `✅ Complete (YYYY-MM-DD).`; (b) milestone README task-order table row 01 status indicator; (c) milestone README §Exit-criteria bullet 1 (the `auditor-sonnet`/`auditor-opus` registration row) ticked. There is no `tasks/README.md` for M12.
 
 ## Dependencies
 
@@ -102,22 +102,22 @@ Filled in at audit time. No forward-deferrals expected from T01 (it is a narrow 
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Drop stray `claude_code.py:254` cross-reference** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-01 — Drop stray `claude_code.py:254` cross-reference** (severity: LOW, source: task_analysis.md round 3)
       §Grounding line cites `[claude_code.py:9,119-129,254]`; line 254 is inside `_find_primary_key` (a `modelUsage`-key resolution helper), not a `--model` flag site. The §What-to-Build cite to `[claude_code.py:254]` should be dropped or repointed to `claude_code.py:124-125` (the actual argv `--model` assembly site).
       **Recommendation:** Drop `,254` from the Grounding citation; drop or repoint the §What-to-Build line-10 cite to `:124-125`.
 
-- [ ] **TA-LOW-02 — `isinstance(route, ClaudeCodeRoute)` narrowing in tests #1/#2** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-02 — `isinstance(route, ClaudeCodeRoute)` narrowing in tests #1/#2** (severity: LOW, source: task_analysis.md round 3)
       The Builder must narrow with `isinstance(route, ClaudeCodeRoute)` before asserting `route.cli_model_flag` (mirrors the existing `tests/workflows/test_planner_synth_claude_code.py:235` pattern; required for mypy under the union route type `LiteLLMRoute | ClaudeCodeRoute`). Optional `route.kind == "claude_code"` assertion alongside `cli_model_flag` matches the existing test shape.
       **Recommendation:** Adopt the `isinstance` narrowing in tests #1 and #2.
 
-- [ ] **TA-LOW-03 — ADR-0004 §Decision item 1 carries stale tier-location framing** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-03 — ADR-0004 §Decision item 1 carries stale tier-location framing** (severity: LOW, source: task_analysis.md round 3)
       `design_docs/adr/0004_tiered_audit_cascade.md:25` reads: *"Both sit in the `TierRegistry` (`ai_workflows/primitives/tiers.py`) next to `planner-synth`."* That framing is superseded by this spec's workflow-scoped landing (`workflows/planner.py`, `workflows/summarize_tiers.py`); the ADR's mechanic — `ClaudeCodeRoute(cli_model_flag="sonnet"/"opus")` over the existing driver — is unchanged.
       **Recommendation:** Do not amend ADR-0004 as part of T01; flag for the Auditor's surface-cite check at audit time. Consider a standalone ADR amendment at M12 close-out.
 
-- [ ] **TA-LOW-04 — Reorder §Grounding architecture cite** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-04 — Reorder §Grounding architecture cite** (severity: LOW, source: task_analysis.md round 3)
       Current order is `architecture.md §4.1 / §4.2`. The cascade primitive resolves in §4.2 (graph layer where `TieredNode` lives); §4.1 (primitives schema) is the secondary anchor. Cosmetic.
       **Recommendation:** Reorder to `§4.2 (graph adapters where TieredNode resolves the tier) / §4.1 (primitives where TierConfig is defined)` for narrative clarity.
 
-- [ ] **TA-LOW-05 — pricing.yaml spot-check** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-05 — pricing.yaml spot-check** (severity: LOW, source: task_analysis.md round 3)
       `pricing.yaml` already carries `claude-opus-4-7`, `claude-sonnet-4-6`, and `claude-haiku-4-5-20251001` at zero rate. `_find_primary_key` (claude_code.py:251-267) resolves `--model sonnet` to `claude-sonnet-4-6` via substring match, so AC-3's pricing-coverage hedge usually won't fire.
       **Recommendation:** Spot-check the actual `modelUsage` keys returned by a real `--model sonnet` call (e.g. `claude --print --output-format json --model sonnet --tools '' 'ping'`); if it returns a date-suffixed ID not in `pricing.yaml`, add at zero rate citing Max flat-rate.

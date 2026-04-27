@@ -1569,13 +1569,18 @@ def slice_refactor_tier_registry() -> dict[str, TierConfig]:
     """Return the tier registry for ``slice_refactor``.
 
     Composes the planner's tiers (``planner-explorer`` /
-    ``planner-synth``) with the new T02 ``slice-worker`` tier so a
-    single :func:`ai_workflows.workflows._dispatch.run_workflow` call
-    can resolve every tier both the parent graph *and* the composed
+    ``planner-synth`` / ``auditor-sonnet`` / ``auditor-opus``) with the
+    new T02 ``slice-worker`` tier so a single
+    :func:`ai_workflows.workflows._dispatch.run_workflow` call can
+    resolve every tier both the parent graph *and* the composed
     planner sub-graph call. Dispatch reads the workflow's own registry
     via ``<workflow>_tier_registry()`` — it does not merge a sibling
     workflow's registry implicitly, so the composition has to be
     declared here at the module level.
+
+    The ``auditor-sonnet`` and ``auditor-opus`` entries are inherited
+    via the ``dict(planner_tier_registry())`` composition (M12 Task 01
+    / ADR-0004); no additional declaration is needed here.
 
     ``slice-worker`` is routed to local Qwen via Ollama
     (``ollama/qwen2.5-coder:32b``) by default — the same cost-free
