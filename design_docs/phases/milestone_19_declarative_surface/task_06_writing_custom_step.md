@@ -1,6 +1,6 @@
 # Task 06 — New `docs/writing-a-custom-step.md` (Tier 3 dedicated guide)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Implemented (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Extension model + §Documentation surface (Tier 3 has its own dedicated guide; load-bearing for downstream consumers extending the framework)](../../adr/0008_declarative_authoring_surface.md) · [KDR-013 (user code is user-owned — applies to custom step types)](../../architecture.md) · [Task 01](task_01_workflow_spec.md) (the `Step` base class this doc teaches authors to subclass; default `compile()` wraps `execute()` per locked Q4) · [Task 02](task_02_compiler.md) (the compiler the custom step's `compile()` method returns to when overridden) · [Task 05](task_05_writing_workflow_rewrite.md) (the Tier 1+2 doc this guide forward-anchors from).
 
 ## What to Build
@@ -257,18 +257,18 @@ Under `[Unreleased]` on both branches:
 
 ## Acceptance Criteria
 
-- [ ] **AC-1:** `docs/writing-a-custom-step.md` exists with the section structure from Deliverable 1 (Title / When to write / `Step` base class contract / Worked example / State-channel conventions / Testing / Graduation hints / User-owned code boundary / Pointers to adjacent tiers). The base-class contract section covers both `execute()` (typical Tier 3 path) AND the `compile()` upgrade path (per locked Q4 refinement) for fan-out / sub-graph / conditional cases.
-- [ ] **AC-2:** Worked `WebFetchStep` example present, end-to-end (the full module from Deliverable 1's §Worked example) marked `# doctest: +SKIP`. Synthetic `AddOneStep` example present and doctest-runnable.
-- [ ] **AC-3:** §`Step` base class contract documents the `execute(state) -> dict` coroutine signature with input/output semantics + the `compile(state_class, step_id) -> CompiledStep` advanced override. Frozen-model + extra='forbid' invariants stated. Default `Step.compile()` wrapping `self.execute()` (per locked Q4) explicitly documented.
-- [ ] **AC-4:** §State-channel conventions enumerates the four conventions (read via state[<field>], write a dict of updates, don't mutate, don't reach for `_mid_run_*` framework keys).
-- [ ] **AC-5:** §Testing section provides at least one worked test example using `compile_step_in_isolation` fixture (per locked M4 — the fixture ships as part of T06). The fixture is documented inline.
-- [ ] **AC-6:** §Graduation hints names the three signals (reused across workflows, copy-paste-propagation, reusable wiring → graph primitive). Cross-link to `writing-a-graph-primitive.md` for the Tier 4 graduation path.
-- [ ] **AC-7:** §User-owned code boundary cites KDR-013 + ADR-0007's privacy framing applied to custom steps.
-- [ ] **AC-8:** §Pointers to adjacent tiers cross-links to T05's `writing-a-workflow.md` (Tier 1+2) and T07-aligned `writing-a-graph-primitive.md` (Tier 4). Every link verified resolvable.
-- [ ] **AC-9:** Doctest verification (Deliverable 4) passes. Every executable code block in the doc compiles cleanly (skipped blocks marked `# doctest: +SKIP` with rationale comment).
-- [ ] **AC-10:** `compile_step_in_isolation` fixture ships as part of T06 (per locked M4): lives in `ai_workflows/workflows/testing.py`, exports through `ai_workflows.workflows.testing`, has a docstring, has at least one test in `tests/workflows/test_testing_fixtures.py`, and is layer-rule-compliant.
-- [ ] **AC-11:** CHANGELOG entry under `[Unreleased]` per Deliverable 5.
-- [ ] **AC-12:** Gates green on both branches. `uv run pytest`, `uv run lint-imports`, `uv run ruff check`.
+- [x] **AC-1:** `docs/writing-a-custom-step.md` exists with the section structure from Deliverable 1 (Title / When to write / `Step` base class contract / Worked example / State-channel conventions / Testing / Graduation hints / User-owned code boundary / Pointers to adjacent tiers). The base-class contract section covers both `execute()` (typical Tier 3 path) AND the `compile()` upgrade path (per locked Q4 refinement) for fan-out / sub-graph / conditional cases.
+- [x] **AC-2:** Worked `WebFetchStep` example present, end-to-end (the full module from Deliverable 1's §Worked example) marked `# doctest: +SKIP`. Synthetic `AddOneStep` example present and doctest-runnable.
+- [x] **AC-3:** §`Step` base class contract documents the `execute(state) -> dict` coroutine signature with input/output semantics + the `compile(state_class, step_id) -> CompiledStep` advanced override. Frozen-model + extra='forbid' invariants stated. Default `Step.compile()` wrapping `self.execute()` (per locked Q4) explicitly documented.
+- [x] **AC-4:** §State-channel conventions enumerates the four conventions (read via state[<field>], write a dict of updates, don't mutate, don't reach for `_mid_run_*` framework keys).
+- [x] **AC-5:** §Testing section provides at least one worked test example using `compile_step_in_isolation` fixture (per locked M4 — the fixture ships as part of T06). The fixture is documented inline.
+- [x] **AC-6:** §Graduation hints names the three signals (reused across workflows, copy-paste-propagation, reusable wiring → graph primitive). Cross-link to `writing-a-graph-primitive.md` for the Tier 4 graduation path.
+- [x] **AC-7:** §User-owned code boundary cites KDR-013 + ADR-0007's privacy framing applied to custom steps.
+- [x] **AC-8:** §Pointers to adjacent tiers cross-links to T05's `writing-a-workflow.md` (Tier 1+2) and T07-aligned `writing-a-graph-primitive.md` (Tier 4). Every link verified resolvable.
+- [x] **AC-9:** Doctest verification (Deliverable 4) passes. Every executable code block in the doc compiles cleanly (skipped blocks marked `# doctest: +SKIP` with rationale comment).
+- [x] **AC-10:** `compile_step_in_isolation` fixture ships as part of T06 (per locked M4): lives in `ai_workflows/workflows/testing.py`, exports through `ai_workflows.workflows.testing`, has a docstring, has at least one test in `tests/workflows/test_testing_fixtures.py`, and is layer-rule-compliant.
+- [x] **AC-11:** CHANGELOG entry under `[Unreleased]` per Deliverable 5.
+- [x] **AC-12:** Gates green on both branches. `uv run pytest`, `uv run lint-imports`, `uv run ruff check`.
 
 ## Dependencies
 
@@ -291,14 +291,14 @@ Under `[Unreleased]` on both branches:
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-04 — `WebFetchStep` worked example skips doctest** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-04 — `WebFetchStep` worked example skips doctest** (severity: LOW, source: task_analysis.md round 1)
       The `WebFetchStep` example imports `httpx` (not a project dependency) and would require a network call. Resolved in this draft by marking the block `# doctest: +SKIP` and providing a synthetic `AddOneStep` doctest-runnable substitute. Verify the implementation lands the skip marker correctly + the AddOneStep substitute exists.
 
-- [ ] **TA-LOW-09 — `WebFetchStep` worked example tier name reuses `planner-explorer`** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-09 — `WebFetchStep` worked example tier name reuses `planner-explorer`** (severity: LOW, source: task_analysis.md round 3)
       The `WebFetchStep` doctest-skip example uses `tiers={"planner-explorer": ...}` and `tier="planner-explorer"`. `planner-explorer` is the in-tree planner workflow's Ollama-Qwen-routed tier; semantically wrong as the recommended tier choice for a generic web-fetch + summarize workflow. The illustrative example would teach a confusing pattern.
       **Recommendation:** At implement time, switch the tier name in T06 §Worked example to a generic name — e.g. `summarize-url-llm` — that doesn't borrow an in-tree planner tier label. Add a one-line framing comment noting the `tiers={"summarize-url-llm": ...}` is illustrative; the actual `TierConfig` definition is omitted for brevity (point at T05's worked example or T04's `summarize_tiers.py` for the concrete shape). Doctest-skip block; safe to land at audit time as part of the implement pass.
 
 ## Carry-over from prior audits
 
-- [ ] **M19-T05-ISS-MED-2 — Overwrite the `docs/writing-a-custom-step.md` stub wholesale** (severity: MEDIUM, source: [M19 T05 issue file](issues/task_05_issue.md))
+- [x] **M19-T05-ISS-MED-2 — Overwrite the `docs/writing-a-custom-step.md` stub wholesale** (severity: MEDIUM, source: [M19 T05 issue file](issues/task_05_issue.md))
       T05 created an 11-line placeholder forward-anchor at `docs/writing-a-custom-step.md` so the cross-link from `writing-a-workflow.md` resolves under the existing link-checker (`tests/docs/test_docs_links.py`). The stub contains only a "Note: This guide ships with M19 Task 06" forward-anchor and a pair of cross-links back to `writing-a-workflow.md` + `writing-a-graph-primitive.md`. **T06 must `Write` the file (overwrite the stub completely), not `Edit` it** — `Edit` would leave the placeholder note at the top of the final guide. T06 Auditor: confirm no stub vestiges (search for the literal phrase "This guide ships with M19 Task 06") remain in the final file.

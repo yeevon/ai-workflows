@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M19 Task 06: docs/writing-a-custom-step.md (Tier 3 dedicated guide) + compile_step_in_isolation testing fixture (2026-04-26)
+
+Files touched:
+- `docs/writing-a-custom-step.md` — Write-overwrite of the T05 placeholder stub (CARRY-T05-MEDIUM-2).
+  Full Tier 3 dedicated guide for downstream consumers extending the framework via custom step
+  types. Sections: intro + tier-decision table, §When to write a custom step, §The `Step` base
+  class contract (both `execute(state) -> dict` typical path and `compile(state_class, step_id)
+  -> CompiledStep` advanced override path per locked Q4), §Advanced — overriding `compile()`
+  directly (MyFanOutStep example), §Worked example — `WebFetchStep` (httpx, doctest: +SKIP per
+  TA-LOW-04 carry-over) + synthetic `AddOneStep` doctest-runnable substitute, §State-channel
+  conventions (four rules including `_mid_run_` key boundary from T04 ADV-1), §Testing your
+  custom step (`compile_step_in_isolation` fixture usage + StubLLMAdapter integration pattern),
+  §Graduation hints (three promotion signals + cross-link to `writing-a-graph-primitive.md`),
+  §User-owned code boundary (KDR-013 + ADR-0007 framing), §Pointers to adjacent tiers (Tier 1+2
+  + Tier 4 cross-links). WebFetchStep example uses tier name `summarize-url-llm` (not
+  `planner-explorer`) per TA-LOW-09 carry-over.
+- `ai_workflows/workflows/testing.py` — new module. `compile_step_in_isolation` async function
+  (per locked M4). Compiles a single `Step` instance into a one-node `StateGraph` using the same
+  Q4 default compile path (`step.compile()` → `_default_step_compile`) and runs it against an
+  initial state dict; returns final state with merge semantics (pre-existing keys preserved).
+  Uses `dict` as state class so custom steps can write arbitrary keys. Layer-rule-compliant:
+  imports from `workflows.spec` + `workflows._compiler` only.
+- `tests/workflows/test_testing_fixtures.py` — 7 hermetic tests for `compile_step_in_isolation`:
+  primary AC-10 test (custom execute runs), empty initial_state, state-merge semantics, error
+  propagation, independent calls, importability smoke, layer placement.
+- `tests/docs/test_writing_custom_step_snippets.py` — 19 doc-verification tests for
+  `writing-a-custom-step.md`: doc exists + no stub vestige (CARRY-T05-MEDIUM-2), all Python
+  blocks compile, skip markers, 9-section structure, WebFetchStep skip-marked + AddOneStep
+  present, generic tier name (TA-LOW-09), Step contract documented, four state-channel
+  conventions, `compile_step_in_isolation` referenced, graduation hints three signals + cross-link,
+  KDR-013 + ADR-0007 cited, cross-links to adjacent tiers.
+- `CHANGELOG.md` — this entry.
+
+ACs satisfied: AC-1 (9-section structure + both execute/compile paths), AC-2 (WebFetchStep
+doctest-skip + AddOneStep runnable substitute), AC-3 (Step base class contract: execute + compile
++ frozen + extra='forbid' + Q4 default-compile-wraps-execute), AC-4 (four state-channel
+conventions), AC-5 (compile_step_in_isolation fixture documented with worked test example),
+AC-6 (graduation hints: three signals + graph-primitive cross-link), AC-7 (KDR-013 + ADR-0007),
+AC-8 (Tier 1+2 + Tier 4 cross-links), AC-9 (doctest verification: all blocks compile, skipped
+blocks marked), AC-10 (compile_step_in_isolation in workflows/testing.py, exported, docstring,
+tests, layer-rule-compliant), AC-11 (this entry), AC-12 (gates green).
+
+Carry-over ACs satisfied: TA-LOW-04 (WebFetchStep doctest skip), TA-LOW-09 (generic tier name,
+not planner-explorer), CARRY-T05-MEDIUM-2 (Write-overwrite, no stub vestiges).
+
+Deviations from spec: none. All deliverables implemented as specified.
+
+**KDRs:** KDR-013 (user-owned custom step code; boundary documented with ADR-0007 framing),
+KDR-009 (no checkpointer in isolation fixture; unit-testing primitive only), KDR-004
+(LLMStep compile path documented in §Advanced — overriding compile() directly).
+
 ### Fixed — M19 Task 05 (cycle 2): writing-a-workflow.md doc-hygiene + bug fixes (2026-04-26)
 
 Files touched:

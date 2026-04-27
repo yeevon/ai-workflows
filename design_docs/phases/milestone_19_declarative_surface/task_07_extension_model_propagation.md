@@ -204,3 +204,9 @@ Under `[Unreleased]` on both branches:
 ## Carry-over from task analysis
 
 *Empty at task generation. Populated by `/clean-tasks` if any LOWs surface during the analyzer loop, and by `/clean-implement`'s audit cycle later.*
+
+## Carry-over from prior audits
+
+- [ ] **M19-T06-ISS-LOW-1 — Add `architecture.md §Extension model` back-link to `docs/writing-a-custom-step.md`** (severity: LOW, source: [M19 T06 issue file](issues/task_06_issue.md))
+      T06 shipped `docs/writing-a-custom-step.md` (Tier 3 dedicated guide) before T07 lands the new `architecture.md §"Extension model"` subsection. Spec Deliverable 3 of T06 expected three cross-link targets — `writing-a-workflow.md`, `writing-a-graph-primitive.md`, and `architecture.md §Extension model` — but the third was intentionally omitted by T06 because the anchor target does not exist yet. T06 cannot reference an anchor T07 hasn't created.
+      **What T07 must do:** when landing the new `architecture.md §"Extension model"` subsection (T07 Deliverable 1), also add a back-link from `docs/writing-a-custom-step.md` to `../design_docs/architecture.md#extension-model` (anchor name to match T07's heading slug). The natural placement is in §Pointers to adjacent tiers (after the Tier 4 cross-link), or inline in §When to write a custom step. T07 already cross-touches `architecture.md` + `README.md` + `writing-a-graph-primitive.md`, so adding one cross-link to `writing-a-custom-step.md` is a natural extension of the same coordinated pass. Verify the link resolves under `tests/docs/test_docs_links.py` (which file-checks but not anchor-checks per its current scope; anchor validation is `nice_to_have` per the link checker's docstring).

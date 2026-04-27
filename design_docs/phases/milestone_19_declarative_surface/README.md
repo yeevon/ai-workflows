@@ -159,7 +159,7 @@ Both shapes are derivable from the M19-shipped doc set alone — no `_dispatch.p
 | 03 | [Result-shape correctness: artefact-field bug fix + `plan` → `artifact` rename with deprecation alias (folded from M18 T01)](task_03_result_shape.md) | code + test | — (independent of T01/T02) | ✅ Implemented (2026-04-26) |
 | 04 | [Ship `summarize` workflow as in-tree spec-API proof point + wire-level e2e verification](task_04_summarize_proof_point.md) | code + test | T01 + T02 + T03 | ✅ Implemented (2026-04-26) |
 | 05 | [Rewrite `docs/writing-a-workflow.md` declarative-first (Tier 1 + Tier 2)](task_05_writing_workflow_rewrite.md) | doc | T01 + T03 | ✅ Implemented (2026-04-26) |
-| 06 | [New `docs/writing-a-custom-step.md` (Tier 3 dedicated guide) + `compile_step_in_isolation` testing fixture](task_06_writing_custom_step.md) | doc + code (fixture) | T01 |
+| 06 | [New `docs/writing-a-custom-step.md` (Tier 3 dedicated guide) + `compile_step_in_isolation` testing fixture](task_06_writing_custom_step.md) | doc + code (fixture) | T01 | ✅ Implemented (2026-04-26) |
 | 07 | [Four-tier framing across `architecture.md`, `README.md`, `writing-a-graph-primitive.md` + KDR table updates + Q5 deferral re-open trigger in `nice_to_have.md`](task_07_extension_model_propagation.md) | doc | T05 + T06 (so the cross-links land) |
 | 08 | [Milestone close-out + 0.3.0 publish ceremony](task_08_milestone_closeout.md) | release | T01–T07 |
 
