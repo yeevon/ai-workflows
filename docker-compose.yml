@@ -46,12 +46,12 @@ services:
       # Persistent Claude CLI state (auth tokens, plugins, settings,
       # plans, history). Container-isolated by default — host
       # credentials are NOT shared (point 5: user re-auths inside).
-      - aiw_claude_state:/root/.claude
+      - aiw_claude_state:/home/aiw/.claude
       # Bind-mount the auto-memory subdirectory only. The deeper-path
       # bind overrides the volume mount above for this exact subtree,
       # so memory persists between host and container while auth /
       # settings stay container-local.
-      - ${HOME}/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory:/root/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory
+      - ${HOME}/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory:/home/aiw/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory
     env_file:
       # Optional. .env is gitignored at repo root; runtime keys
       # (GEMINI_API_KEY, PYPI_TOKEN) live there. Compose tolerates a

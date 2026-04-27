@@ -48,6 +48,13 @@
 ARG PYTHON_VERSION=3.13
 ARG UV_VERSION=0.10
 ARG NODE_MAJOR=22
+# AIW_UID/AIW_GID — match the host user that owns the bind-mounted
+# repo so files written from inside the container don't drift to
+# root-owned on the host. Defaults to 1000/1000 (the typical first
+# user on Linux); override at build time if needed:
+#   docker compose build --build-arg AIW_UID=$(id -u) --build-arg AIW_GID=$(id -g)
+ARG AIW_UID=1000
+ARG AIW_GID=1000
 
 # Pull uv binary from the official Astral image
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-bin
@@ -55,6 +62,8 @@ FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-bin
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
 ARG NODE_MAJOR
+ARG AIW_UID
+ARG AIW_GID
 
 # OS deps:
 #   git              — tests + in-container git ops
@@ -71,6 +80,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         bash \
         make \
         gnupg \
+        gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js (for the `claude` CLI, distributed as @anthropic-ai/claude-code
@@ -96,10 +106,32 @@ ENV UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/home/papa-jochy/prj/ai-workflows/.venv \
     PATH="/home/papa-jochy/prj/ai-workflows/.venv/bin:/usr/local/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    HOME=/home/aiw
+
+# Create non-root user `aiw` (UID/GID match the host user that owns
+# the bind-mounted repo). The `claude` CLI refuses to run with
+# `--dangerously-skip-permissions` or `defaultMode: "bypassPermissions"`
+# under root, so non-root is required for unattended autonomy. The
+# UID/GID match means files written through the bind-mount stay
+# host-owned (no chown drift).
+RUN groupadd --gid ${AIW_GID} aiw \
+    && useradd --uid ${AIW_UID} --gid ${AIW_GID} --shell /bin/bash --create-home aiw \
+    && mkdir -p /home/aiw/.claude /home/papa-jochy/prj/ai-workflows \
+    && chown -R aiw:aiw /home/aiw /home/papa-jochy
+
+# Entrypoint runs as root, chowns named-volume mount points to aiw,
+# then drops to aiw via gosu. Without this, Docker-managed named
+# volumes mount as root-owned and the unprivileged user can't write
+# to them. The script path is baked into the image (not via the
+# bind-mount) so it survives even if scripts/ goes missing on the
+# host. Source is at scripts/aiw-entrypoint.sh on disk.
+COPY scripts/aiw-entrypoint.sh /usr/local/bin/aiw-entrypoint.sh
+RUN chmod +x /usr/local/bin/aiw-entrypoint.sh
 
 WORKDIR /home/papa-jochy/prj/ai-workflows
 
+ENTRYPOINT ["/usr/local/bin/aiw-entrypoint.sh"]
 # Default command — drop into a shell. Override per-target with
 # `docker compose run --rm aiw <cmd>` (see Makefile).
 CMD ["bash"]
