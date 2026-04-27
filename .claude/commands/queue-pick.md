@@ -22,11 +22,19 @@ Resolve `$ARGUMENTS`:
 - **Empty:** roadmap-selector scans all `design_docs/phases/milestone_*/` directories.
 - **"m10 m15" / "m10":** pass the milestone list verbatim to roadmap-selector.
 
+**Compute the project memory path at runtime** — do not hardcode a username or machine path. The Claude Code auto-memory directory is hashed off the current working directory (each `/` in cwd becomes `-`), and lives under `$HOME/.claude/projects/`. Compute via Bash:
+
+```bash
+MEMORY_PATH="$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md"
+```
+
+If the resulting path does not exist on disk, that's a pre-condition failure — the orchestrator was invoked from a directory Claude Code has not yet seen. Halt and surface the question (which is unusual; in normal operation the auto-memory dir is created on first conversation in the project).
+
 Build the **project context brief** — pass verbatim to the `roadmap-selector` Task spawn:
 
 ```text
 Project: ai-workflows (Python, MIT, published as jmdl-ai-workflows on PyPI)
-Memory path: ~/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory/MEMORY.md
+Memory path: <MEMORY_PATH computed above; substitute the resolved absolute path>
 Architecture: design_docs/architecture.md (especially §9 KDRs)
 Roadmap: design_docs/roadmap.md
 Deferred-ideas file: design_docs/nice_to_have.md (out-of-scope by default)
@@ -52,6 +60,17 @@ Read the file the agent wrote. The verdict line is the source of truth:
 - `HALT-AND-ASK` — surface the user-arbitration question.
 
 Do not trust a chat summary; read the file.
+
+**Pre-condition check: empty or missing recommendation file.** If the file does not exist after the Task spawn, OR exists but is empty, OR exists but has no parseable `**Verdict:**` line, that itself is a `HALT-AND-ASK` condition — the agent halted before producing output (commonly: missing memory path, missing milestone directories, scope-load failure). Report:
+
+```
+⚠ /queue-pick — roadmap-selector did not produce a recommendation.
+   Recommendation file: <path>
+   Likely cause: <missing memory file | unreadable milestone dir | other pre-condition gap>
+   Re-check the orchestrator's project context brief and re-run.
+```
+
+Surface the agent's last chat reply verbatim (it usually names what it was missing) and halt. Do not silently re-spawn; the issue is upstream of the agent and re-spawning will hit the same wall.
 
 ### Step 3 — Branch on verdict
 

@@ -31,7 +31,13 @@ Resolve `$ARGUMENTS` to a milestone directory:
 
 Verify the milestone directory contains a `README.md`. If not, **stop and ask** — the README is the source of truth for task scope.
 
-Build the **project context brief** — pass verbatim to every `task-analyzer` spawn:
+**Compute the project memory path at runtime** — do not hardcode a username or machine path. Compute via Bash before assembling the brief:
+
+```bash
+MEMORY_PATH="$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md"
+```
+
+Build the **project context brief** — pass verbatim to every `task-analyzer` spawn (substitute the resolved `MEMORY_PATH` into the line below):
 
 ```text
 Project: ai-workflows (Python, MIT, published as jmdl-ai-workflows on PyPI)
@@ -49,7 +55,7 @@ Load-bearing KDRs: 002 (MCP-as-substrate), 003 (no Anthropic API), 004 (validato
 Status surfaces (must flip together at task close): per-task spec **Status:** line,
                    milestone README task table row, tasks/README.md row if present,
                    milestone README "Done when" checkboxes
-Project memory: ~/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory/MEMORY.md
+Project memory: <MEMORY_PATH computed above; substitute the resolved absolute path>
                    (read for milestone status — on-hold / paused / pending external trigger)
 ```
 

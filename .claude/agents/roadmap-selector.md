@@ -64,26 +64,33 @@ A task whose trigger has not fired is **not eligible**. Move to the next task in
 
 If the task's `Dependencies` section names a prior task that has not landed (`**Status:** ✅` not present in that prior spec), the task is **not eligible**. Move to the next task in sequential order.
 
-### Walk the queue
+### Walk the queue (nested-loop form)
 
-Apply the default-sequential rule:
+Filter 1 is **milestone-level** (stops the walk); Filters 2 and 3 are **task-level** (skip to the next task within the milestone). Read the algorithm as nested loops:
 
-1. Start at the lowest-numbered open milestone.
-2. Check Filter 1 at the milestone level first — does the milestone have any `task_*.md` specs?
-   - **No specs at all** (README-only) → emit `NEEDS-CLEAN-TASKS` for this milestone. Stop the walk here; the milestone is the queue's bottleneck. The orchestrator routes to `/clean-tasks <milestone>` and re-runs roadmap-selector after.
-   - **Specs exist but unhardened** (no `task_analysis.md`, or its verdict is `OPEN`, or carry-over has `🚧 BLOCKED`) → emit `NEEDS-CLEAN-TASKS` for this milestone. Same routing as above.
-   - **Specs exist and hardened** → continue to step 3.
-3. Pick the lowest-numbered open task within that milestone (Status not `✅ Complete`).
-4. Apply filters 2–3 (trigger fired, dependencies satisfied).
-5. If all pass → that's the Phase-2 candidate. Continue to Phase 3 to check the bug-blocker exception.
-6. If filter 2 or 3 fails → move to the next task in the same milestone, then the next milestone if the milestone is exhausted.
-7. If the walk exhausts all open milestones without finding an eligible task → `HALT-AND-ASK`.
+```
+for each open milestone (lowest number first):
+    if Filter 1 fails (milestone has no specs OR specs unhardened):
+        emit NEEDS-CLEAN-TASKS for this milestone, STOP the walk
+    for each open task within milestone (lowest number first, Status != ✅ Complete):
+        if Filter 2 fails (trigger not fired):
+            continue to next task
+        if Filter 3 fails (a prior task it depends on hasn't landed):
+            continue to next task
+        return this task as the Phase-2 candidate (continue to Phase 3)
+if the walk exhausts every open milestone without returning:
+    emit HALT-AND-ASK
+```
 
 **Why milestone-level Filter 1 stops the walk instead of skipping:** the user's roadmap rule is sequential. A README-only milestone is a real piece of work that needs to land before the queue can move past it. Skipping past M15 (no specs) to M17 (also no specs) just delays the same `/clean-tasks` call. Stop at the first unhardened milestone; let the orchestrator decide whether to harden it now or skip it explicitly.
 
 ## Phase 3 — Check for the bug-blocker exception
 
-Even when Phase 2 returns an eligible candidate, check whether a **later-milestone task** would block its clean implementation. The override applies only when **both** conditions hold:
+Even when Phase 2 returns an eligible candidate, check whether a **later-milestone task** would block its clean implementation.
+
+**Bound the override search to the next 2 open milestones beyond the Phase-2 candidate's milestone.** Beyond two ahead, the link to the current candidate is too speculative — a hypothetical future task that "fixes a bug" doesn't usefully constrain what we should build now. If the bug-blocker is genuinely 3+ milestones away, that's a roadmap-reordering question for the user, not a routing call the agent should make.
+
+The override applies only when **both** conditions hold:
 
 1. The later task fixes a specific bug or issue (named in the task spec, the issue file, or a CHANGELOG entry) that would **negatively impact the test or implementation of the Phase-2 candidate.** Examples that qualify:
    - The current task's tests would be unreliable because of a known framework defect the later task fixes.

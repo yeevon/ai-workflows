@@ -33,7 +33,7 @@ Read in this order. Stop and ask the invoker if anything is missing or unclear:
 7. Sibling milestone READMEs the specs cite — e.g. when a M10 spec cites M8, read M8's README to verify the cited prior decision.
 8. `pyproject.toml` and `ai_workflows/__init__.py` — for the current `__version__` (so SEMVER claims can be checked).
 9. The relevant code under `ai_workflows/` — for every function, class, constant, or path the specs name. Do not infer existence; verify with `Read`, `Grep`, or `Glob`.
-10. Project memory at `~/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory/MEMORY.md` plus any of its referenced memory files relevant to the milestone (CS300 pivot status, M-on-hold flags, etc.) — these surface context that is not in the codebase but materially shapes whether a spec is timely or stale.
+10. Project memory — the orchestrator's project context brief names the path under `Project memory:` (computed from cwd via the standard `$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md` encoding; do not hardcode a username or machine path). Read `MEMORY.md` plus any of its referenced memory files relevant to the milestone (CS300 pivot status, M-on-hold flags, etc.) — these surface context that is not in the codebase but materially shapes whether a spec is timely or stale. If the brief omits the memory path or the file does not exist, surface as a HIGH finding "memory path missing" and halt; do not assume a default.
 
 ## Phase 2 — Per-task verification
 
