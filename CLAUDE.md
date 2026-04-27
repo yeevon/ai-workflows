@@ -15,7 +15,8 @@ Subagents:
 - `auditor` — read-only on source code; mandatory architecture + KDR drift check; writes the issue file.
 - `security-reviewer` — post-functional-clean threat-model check; appends to the issue file.
 - `dependency-auditor` — `pyproject.toml` / `uv.lock` changes + wheel-contents pre-publish; appends to the issue file.
-- `architect` — independent architectural judgment + targeted external research (web-search enabled). Used at queue-selection time and at mid-loop decision points where a finding implies a new KDR / ADR. Read-only on source code; writes only to the issue file's `## Architect review` section. NOT a per-cycle reviewer.
+- `architect` — independent architectural judgment + targeted external research (web-search enabled). Used at mid-loop decision points where a finding implies a new KDR / ADR (Trigger A) or an external best-practice claim needs reconciliation against locked decisions (Trigger B). Read-only on source code; writes only to the issue file's `## Architect review` section. NOT a per-cycle reviewer; queue selection lives in `roadmap-selector`, not here.
+- `roadmap-selector` — picks the next task to drive under autonomous mode by reading open milestone READMEs, per-task specs, the most recent `task_analysis.md` verdicts, the project memory, and the `[Unreleased]` CHANGELOG. Output: one task ID + rationale, OR halt-and-ask. Read-only; writes only to the recommendation file the invoker names.
 - `sr-dev` — senior code-quality review run once per task at the autonomous-mode terminal gate. Complements the auditor — looks for hidden bugs that pass tests, defensive-code creep, idiom drift, premature abstraction. Read-only.
 - `sr-sdet` — senior test-quality + coverage review run once per task at the autonomous-mode terminal gate. Complements the auditor — looks for tests that pass for the wrong reason, mock overuse, hermetic-vs-E2E gating mistakes. Read-only.
 

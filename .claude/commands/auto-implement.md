@@ -156,9 +156,11 @@ Output appends under `## Sr. SDET review` in the issue file. Verdict line: `SHIP
 
 T1 and T2 may run in parallel — they read disjoint files (sr-dev reads source, sr-sdet reads tests) and write to disjoint sections of the same issue file. Spawn both in a single message with two `Task` tool calls.
 
+**Concurrent Edit on disjoint sections — has not raced in practice; if it does (e.g. one section's append clobbers the other's mid-write), serialize: spawn T1, await completion, then spawn T2.** Each agent uses Edit to append its own `## Sr. <Role> review` section, so the disjoint-section assumption holds as long as neither rewrites the other's section. Surface the race as a tooling finding for follow-up rather than retrying the gate.
+
 ### Step T3 — Architect (conditional)
 
-Spawn `architect` via `Task` **only if** any of the four reviewers (auditor, security-reviewer, dependency-auditor, sr-dev, sr-sdet) flagged a finding whose recommendation reads "this should be a new KDR" or "violates an unwritten rule". Pass: trigger=`new-KDR`, the finding ID, the project context brief.
+Spawn `architect` via `Task` **only if** any of the five reviewers (auditor, security-reviewer, dependency-auditor, sr-dev, sr-sdet) flagged a finding whose recommendation reads "this should be a new KDR" or "violates an unwritten rule". Pass: trigger=`new-KDR`, the finding ID, the project context brief.
 
 Architect output appends under `## Architect review` in the issue file. Verdict line: `PROPOSE-NEW-KDR | NO-KDR-NEEDED-EXISTING-RULE-COVERS | NO-KDR-NEEDED-CASE-BY-CASE`.
 

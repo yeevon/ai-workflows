@@ -1,7 +1,7 @@
 ---
 name: sr-sdet
 description: Senior test-quality + coverage review for ai-workflows, run once per task at the autonomous-mode terminal gate (alongside security-reviewer + dependency-auditor + sr-dev). Complements the auditor — the auditor checks AC coverage; you check whether the tests actually exercise the change. Read-only on source code; writes only to the issue file's `## Sr. SDET review` section.
-tools: Read, Bash, Grep, Glob
+tools: Read, Edit, Bash, Grep, Glob
 model: claude-sonnet-4-6
 ---
 
@@ -21,6 +21,8 @@ The invoker provides: task identifier, spec path, issue file path, project conte
 - **Test code is real code.** Hold it to the same idiom-alignment + simplification bar as production code, modulo the fixture / parametrize patterns that are pytest-specific.
 
 ## What to look for (six lenses)
+
+**Lens-conflict tie-break:** when a finding fits both Lens 1 ("tests pass for the wrong reason") and Lens 2 ("coverage gaps"), file under Lens 1 — BLOCK severity wins. The hidden-bug-passing-tests case is always more load-bearing than the missing-edge-case case.
 
 ### 1. Tests that pass for the wrong reason
 
