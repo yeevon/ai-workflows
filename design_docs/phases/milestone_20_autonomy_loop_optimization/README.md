@@ -95,6 +95,7 @@ Beyond these shifts, the per-task token cost has four leaks compounding multipli
 | Orchestrators never downgrade to Haiku — empirical evidence does not support it for non-trivial workflows | research brief §Lens 3.4 (Caylent, ClaudeFa.st, SolidNumber convergence) |
 | Never switch model mid-context — cache invalidation footgun | research brief §Lens 2.2 |
 | KDR-013 boundary holds — agent edits do not police user-owned external workflow code | architecture.md KDR-013 |
+| **KDR-014 affirmation** — slash-command flags `--expert` / `--cheap` (T07) and env-var overrides (`AIW_*`) are operator-surface knobs, NOT user-facing quality knobs. Conform to KDR-014's framework-vs-operator boundary by analogy with `AIW_AUDIT_CASCADE` (M12 / ADR-0009). End-user `*Input` schemas, `WorkflowSpec` fields, MCP tool schemas remain free of quality knobs. | architecture.md KDR-014 · ADR-0009 |
 
 ---
 
@@ -102,7 +103,7 @@ Beyond these shifts, the per-task token cost has four leaks compounding multipli
 
 The pool is reorganized into seven phases keyed to the optimization themes. Each row maps to a research-brief finding (`SUPPORT` / `MODIFY` / new candidate `T21+`) and a memo thread (`#1-15` from the prior project memory). Order within a phase is roughly the suggested implementation order, not a hard sequence.
 
-### Phase A — Compaction quartet (token-leak closure, sequential within phase)
+### Phase A — Compaction quartet + server-side primitive evaluation (token-leak closure, sequential within phase)
 
 | # | Task | Research-brief verdict | Phase / Kind | Status |
 |---|---|---|---|---|
@@ -110,6 +111,7 @@ The pool is reorganized into seven phases keyed to the optimization themes. Each
 | 02 | Sub-agent input prune (orchestrator-side scope discipline, plus per-spawn output token budget) | SUPPORT + EXTEND (T02 from #8) | Compaction / doc + code | 📝 Candidate |
 | 03 | In-task cycle compaction (`cycle_summary.md` per Auditor, structured template) | SUPPORT (T03 from #9) | Compaction / doc + code | 📝 Candidate |
 | 04 | Cross-task iteration compaction (`iter_<N>_shipped.md` at autopilot iteration boundaries) | SUPPORT (T04 from #13) | Compaction / doc + code | 📝 Candidate |
+| 28 | **NEW** — Evaluate server-side `compact_20260112` strategy for orchestrator runs through Agent SDK (research brief §Lens 2.1). GO / NO-GO / use-alongside-T03-T04 decision; if GO, integrates with `pause_after_compaction` so orchestrator can re-stitch state from cycle_summary / iter_shipped files post-compaction. Does NOT replace T03/T04 (file-based memory remains the auditable durable record); composes on top. | NEW (audit M1, research-brief §Lens 2.1) | Compaction / analysis + code | 📝 Candidate |
 
 ### Phase B — Parallel terminal gate (perf, can run alongside Phase A)
 
@@ -171,7 +173,7 @@ The pool is reorganized into seven phases keyed to the optimization themes. Each
 
 | Phase | Tasks | Rationale |
 |---|---|---|
-| **A — Compaction (token reduction)** | T01 → T02 → T03 → T04 | Foundation. T01 (output schema) gates everything else — without it, downstream pruning leaks the same way. T02–T04 plug one accumulation surface each. Sequential within the phase. |
+| **A — Compaction (token reduction)** | T01 → T02 → T03 → T04 → T28 | Foundation. T01 (output schema) gates everything else — without it, downstream pruning leaks the same way. T02–T04 plug one accumulation surface each. Sequential within the phase. T28 (server-side `compact_20260112` evaluation) lands last — informs whether to compose the Anthropic primitive with file-based memory or keep file-based as the only continuity mechanism; doesn't replace T03/T04 either way (file-based memory remains the auditable record). |
 | **B — Parallel terminal gate (perf)** | T05 | Independent of Phase A. Could run in parallel iteration with Phase A. |
 | **C — Model-tier rationalization** | T21 → T22 → T06 → T07 (gated on T06) | T21 (adaptive-thinking migration) lands first — confirmed 6 hits of `thinking: max` across `.claude/commands/` 2026-04-27 will 400-error on Opus 4.7 mid-study otherwise. T22 (telemetry) lands second — T06 cannot produce evidence without measurement infrastructure. T06 study third. T07 conditional on T06 GO verdict. |
 | **D — Safeguards** | T08 → T09 → T20 → T23 → T27 | Defense-in-depth. T23 (cache-breakpoint discipline) is the highest-impact-per-effort item in this phase. **Lands BEFORE Phase C completes** in priority — Sonnet-default makes safeguards more load-bearing. Re-order if Phase C is deferred. |
