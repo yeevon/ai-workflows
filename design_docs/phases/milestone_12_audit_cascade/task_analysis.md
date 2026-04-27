@@ -1,14 +1,20 @@
-# milestone_12_audit_cascade — Task Analysis
+# M12 Audit Cascade — Task Analysis
 
-**Round:** 3 (T02)
-**Analyzed on:** 2026-04-27
-**Specs analyzed:** `task_02_audit_cascade_node.md`
+This file carries findings for two specs verified in the same /clean-tasks invocation:
+
+- **§T03 (round 6)** — verification of round-5 fix application (one over the 5-round budget; orchestrator close-out exception).
+- **§T08 (round 2)** — verification of round-1 fix application.
+
+T01 + T02 are shipped (✅ Complete 2026-04-27) and are not analyzed here.
+
+---
+
+# T03 (round 6 verification)
+
+**Round:** 6 (one over the standard 5-round budget — orchestrator close-out verification per /clean-tasks Step 4 discretion; round-5 fixes were single-mechanical and orchestrator confidence is high)
+**Verified on:** 2026-04-27
+**Specs analyzed:** `task_03_workflow_wiring.md`
 **Analyst:** task-analyzer agent
-
-T01 closed 2026-04-27 (✅ Complete; issue file at `issues/task_01_issue.md`); not re-analyzed.
-T03–T07 specs do not yet exist per the milestone README's `T02–T07 written at each predecessor's close-out` policy; intentionally absent.
-
-This is the third analysis round on T02. Round-2 verdict was OPEN (0 HIGH, 1 MEDIUM, 5 LOW); orchestrator applied the single MEDIUM fix (M1 — added §Counter-sharing contract block under §Sub-graph wiring; pinned test #3 scenario to pure-audit-failure-only). Round 3 verifies the round-2 MEDIUM fix landed correctly + re-grades the 5 LOWs + hostile re-reads for any new issues introduced by round-2 edits.
 
 ## Summary
 
@@ -16,115 +22,181 @@ This is the third analysis round on T02. Round-2 verdict was OPEN (0 HIGH, 1 MED
 | --- | --- |
 | 🔴 HIGH | 0 |
 | 🟡 MEDIUM | 0 |
-| 🟢 LOW | 4 |
-| Total | 4 |
+| 🟢 LOW | 0 (all 8 LOWs in carry-over) |
+| Total | 0 |
 
-**Stop verdict:** LOW-ONLY
+**Stop verdict:** LOW-ONLY (8 LOWs already pushed to spec carry-over; orchestrator may exit the loop).
 
-(Per the orchestrator contract: zero HIGH and zero MEDIUM with LOW findings only → orchestrator pushes LOWs to spec carry-over and exits the loop. Phase 3 will append the four LOWs to T02's `## Carry-over from task analysis` section.)
+Round 5's single MEDIUM (M1, AC line 318 stale "4 contracts kept") landed mechanically; the two round-5 LOWs (TA-LOW-07 extension; TA-LOW-08 line-citation tightening) were both pushed to the spec's `## Carry-over from task analysis` section. No new findings introduced by round-5 fix application. T03 is implementable as written, modulo T08 closing first per `## Dependencies`.
 
-## Round-2 fix verification
+## Round-5 fix verification
 
-The round-2 MEDIUM fix (M1 — shared retry counter contract clarification) was hostile-re-read against the live codebase and the spec. It landed correctly:
+### M1 — AC line 318 contract count (5 not 4) — VERIFIED LANDED
 
-- **§Counter-sharing contract block exists.** Spec lines 220–234. Block is positioned correctly between §Sub-graph wiring's edge-wiring section (ending line 218) and §Internal node block (starting line 235), as the round-2 fix prescription required.
-- **Block names the design intent explicitly.** Line 222 states "shared semantic budget against the primary's `policy.max_semantic_attempts`" — load-bearing for any future Builder/Auditor reading the §Sub-graph wiring section. The intent (audit-fail + shape-fail share the budget) is no longer inferential.
-- **Worked example arithmetic verified against `validator_node.py:135-142`.** Spec line 226–229 trace:
-  - Cycle 1: AuditFailure → counter=1. Verified `error_handler.py:170-178` bumps `_retry_counts[node_name]` from 0 to 1.
-  - Cycle 2: prior_failures=1, max_attempts=3, `1 >= 3-1` → False. Verified `validator_node.py:136` reads `prior_failures = retry_counts.get(node_name, 0)` BEFORE the failure increment, and `136` is `if prior_failures >= max_attempts - 1`. With prior_failures=1 (read from state which was bumped to 1 by Cycle 1's verdict-wrap), the comparison `1 >= 2` is False → raises RetryableSemantic. Counter bumps to 2 via `_failure_state_update` at error_handler.py:170-178. ✅
-  - Cycle 3: prior_failures=2, `2 >= 3-1` → True → escalates to NonRetryable. Counter bumps to 3 (the NonRetryable also goes through _failure_state_update). retrying_edge then routes via `on_terminal` because: (a) `_non_retryable_failures = 1 < 2` so the hard-stop check at retrying_edge.py:103 is False; (b) `isinstance(exc, NonRetryable)` doesn't match either RetryableTransient or RetryableSemantic at retrying_edge.py:112,117, so falls through to `return on_terminal` at retrying_edge.py:122. ✅
-- **Pure-audit-failure-only claim verified.** Spec line 231: "reaches the human_gate after exactly `max_semantic_attempts` primary attempts." Traced for `max_semantic_attempts=2` (test #3 setting):
-  - Cycle 1: primary → validator(passes shape) → auditor → verdict raises AuditFailure. Counter bumps to 1. retrying_edge: `retry_counts["{name}_primary"]=1 >= 2`? False → routes to on_semantic (back to primary). ✅
-  - Cycle 2: primary → validator(passes shape) → auditor → verdict raises AuditFailure. Counter bumps to 2. retrying_edge: `2 >= 2`? True → routes to on_terminal (HumanGate). ✅
-  - Total: 2 primary attempts, then human_gate. Matches spec's "after exactly `max_semantic_attempts` primary attempts" claim. ✅
-- **Test #3 pinned to pure-audit-failure-only.** Spec line 342 reads "**pure-audit-failure-only scenario** (no shape failures interleaved — primary always returns shape-valid output, auditor always returns `passed=False`)." The cross-reference to §Counter-sharing contract is present in the test description ("the shared counter (§Counter-sharing contract) burns one slot per audit-failure, and exhaustion routes via the verdict-node's retrying_edge on `on_terminal` after `max_semantic_attempts`"). The budget arithmetic is now unambiguous to any Builder reading test #3.
-- **Test #4 cross-referenced.** Spec line 233: "A pure-shape-failure-only sequence (auditor never invoked, see test #4) also reaches the in-validator `NonRetryable` escalation on the same cycle. Test #4 pins this — auditor adapter call count is 0." This forward-reference correctly anchors the validator-only path against the test that pins it.
+**Live spec line 318:**
 
-The round-2 fix is internally consistent, factually correct against the live codebase, and resolves the M1 ambiguity cleanly. No new findings introduced by the round-2 edits.
+> `- [ ] uv run pytest + uv run lint-imports (5 contracts kept — T03 adds no new contract; T02's audit_cascade composes only graph + primitives contract carries forward) + uv run ruff check all clean.`
 
-## Re-evaluation of round-2 LOW findings
+Matches the round-5 mechanical recommendation byte-for-byte. The Auditor's `uv run lint-imports` invocation will report "Contracts: 5 kept" and the AC will tick correctly.
 
-- **L1 (`Status` parenthetical drift).** Still LOW; cosmetic only. Round-2 did not edit the Status line. Push to spec carry-over in Phase 3.
-- **L2 (`HumanGate verbatim` phrasing).** Still LOW; phrasing-only. Round-2 did not edit §Out of scope. Push to spec carry-over in Phase 3.
-- **L3 (M12-T01-ISS-03 propagation).** **Re-graded to RESOLVED.** Re-read T01 issue file line 134 — the T01 audit explicitly closed ISS-03 with "No spec edit required" and "Self-resolves at T02 cycle 1 when `AuditCascadeNode` first invokes the auditor tier." Per CLAUDE.md "Propagation discipline" only forward-deferred items requiring action need to appear in the target spec; ISS-03 was closed-on-self-resolution at T01, not forward-deferred. Round-2 L3 was an over-read of the T01 issue file. Drop from carry-over push.
-- **L4 (Test #5 outer-graph state schema underspecified).** Still LOW. Round-2 did not edit test #5. Push to spec carry-over in Phase 3.
-- **L5 (`_default_primary_original` helper sketch).** Still LOW. Round-2 did not edit the §Internal node block helper sketch. Push to spec carry-over in Phase 3.
+### TA-LOW-07 extension (positive AND negative side structural assertions) — VERIFIED LANDED
 
-Net change: 5 LOWs → 4 LOWs (L3 resolved on re-read).
+**Live spec lines 373-377:** the carry-over now reads
 
-## Findings
+> Test #5 (`test_planner_subgraph_inherits_planner_module_decision`) references "the cascade primitive's structural marker — see T02's compiled-graph fixture" without enumerating it. Builder will hunt. Test also asserts negative-side ("slice-worker node does NOT have cascade wrapping") but the slice-worker lives inside `_build_slice_branch_subgraph()` — Builder must descend into the per-branch sub-graph for the negative assertion.
+> **Recommendation:** Pin both sides:
+> - Positive: assert `'planner_explorer_audit_primary' in <planner subgraph>.nodes` (the cascade primitive adds 5 prefixed nodes per `audit_cascade.py:420-424`: `{name}_primary`, `{name}_validator`, `{name}_auditor`, `{name}_verdict`, `{name}_human_gate`).
+> - Negative: assert `'slice_worker_audit_primary' not in <slice-branch subgraph>.nodes`. Builder may need a helper to descend into the compiled `slice_branch` sub-graph; cite `_build_slice_branch_subgraph()` at slice_refactor.py:899 as the construction site.
 
-### 🔴 HIGH
+The five-node enumeration matches live `audit_cascade.py:420-424` exactly:
+- L420: `g.add_node(f"{name}_primary", primary_node)`
+- L421: `g.add_node(f"{name}_validator", validator_wrapped)`
+- L422: `g.add_node(f"{name}_auditor", auditor_node)`
+- L423: `g.add_node(f"{name}_verdict", verdict_node)`
+- L424: `g.add_node(f"{name}_human_gate", gate)`
 
-*None.*
+Both positive and negative-side assertions pinned. Builder has actionable structural markers.
 
-### 🟡 MEDIUM
+### TA-LOW-08 (line-citation tightening) — VERIFIED LANDED
 
-*None.* Round-2 M1 fix verified clean.
+**Live spec lines 379-381:** new TA-LOW-08 carry-over reads
 
-### 🟢 LOW
+> Spec line 197 cites `_slice_branch_finalize` "line 869-870" for the existing exception path; live `slice_refactor.py:868` is `exc = state.get("last_exception")`, line 869 is `if exc is None:`, line 870 is `return {}`. Citation is one-off — Builder lands on the early-return branch instead of the exception-read site.
+> **Recommendation:** Change "at line 869-870" to "at line 868 (the `state.get('last_exception')` read), with the early-return at line 869-870 the path the new `isinstance(exc, AuditFailure)` branch must precede". Tightens Builder targeting.
 
-#### L1 (carried from round 1) — `**Status:**` parenthetical drift
+Verified live `slice_refactor.py`:
+- L868: `exc = state.get("last_exception")`
+- L869: `if exc is None:`
+- L870: `return {}`
 
-**Task:** `task_02_audit_cascade_node.md`
-**Issue:** Spec line 3 has `**Status:** 📝 Planned (drafted 2026-04-27).` while milestone README task table row 02 (line 65 of README) uses `📝 Planned` only. Cosmetic; close-out flips both to `✅ Complete (YYYY-MM-DD)` together so no real surface drift at close.
-**Recommendation:** Optional drop of the `(drafted 2026-04-27)` parenthetical for uniformity with README task-table row format.
-**Push to spec:** yes — append: *"Optional: drop the `(drafted 2026-04-27)` parenthetical from `**Status:**` line for uniformity with the README task-table row format. Cosmetic only — does not affect close-out flip."*
+The carry-over correctly identifies the off-by-one citation; the recommendation tightens it without modifying the in-prose §Folding cascade exhaustion citation (left as-is for the Builder to act on at /clean-implement time, per the round-5 push-to-carry-over decision).
 
-#### L2 (carried from round 1) — `HumanGate verbatim` phrasing in §Out of scope
+## What's structurally sound (round-6 final read)
 
-**Task:** `task_02_audit_cascade_node.md`
-**Location:** spec line 384 ("No HumanGate edit. T02 reuses HumanGate(strict_review=True) verbatim").
-**Issue:** "Verbatim" is technically true but a pedant could read it as "no behavioural customization at all." The cascade *does* supply a custom `prompt_fn` for the cascade-transcript renderer — that's `human_gate.py:52`'s documented extension point.
-**Recommendation:** Replace "verbatim" with "without source-code edit"; clarifies that the `prompt_fn` injection is the documented extension point.
-**Push to spec:** yes — append: *"Optional: in §Out of scope, replace `reuses HumanGate(strict_review=True) verbatim` with `reuses HumanGate(strict_review=True) without source-code edit (the cascade-transcript prompt_fn is HumanGate's documented extension point, not a fork)`."*
+Verified-and-correct on the post-round-5-fix spec:
 
-#### L3 (carried from round 1) — Test #5 outer-graph state schema underspecified
+- **All round-1..5 fix applications are coherent.** The spec's prescriptive sections (What to Build, Deliverables, Tests, Smoke, Acceptance Criteria) tell one consistent story. The 8 carry-over LOWs are well-scoped, all source-cited, all Recommendation-bearing, and none of them re-open a structural question — they are spec-text fragility items the Builder absorbs at implement time.
+- **8 carry-over LOWs (TA-LOW-01 through TA-LOW-08) all present as `[ ]` checkboxes** with Recommendation text. Verified by `grep -c '\*\*TA-LOW-'` returning 8 matches in `task_03_workflow_wiring.md`.
+- **Round-5 M1 fix is minimal and surgical.** The substitution updated only the parenthetical inside AC line 318; no other ACs touched, no Deliverables block touched, no test-file rename. The fix matches what the round-5 analysis recommended verbatim.
+- **No NEW findings introduced by round-5 fixes.** Walking the spec end-to-end after the M1 substitution + the two LOW additions, no new structural claim, line citation, KDR drift, layer-rule break, or status-surface drift surfaced.
+- **KDR re-grade — all 9 KDRs still preserved.** Same as round 5; round-5 fixes touched only AC line 318's parenthetical and the carry-over section, neither of which interacts with any KDR.
+- **Layer rule preserved.** Round-5 fixes added zero source-code change; all edits land in `workflows/` layer at /clean-implement time per the spec's deliverables.
+- **Status surfaces consistent.** AC line 320 still enumerates spec status, README task table row 03, and README §Exit-criteria bullet 5. README task-table row 03 already carries `📝 Planned (depends on T08)`; README §Exit-criteria bullet 5 is the surface that needs the framing-update at T03 close-out per the propagation status.
+- **Dependencies block honoured.** T01 (`a7f3e8f`) and T02 (`fc8ef19`) shown as Met; T08 listed as required predecessor with the explicit "T03 cannot ship until T08 closes" framing at line 326.
+- **Round-budget posture.** The orchestrator chose to verify in round 6 (one over the 5-round budget) given the round-5 fixes were single-mechanical and the orchestrator's confidence was high. This verification confirms that judgment was correct — the spec is LOW-ONLY clean.
 
-**Task:** `task_02_audit_cascade_node.md`
-**Location:** spec line 344 (test #5 description).
-**Issue:** "instantiate `audit_cascade_node(...)`; add it as a single node to a minimal outer `StateGraph(state_schema=...)`; compile; invoke." The outer state schema is unspecified. The four `<name>_*` channels are pinned at lines 280–283 which the Builder can copy in, but the test still needs `run_id`, `last_exception`, `_retry_counts`, `_non_retryable_failures`, `cascade_role`, `cascade_transcript` plus the four cascade-internal keys.
-**Recommendation:** Sketch the minimum schema in the test description, or reference `tests/graph/test_tiered_node.py`'s `_build_config` shape as the template.
-**Push to spec:** yes — append: *"In test #5 (`test_cascade_returns_compiled_state_graph_composable_in_outer`), name the minimum outer-graph state schema fields the Builder needs: `run_id`, `last_exception`, `_retry_counts`, `_non_retryable_failures`, `cascade_role`, `cascade_transcript`, plus the four cascade-internal keys (`<name>_primary_output`, `<name>_primary_parsed`, `<name>_auditor_output`, `<name>_audit_verdict`). Or reference `tests/graph/test_tiered_node.py:_build_config` shape as the template."*
+## Cross-cutting context (T03)
 
-#### L4 (carried from round 2) — `_default_primary_original` helper named in §Internal node block but never defined
-
-**Task:** `task_02_audit_cascade_node.md`
-**Location:** spec lines 263 + 268 (verdict-node block references `_default_primary_original(state, primary_prompt_fn)` as the fallback when `cascade_context_fn` is None).
-**Issue:** The §Internal node block correctly added by the round-1 M5 fix references a helper `_default_primary_original` whose body shape is described in prose ("re-calls `primary_prompt_fn(state)` and joins the (system, messages) tuple into a single rendered string — same shape as the primary's first invocation prompt") but with no signature, no body sketch, and no explicit return-shape pin. The exact join shape (delimiter between system and messages, JSON-encoding vs. plain concatenation, treatment of role-tagged message dicts) is left to Builder discretion. Test #2's byte-equal assertion against `_render_audit_feedback(...)` will lock the cascade's first revision_hint shape, but the Builder will need to know what `primary_original` rendered to in order to construct the expected literal.
-**Recommendation:** Add a one-paragraph sketch of `_default_primary_original`'s body shape. Suggested shape: `system, messages = primary_prompt_fn(state); return (system or "") + "\n\n" + "\n".join(m.get("content", "") for m in messages)`. Or pin a less-opinionated shape (e.g. `repr((system, messages))`) and let the test #2 byte-equal assertion drive whatever shape the Builder picks. Either way, the spec should not leave the join shape unwritten.
-**Push to spec:** yes — append: *"In §Internal node block, sketch `_default_primary_original(state, primary_prompt_fn)`'s body. Suggested shape: `system, messages = primary_prompt_fn(state); return (system or '') + '\n\n' + '\n'.join(m.get('content', '') for m in messages)`. Pin whichever shape — test #2's byte-equal assertion against `_render_audit_feedback(...)` will lock the cascade's first revision_hint shape, and the Builder will need to know what `primary_original` rendered to in order to construct the expected literal."*
-
-## What's structurally sound
-
-Round-3 hostile re-read confirms the round-1 + round-2 fixes plus all prior structural verifications hold up. Specifically re-verified this round:
-
-- **§Counter-sharing contract block is internally consistent and codebase-accurate.** Worked example traced step-by-step against `validator_node.py:135-142`, `error_handler.py:128-130,170-178`, `retrying_edge.py:103,112,117-122`. The off-by-one between in-validator escalation (`prior_failures >= max_attempts - 1`) and retrying_edge's bucket-budget check (`retry_counts >= max_semantic_attempts`) is correctly handled — they fire on different cycles for different paths but converge on the same human_gate exit either way.
-- **Pure-audit-failure-only test #3 budget arithmetic verified.** With `max_semantic_attempts=2`, the cascade reaches human_gate after exactly 2 primary attempts via the retrying_edge's `on_semantic` budget check (the in-validator escalation never fires since the validator never sees a shape-invalid output in this scenario).
-- **Pure-shape-failure-only test #4 budget arithmetic verified.** Validator's in-validator escalation fires on the second consecutive shape-failure cycle (assuming `max_attempts=2`), routing to NonRetryable → retrying_edge `on_terminal` → human_gate. Auditor adapter call count is 0 throughout. The cross-reference at line 233 correctly anchors this scenario.
-- **Layer rule honoured (re-verified).** `audit_cascade.py` imports stay within `graph/` + `primitives/`. Spec lines 100–110 list the imports; zero workflow / surface imports. The new 5th import-linter contract at lines 303–312 pins this against drift.
-- **KDR-003 honoured.** No `anthropic` SDK import anywhere in the spec; no `ANTHROPIC_API_KEY` read; tree-wide grep at `tests/workflows/test_slice_refactor_e2e.py:test_kdr_003_no_anthropic_in_production_tree` covers the new module automatically.
-- **KDR-004 honoured.** Validator pairing for the primary half of the cascade (line 213). Auditor half is also a TieredNode that produces structured output the verdict node parses against the AuditVerdict schema — pseudo-validator coverage via the verdict node's parse step.
-- **KDR-006 honoured.** `AuditFailure` as `RetryableSemantic` subclass; no `classify()` edit needed. Three-bucket taxonomy preserved.
-- **KDR-008 honoured.** No MCP tool schema change at T02 (the `run_audit_cascade` MCP tool lands at T05). No public-contract version bump implied.
-- **KDR-009 honoured.** `cascade_transcript` is a state channel surviving via LangGraph's checkpointer; no new persistence table.
-- **KDR-011 honoured.** Re-prompt template renders `failure_reasons` + `suggested_approach` into `revision_hint`; pinned by `test_audit_feedback_template_full_shape` test #1.
-- **KDR-013 not implicated** — no externally-loaded user code in T02.
-- **SEMVER stance.** T02 is purely additive: new exception class (`AuditFailure`), new module (`graph/audit_cascade.py`), new factory (`audit_cascade_node`), new pydantic model (`AuditVerdict`), one new import-linter contract. Zero backward-incompatible change to existing public surface. Patch-bump-compatible.
-- **Status-surface AC complete.** Spec line 368 enumerates all four required surfaces (per-task spec Status, README task-order row 02, README §Exit-criteria bullets 2/3/4 + 11 + 12; no `tasks/README.md` for M12). Matches CLAUDE.md status-surface discipline.
-- **Smoke test names a wire-level path** (line 367): `test_cascade_pass_through` invokes the compiled cascade end-to-end through the same `tiered_node` + `validator_node` adapters production code uses; only the LLM dispatch is stubbed. CLAUDE.md non-inferential rule satisfied.
-- **Test #5 reference verified.** `_FakeLiteLLMAdapter` exists at `tests/graph/test_tiered_node.py:104`; `_FakeClaudeCodeAdapter` exists at line 172 (verified via grep). The monkey-patch pattern still applies.
-- **`nice_to_have.md` slot range checked.** Highest-numbered section is **§23** (verified via grep). T02 surfaces no new deferred items beyond what the milestone README and T01 issue file already track. No slot-drift risk this round.
-- **T01 issue file ISS-03 closure.** Re-read T01 issue file line 134 — ISS-03 was closed at T01 with "No spec edit required" / "Self-resolves at T02 cycle 1." T02 carry-over need not include it.
-
-## Cross-cutting context
-
-- **Project-memory state.** Per `MEMORY.md` and `project_m13_shipped_cs300_next.md`, ai-workflows is in CS300 hold-mode for M10 / M15 / M17. M12 is not on hold — proactive spec hardening is happening now. T02 will be ready for `/clean-implement` (or `/auto-implement` since `AIW_AUTONOMY_SANDBOX=1` per the Docker container) when the M12 go-ahead fires.
-- **0.3.1 is live; 0.3.0 yanked.** T02 is graph-layer additive (one new module, one new exception) — no SEMVER break, but `audit_cascade_node` becomes importable via `ai_workflows.graph` at next minor bump.
-- **Round-2 fix was the last MEDIUM-severity issue.** All HIGHs cleared at round 1; the single round-2 MEDIUM is verified clean at round 3. The remaining four LOWs are all push-to-carry-over class (cosmetic / phrasing / sketchable-by-Builder); none block implementation.
-- **Round-3 verdict triggers Phase 3 (carry-over push + exit).** The orchestrator should now (a) write the four LOWs above into T02's `## Carry-over from task analysis` section as discrete bullets (each with the `Push to spec` text already prepared above), and (b) exit the loop with verdict LOW-ONLY. T02 spec is hardened and ready for `/auto-implement` when M12 goes live.
-- **ADR-0004 stale-framing list still has two items** (auditor tier landing site + import-linter contract sentence) — both deferred to M12 T07 docs sweep. Round-1 M3 fix correctly captured this in the spec's propagation-status section.
+- **Project memory consistent.** No on-hold flag for M12; T01 + T02 shipped 2026-04-27 (`a7f3e8f`, `fc8ef19`); T03 + T08 are the next live tasks. CS300 pivot status per `project_m13_shipped_cs300_next.md` does not block T03.
+- **Round-5 → round-6 trajectory.** Round 5's verdict was OPEN with one MEDIUM. Round-5 fix applied mechanically; two LOWs pushed to carry-over. Round 6 verifies the close-out. The /clean-tasks loop on T03 is complete.
+- **T08 dependency.** T03 cannot enter /clean-implement until T08 closes per the spec's Dependencies block (line 326). Once T08 lands, the orchestrator's commit-ceremony for T08 also substitutes the T08 commit hash into T03's Dependencies block (per TA-T08-LOW-02), at which point T03 is greenlit for /clean-implement.
 
 ## Verdict
 
-`Round 3 — LOW-ONLY (4 LOW)`. The round-2 MEDIUM (M1 — shared retry counter contract) is verified clean against the live codebase. The §Counter-sharing block is internally consistent and the worked-example arithmetic traces correctly through `validator_node.py:135-142` + `error_handler.py:170-178` + `retrying_edge.py:103,112,117-122`. Test #3 is correctly pinned to pure-audit-failure-only with cross-reference to §Counter-sharing. Four LOWs remain (L1 + L2 cosmetic/phrasing carried unchanged from round 1; L3 test #5 schema sketch carried unchanged; L4 `_default_primary_original` helper sketch carried unchanged from round 2's L5). One round-2 LOW (round-2 L3 / M12-T01-ISS-03 propagation) was re-graded to RESOLVED on re-read of the T01 issue file (which explicitly closed ISS-03 at T01 with "No spec edit required"). Phase 3 should push the four remaining LOWs to T02's `## Carry-over from task analysis` section and exit the loop.
+**LOW-ONLY — 0 HIGH, 0 MEDIUM, 8 LOW (all in carry-over).** Round-5 fixes verified landed cleanly with no new findings introduced. Orchestrator may exit the /clean-tasks loop on T03 and proceed to T08 cleanup → T08 ship → T03 ship sequence.
+
+---
+
+# T08 (round 2 verification)
+
+**Round:** 2 of 5
+**Verified on:** 2026-04-27
+**Specs analyzed:** `task_08_audit_cascade_skip_terminal_gate.md`
+**Analyst:** task-analyzer agent
+
+## Summary
+
+| Severity | Count |
+| --- | --- |
+| 🔴 HIGH | 0 |
+| 🟡 MEDIUM | 0 |
+| 🟢 LOW | 0 (both LOWs in carry-over) |
+| Total | 0 |
+
+**Stop verdict:** LOW-ONLY (2 LOWs already pushed to spec carry-over; orchestrator may exit the loop).
+
+Round 1's HIGH (H1, missing destination-list bullet), MEDIUM (M1, gate-line citation), and MEDIUM (M2, test-count claim) all landed mechanically. The two round-1 LOWs (TA-T08-LOW-01 positional test number; TA-T08-LOW-02 T03 dependency-block hash substitution) are pushed to T08's `## Carry-over from task analysis` section. No new findings introduced by round-1 fix application. T08 is implementable as written.
+
+## Round-1 fix verification
+
+### H1 — `add_conditional_edges` destination-list bullet — VERIFIED LANDED
+
+**Live spec lines 56-62:** the new third bullet (line 60) reads
+
+> `audit_cascade.py:433-437` + `:443-447` (the two `add_conditional_edges` destination-list literals) — the `f"{name}_human_gate"` member must be omitted from the destination list when `skip_terminal_gate=True` (LangGraph compile-time validates that every destination-list member is a registered node; an unregistered destination raises at compile). The after-validator list becomes `[f"{name}_primary", f"{name}_auditor", END]` (END added because `_decide_after_validator` now returns `END` on the `NonRetryable` path under the new mode); the after-verdict list becomes `[f"{name}_primary", END]`.
+
+Cross-checks against live `audit_cascade.py`:
+- L433-437 — after-validator `add_conditional_edges` destination list: live `[f"{name}_primary", f"{name}_auditor", f"{name}_human_gate"]` at L436. Spec correctly says: under skip-true mode, omit `f"{name}_human_gate"` and add `END`. The "END added" rationale (because `_decide_after_validator` now returns END on the NonRetryable path) matches the routing-function changes spec'd at lines 67-72.
+- L443-447 — after-verdict `add_conditional_edges` destination list: live `[f"{name}_primary", f"{name}_human_gate", END]` at L446. Spec correctly says: under skip-true mode, omit `f"{name}_human_gate"`. END stays (it's already there in the default destination list at L446 as the success path). Result: `[f"{name}_primary", END]` — matches.
+
+The Builder now has the complete spec for the conditional-edge destination updates; the previously-missed compile-time failure mode is closed. The recommended sub-assertion in test #2 is implicitly enforced by LangGraph's compile-time validation (a graph with an unregistered destination won't compile, so the existing `f"{name}_human_gate" not in compiled.nodes` assertion in test #2 cannot pass without the destination-list edits being correct).
+
+### M1 — Gate-line citation (424 + 448, not 447-448) — VERIFIED LANDED
+
+**Live spec line 59:** now reads
+
+> `audit_cascade.py:424` (gate `add_node` call) + `audit_cascade.py:448` (gate edge to END) — both wrap in `if not skip_terminal_gate:` so the gate node is neither registered nor edged when the new mode is active.
+
+Cross-checks against live `audit_cascade.py`:
+- L424: `g.add_node(f"{name}_human_gate", gate)` — gate node addition. Confirmed.
+- L448: `g.add_edge(f"{name}_human_gate", END)` — gate edge to END. Confirmed.
+
+Builder will land directly on the right edits without a search-and-find cycle.
+
+### M2 — Test count claim (separate-file distinction) — VERIFIED LANDED
+
+**Live spec line 97:** now reads
+
+> The test count for `tests/graph/test_audit_cascade.py` grows from 7 → 11 cascade tests in this file (+4 from T08). The 5 audit-feedback-template tests at `tests/primitives/test_audit_feedback_template.py` are unaffected — that's a separate file.
+
+Cross-checks against the live test files:
+- `tests/graph/test_audit_cascade.py` carries 7 cascade tests (`test_cascade_pass_through`, `test_cascade_re_fires_with_audit_feedback_in_revision_hint`, `test_cascade_exhausts_retries_routes_to_strict_human_gate`, `test_cascade_validator_failure_routes_back_to_primary_not_auditor`, `test_cascade_pure_shape_failure_never_invokes_auditor`, `test_cascade_returns_compiled_state_graph_composable_in_outer`, `test_cascade_role_tags_stamped_on_state`). T08 adds 4 → 11. Matches.
+- `tests/primitives/test_audit_feedback_template.py` carries 5 template tests (`test_audit_feedback_template_full_shape`, `test_audit_feedback_template_empty_reasons`, `test_audit_feedback_template_no_suggested_approach`, `test_audit_failure_revision_hint_byte_equal_to_expected_template`, `test_audit_failure_is_retryable_semantic`). The "separate file" distinction is correct.
+
+A reader landing on `tests/graph/test_audit_cascade.py` after T08 ships will see 11 cascade tests, matching the spec's claim.
+
+### TA-T08-LOW-01 + TA-T08-LOW-02 — VERIFIED PUSHED TO CARRY-OVER
+
+**Live spec line 158-166:** carry-over section now contains
+
+> - [ ] **TA-T08-LOW-01 — Test #2 cross-reference uses positional number that drifts** (severity: LOW, source: task_analysis.md round 1 L1)
+>       Test #4 in T08's spec mirrors an existing `tests/graph/test_audit_cascade.py` test by name (`test_cascade_pure_shape_failure_never_invokes_auditor`) — already corrected during round-1 fix application; the original positional citation ("test 7") drifted from the live file's order (test #5 by position). The test name is canonical; positional references should be avoided.
+>       **Recommendation:** Builder should avoid positional test references in any new docstrings or comments referencing this test; use the test name only.
+>
+> - [ ] **TA-T08-LOW-02 — T03 dependency-block hash substitution at T08 close** (severity: LOW, source: task_analysis.md round 1 L2)
+>       When T08 closes (commit lands on `design_branch`), the autopilot orchestrator's commit-ceremony for T08 must edit `task_03_workflow_wiring.md` `## Dependencies` block to replace the placeholder text *"Spec at `task_08_audit_cascade_skip_terminal_gate.md` (drafted 2026-04-27 after round-4 H1 arbitration)."* with `Met: T08 shipped at <commit-hash>.` matching the T01 / T02 conventions on the same lines. Without this, T03's audit cycle would read a stale "spec drafted" annotation instead of "Met: T08 shipped at <hash>" and may flag the dependency as unsatisfied.
+>       **Recommendation:** Add to T08's commit-ceremony close-out: after `git commit` lands the T08 implementation, the orchestrator runs an inline `Edit` on `task_03_workflow_wiring.md` to substitute the T08 hash, and includes that edit in the same commit (NOT a separate commit — keeps the T03/T08 bidirectional reference atomic).
+
+Both LOWs preserved with full Recommendation text, both source-cited to round-1 analysis.
+
+## What's structurally sound (round-2 final read)
+
+Verified-and-correct on the post-round-1-fix T08 spec:
+
+- **All round-1 fix applications are coherent.** Sub-graph wiring change section (lines 56-77) now reads as a complete three-bullet specification: gate node addition (424+448 conditional-wrap), destination-list updates (433-437 + 443-447 conditional-omit + END-add for after-validator), routing-function changes (END returns under skip-true). A Builder implementing the spec literally will produce a graph that compiles under both modes.
+- **2 carry-over LOWs (TA-T08-LOW-01, TA-T08-LOW-02) all present as `[ ]` checkboxes.** Verified by `grep -c '\*\*TA-T08-LOW-'` returning 2 matches in `task_08_audit_cascade_skip_terminal_gate.md`.
+- **No NEW findings introduced by round-1 fixes.** Walking the spec end-to-end after the H1 bullet insertion + the two MEDIUM citation/count corrections + the two LOW carry-over additions, no new structural claim, line citation, KDR drift, layer-rule break, or status-surface drift surfaced.
+- **The "Why this task exists" historical paragraph (line 8) still cites `audit_cascade.py:292-296 + :447-448`.** This is in the historical narration of round-4 H1 (`The cascade primitive (T02 shipped at fc8ef19) hard-wires its terminal human_gate at audit_cascade.py:292-296 + :447-448`). Live verification: `audit_cascade.py:292-296` is the `human_gate(...)` constructor call (correct); `audit_cascade.py:448` is the gate edge to END (the `447-448` range straddles the closing `)` of the unrelated `add_conditional_edges` at L443-447 plus the gate edge at L448, which is a literal description of "the gate-edge area" and is not used as a Builder targeting citation). The prescriptive spec sections all carry the corrected citations from the round-1 fixes; this historical paragraph is narrative-only and does not need a tightening pass. Not a finding.
+- **KDR re-grade — all 9 KDRs still preserved.** Same as round 1; round-1 fixes were all spec-text edits with no semantic shift. KDR-006 (RetryingEdge taxonomy) and KDR-011 (cascade primitive contract) explicitly preserved per AC + CHANGELOG.
+- **Layer rule preserved.** All edits land in `ai_workflows/graph/audit_cascade.py` (graph layer); no upward imports.
+- **Status surfaces consistent.** AC line 130 enumerates the two surfaces (per-task spec status, README task table row 08); no exit-criteria bullet for T08 since it's a sequencing exception per the spec's framing. Verified README row 08 carries `📝 Planned (T03 prerequisite — drafted 2026-04-27 after T03 round-4 H1 arbitration; ships before T03)`.
+- **Dependencies block honoured.** Lists T02 only with `Met: T02 shipped at fc8ef19`. Matches T03's Dependencies-block citation convention.
+
+## Cross-cutting context (T08)
+
+- **Project memory consistent.** No on-hold flag for M12; T08 is freshly drafted as a T03 prerequisite. CS300 pivot status doesn't block T08.
+- **Round-1 → round-2 trajectory.** Round 1's verdict was OPEN with 1 HIGH + 2 MEDIUM + 2 LOW. All round-1 fixes applied mechanically; both LOWs pushed to carry-over. Round 2 verifies the close-out. The /clean-tasks loop on T08 is complete.
+- **T08 → T03 sequence.** With both T08 (this round) and T03 (round 6) at LOW-ONLY, the orchestrator's pipeline is: exit /clean-tasks for both → /auto-implement T08 → on T08 commit close, orchestrator substitutes T08 hash into T03's Dependencies block (per TA-T08-LOW-02) → /auto-implement T03. Both should land within autonomy budget.
+
+## Verdict
+
+**LOW-ONLY — 0 HIGH, 0 MEDIUM, 2 LOW (all in carry-over).** Round-1 fixes verified landed cleanly with no new findings introduced. Orchestrator may exit the /clean-tasks loop on T08 and proceed to /auto-implement T08.
+
+---
+
+# Combined verdict
+
+- **T03 round 6:** LOW-ONLY (8 LOWs in carry-over, no HIGH or MEDIUM). /clean-tasks loop closes.
+- **T08 round 2:** LOW-ONLY (2 LOWs in carry-over, no HIGH or MEDIUM). /clean-tasks loop closes.
+
+Both specs are implementable as written. Sequencing per T03's `## Dependencies`: T08 ships first (via /auto-implement), then T03 ships after T08's commit-ceremony substitutes the T08 hash into T03's Dependencies block.
