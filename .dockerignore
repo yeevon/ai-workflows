@@ -1,0 +1,50 @@
+# Image is bind-mount based — this file mostly hardens against future
+# COPY directives leaking host artefacts into the build context.
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build artefacts
+dist/
+build/
+
+# Runtime artefacts that must never end up in an image
+runs/
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Secrets — never bake into an image. The runtime mount in
+# docker-compose.yml exposes the host .env as a file mount instead.
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Git — ok to copy in if a target ever needs git history, but the
+# default is to keep images small.
+.git/
+
+# Node / npm — neither used by ai-workflows itself; only relevant if
+# Phase-2 layers in the npm-distributed `claude` CLI.
+node_modules/
+
+# Docker output
+*.log

@@ -1,0 +1,4 @@
+# Runtime artefacts (storage.sqlite3, checkpoint.sqlite3, captured
+# evals) land here. .gitignore covers everything in this directory
+# (line 30: runs/); this .gitkeep just ensures the path exists for
+# the Docker bind-mount target.

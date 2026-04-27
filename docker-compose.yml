@@ -1,0 +1,81 @@
+# ai-workflows sandbox compose file
+# ---------------------------------
+# Single service (`aiw`) wraps the sandbox image. Live source is
+# bind-mounted at /home/papa-jochy/prj/ai-workflows (matching the
+# host path so Claude Code auto-memory hashes line up — point 8 of
+# the autonomy decisions); venv + uv cache + Claude state live in
+# named volumes so they survive `docker compose run --rm` invocations.
+#
+# Usage (preferred — via the project Makefile):
+#   make build / make sync / make test / make lint / make smoke / make shell
+#
+# Usage (raw):
+#   docker compose build
+#   docker compose run --rm aiw uv sync --frozen
+#   docker compose run --rm aiw uv run pytest -q
+#   docker compose run --rm aiw bash
+#
+# To re-auth Claude inside the container (point 5 — user auths fresh,
+# host credentials NOT shared):
+#   make shell
+#   $ claude /login
+
+services:
+  aiw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: "3.13"
+        UV_VERSION: "0.10"
+        NODE_MAJOR: "22"
+    image: ai-workflows-sandbox:latest
+    container_name: ai-workflows-sandbox
+    working_dir: /home/papa-jochy/prj/ai-workflows
+    volumes:
+      # Live source — bind-mounted at the host path so cwd-based
+      # hashes (Claude Code auto-memory, pytest cache, etc.) match
+      # what the host conversation produced.
+      - .:/home/papa-jochy/prj/ai-workflows
+      # Persistent venv — overlay on the bind-mount so the host venv
+      # (if any) does not collide with the container's Python ABI.
+      - aiw_venv:/home/papa-jochy/prj/ai-workflows/.venv
+      # Persistent uv download cache — first sync is slow, subsequent
+      # are fast.
+      - aiw_uv_cache:/root/.cache/uv
+      # Persistent Claude CLI state (auth tokens, plugins, settings,
+      # plans, history). Container-isolated by default — host
+      # credentials are NOT shared (point 5: user re-auths inside).
+      - aiw_claude_state:/root/.claude
+      # Bind-mount the auto-memory subdirectory only. The deeper-path
+      # bind overrides the volume mount above for this exact subtree,
+      # so memory persists between host and container while auth /
+      # settings stay container-local.
+      - ${HOME}/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory:/root/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory
+    env_file:
+      # Optional. .env is gitignored at repo root; runtime keys
+      # (GEMINI_API_KEY, PYPI_TOKEN) live there. Compose tolerates a
+      # missing file as long as nothing else demands the variables.
+      - path: ./.env
+        required: false
+    environment:
+      # Point ai-workflows runtime at the host Ollama daemon (point 7
+      # of the autonomy decisions — host Ollama, not in-container).
+      # The extra_hosts entry below resolves host.docker.internal on
+      # both Linux native + Docker Desktop.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # Tell the runtime where to drop SQLite state by default. The
+      # bind-mounted repo is the natural place — these files end up
+      # gitignored under `runs/` and can be inspected on the host.
+      AIW_STORAGE_DB: /home/papa-jochy/prj/ai-workflows/runs/storage.sqlite3
+      AIW_CHECKPOINT_DB: /home/papa-jochy/prj/ai-workflows/runs/checkpoint.sqlite3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Interactive flags so `make shell` lands in a proper TTY.
+    stdin_open: true
+    tty: true
+
+volumes:
+  aiw_venv:
+  aiw_uv_cache:
+  aiw_claude_state:

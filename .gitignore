@@ -27,7 +27,8 @@ dist/
 htmlcov/
 
 # ai-workflows runtime (local only, never committed)
-runs/
+runs/*
+!runs/.gitkeep
 *.db
 *.db-wal
 *.db-shm
