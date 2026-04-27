@@ -38,13 +38,18 @@ LIVE_CLAUDE_JSON="/home/aiw/.claude.json"
 # First boot of a fresh volume: no persisted copy yet. If the live
 # file exists as a real file (the CLI wrote it during this session
 # or it was carried in by some other path), promote it. Otherwise
-# create an empty placeholder so the symlink target is valid; the
-# CLI will populate it on next write.
+# seed an empty-but-parseable JSON object — Claude Code parses
+# .claude.json as JSON at startup and a zero-byte file is
+# "Unexpected EOF" not "no file", which is fatal where empty
+# JSON is fine. The CLI populates fields on next write.
 if [[ -f "$LIVE_CLAUDE_JSON" && ! -L "$LIVE_CLAUDE_JSON" ]]; then
     mv "$LIVE_CLAUDE_JSON" "$PERSISTED_CLAUDE_JSON"
 fi
-if [[ ! -e "$PERSISTED_CLAUDE_JSON" ]]; then
-    : > "$PERSISTED_CLAUDE_JSON"
+if [[ ! -s "$PERSISTED_CLAUDE_JSON" ]]; then
+    # `! -s` covers both "missing" and "exists-but-zero-bytes" so
+    # an empty placeholder from the prior buggy entrypoint version
+    # gets reseeded too.
+    printf '{}\n' > "$PERSISTED_CLAUDE_JSON"
 fi
 
 # Always (re)create the symlink — `ln -snf` is idempotent.
