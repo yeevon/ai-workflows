@@ -3,7 +3,7 @@
 Loaded into every Claude Code conversation. Defines what's load-bearing across the project. Step-by-step procedures live in `.claude/agents/` (subagents) and `.claude/commands/` (slash commands):
 
 - `/clean-tasks <milestone>` — generate per-task spec files for a milestone (if missing) and loop the `task-analyzer` subagent + spec-fix application until the analysis returns no HIGH or MEDIUM findings. Pushes any LOWs to each spec's `## Carry-over from task analysis` section. Cap of 5 rounds.
-- `/clean-implement <task>` — full Builder → Auditor loop (up to 10 cycles) + security gate. Spawns subagents via `Task`.
+- `/clean-implement <task>` — full Builder → Auditor loop (up to 10 cycles) + security gate. Spawns subagents via `Task`. **Auditor-agreement bypass on stop condition 2:** when the auditor (or security reviewer) surfaces a single clear recommendation and the loop controller concurs against the spec + KDRs + locked decisions, the controller stamps it as `Locked decision (loop-controller + Auditor concur, YYYY-MM-DD): <one-liner>` in the issue file and feeds it to the next Builder cycle as a carry-over AC instead of halting. Halt only when the auditor surfaces two-or-more options without a recommendation, the recommendation conflicts with a KDR / prior user decision / the spec, or it expands scope or defers work to a non-existent future task. See `.claude/commands/clean-implement.md` for the full mechanic.
 - `/implement <task>` — single Builder pass; spawns the `builder` subagent.
 - `/audit <task>` — single Auditor pass; spawns the `auditor` subagent.
 
