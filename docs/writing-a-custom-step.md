@@ -9,10 +9,10 @@ This guide covers **Tier 3** of the four-tier extension model:
 
 | Tier | When to use it | Guide |
 |---|---|---|
-| Tier 1 — compose | Combine built-in steps with default settings | [`writing-a-workflow.md`](writing-a-workflow.md) |
-| Tier 2 — parameterise | Tune a built-in step with `prompt_fn`, `retry`, `on_reject` | [`writing-a-workflow.md`](writing-a-workflow.md) |
-| **Tier 3 — custom step** | **No built-in covers your need; write a `Step` subclass** | **This guide** |
-| Tier 4 — escape hatch | Topology the step list cannot express at all | [`writing-a-graph-primitive.md`](writing-a-graph-primitive.md) |
+| 1 — Compose | Combine built-in steps with default settings | [`writing-a-workflow.md`](writing-a-workflow.md) |
+| 2 — Parameterise | Tune a built-in step with `prompt_fn`, `retry`, `on_reject` | [`writing-a-workflow.md`](writing-a-workflow.md) |
+| **3 — Author a custom step type** | **No built-in covers your need; write a `Step` subclass** | **This guide** |
+| 4 — Escape to LangGraph directly | Topology the step list cannot express at all | [`writing-a-graph-primitive.md`](writing-a-graph-primitive.md) |
 
 Start from [`writing-a-workflow.md`](writing-a-workflow.md) if you have not read it — the Tier 1
 happy path is the right entry point for most workflows. Come back here when you hit a gap.
@@ -321,6 +321,6 @@ performs file I/O, the security of those operations is yours to own.
 - **Tier 4 (escape to LangGraph directly)** — [`writing-a-graph-primitive.md`](writing-a-graph-primitive.md).
   When even the `compile()` override in Tier 3 cannot express your topology — typically
   non-standard control-flow patterns that the linear step list cannot describe.
-- **Full four-tier extension model** — [`design_docs/architecture.md` §Extension model](../design_docs/architecture.md#extension-model----extensibility-is-a-first-class-capability) (builder-only, on design branch).
+- **Full four-tier extension model** — [`design_docs/architecture.md` §Extension model](../design_docs/architecture.md#extension-model-extensibility-is-a-first-class-capability) (builder-only, on design branch).
   The architecture-of-record for the extension framing: tier definitions, out-of-scope guidance
   for graph-layer primitives, and the graduation path from custom step to built-in.

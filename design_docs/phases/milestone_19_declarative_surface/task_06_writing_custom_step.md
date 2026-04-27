@@ -1,6 +1,6 @@
 # Task 06 — New `docs/writing-a-custom-step.md` (Tier 3 dedicated guide)
 
-**Status:** ✅ Implemented (2026-04-26).
+**Status:** ✅ Complete (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Extension model + §Documentation surface (Tier 3 has its own dedicated guide; load-bearing for downstream consumers extending the framework)](../../adr/0008_declarative_authoring_surface.md) · [KDR-013 (user code is user-owned — applies to custom step types)](../../architecture.md) · [Task 01](task_01_workflow_spec.md) (the `Step` base class this doc teaches authors to subclass; default `compile()` wraps `execute()` per locked Q4) · [Task 02](task_02_compiler.md) (the compiler the custom step's `compile()` method returns to when overridden) · [Task 05](task_05_writing_workflow_rewrite.md) (the Tier 1+2 doc this guide forward-anchors from).
 
 ## What to Build

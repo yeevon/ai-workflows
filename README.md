@@ -22,6 +22,10 @@ A LangGraph-native workflow framework for solo developers. Orchestrates multi-st
 | M12 — Tiered audit cascade | Planned |
 | **M13 — v0.1.0 release + PyPI packaging** | Complete (2026-04-22) |
 | **M14 — MCP HTTP transport** | Complete (2026-04-22) |
+| M15 — Tier overlay + fallback chains | Planned |
+| **M16 — External workflows + primitives load path** | Complete (2026-04-24) |
+| M17 — `scaffold_workflow` meta-workflow | Planned |
+| **M19 — Declarative authoring surface** | Complete (2026-04-26) |
 
 ## What it is
 
@@ -73,16 +77,27 @@ aiw list-runs
 
 The planner workflow composes two LLM tiers (Qwen explorer via Ollama + Claude Code Opus synth). If you only want the Gemini path for a smoke, pass `--tier-override planner-synth=planner-explorer` or omit the Ollama + Claude Code prerequisites and stub the `gemini_flash` tier.
 
+### Setup
+
+Both `aiw` and `aiw-mcp` auto-load a `.env` from the current working directory at startup (shell-exported values win over `.env`).
+
+**Key env vars:**
+- `GEMINI_API_KEY` — required for any workflow using a Gemini tier (most defaults).
+- `OLLAMA_BASE_URL` — default `http://localhost:11434`; override if your Ollama daemon listens elsewhere.
+- `AIW_STORAGE_DB` / `AIW_CHECKPOINT_DB` — path overrides for the run registry and checkpoint databases (defaults: `~/.ai-workflows/storage.sqlite3` / `~/.ai-workflows/checkpoint.sqlite3`).
+
+**Claude Code tier:** some workflows route to the `claude` CLI via OAuth. Install and authenticate it separately per [Anthropic's setup docs](https://docs.claude.com/en/docs/claude-code/setup). `aiw` never reads `ANTHROPIC_API_KEY` and never imports the `anthropic` SDK — Claude access is OAuth-only through the CLI subprocess.
+
 ## Extending ai-workflows
 
 ai-workflows is a declarative orchestration layer; extension is a first-class capability. Authors engage at four progressively-deeper tiers, each with a dedicated guide:
 
 | Tier | When | Guide |
 |---|---|---|
-| **1. Compose** | You're combining built-in step types (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`) into a workflow. The happy path. | [docs/writing-a-workflow.md](docs/writing-a-workflow.md) |
-| **2. Parameterise** | You're configuring built-in steps (retry policy, response format, gate behaviour, tier choice). | [docs/writing-a-workflow.md](docs/writing-a-workflow.md) (same doc) |
-| **3. Author a custom step type** | No built-in covers your need. Subclass `Step`; the framework wires your custom step into the graph like a built-in. | [docs/writing-a-custom-step.md](docs/writing-a-custom-step.md) |
-| **4. Escape to LangGraph directly** | Your topology is genuinely non-standard (dynamic edge conditions, novel control flow). Use the legacy `register(name, build_fn)` API. | [docs/writing-a-graph-primitive.md](docs/writing-a-graph-primitive.md) |
+| 1 — Compose | You're combining built-in step types (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`) into a workflow. The happy path. | [docs/writing-a-workflow.md](docs/writing-a-workflow.md) |
+| 2 — Parameterise | You're configuring built-in steps (retry policy, response format, gate behaviour, tier choice). | [docs/writing-a-workflow.md](docs/writing-a-workflow.md) (same doc) |
+| 3 — Author a custom step type | No built-in covers your need. Subclass `Step`; the framework wires your custom step into the graph like a built-in. | [docs/writing-a-custom-step.md](docs/writing-a-custom-step.md) |
+| 4 — Escape to LangGraph directly | Your topology is genuinely non-standard (dynamic edge conditions, novel control flow). Use the legacy `register(name, build_fn)` API. | [docs/writing-a-graph-primitive.md](docs/writing-a-graph-primitive.md) |
 
 The framework's promise: descending a tier never forces you to reverse-engineer framework source. If you're at the wrong tier, you'll find pointers to the right one in any guide.
 
@@ -98,6 +113,11 @@ The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport 
 
 Registering your own workflow modules from a downstream package? `AIW_EXTRA_WORKFLOW_MODULES=pkg.workflows.your_workflow` (or `--workflow-module pkg.workflows.your_workflow`, repeatable) imports them at startup. See [docs/writing-a-workflow.md §External workflows from a downstream consumer](docs/writing-a-workflow.md#external-workflows-from-a-downstream-consumer).
 
+### Security notes
+
+- **Loopback default** — `aiw-mcp --transport http` binds to `127.0.0.1`; unreachable from other machines. `--host 0.0.0.0` exposes the server to every process on the host and to the LAN. `aiw-mcp` has no built-in auth; the bind address is the only access boundary. Only pass `--host 0.0.0.0` on a machine you own every process on, and put a reverse proxy in front if you need TLS.
+- **CORS is opt-in, exact-match** — `--cors-origin <url>` adds one origin; without any flags the server emits no `Access-Control-Allow-Origin` header (same-origin only). Not required for stdio or loopback HTTP.
+
 ## Contributing / from source
 
 Clone the repo for development or to modify the framework itself:
@@ -106,7 +126,7 @@ Clone the repo for development or to modify the framework itself:
 git clone https://github.com/yeevon/ai-workflows.git
 cd ai-workflows
 uv sync              # install runtime + dev dependencies
-uv run aiw version   # prints 0.1.0
+uv run aiw version   # prints the current __version__ (0.3.0 at M19 close)
 ```
 
 For the full builder/auditor workflow — task specs, audit issue files, Builder / Auditor mode conventions — switch to the `design_branch`.

@@ -1,6 +1,6 @@
 # Task 02 — Spec → `StateGraph` compiler
 
-**Status:** 📝 Planned.
+**Status:** ✅ Complete (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Decision + §Step taxonomy](../../adr/0008_declarative_authoring_surface.md) · [Task 01](task_01_workflow_spec.md) (the data-model layer this task consumes) · [KDR-004 (validator pairing — by construction)](../../architecture.md) · [KDR-006 (three-bucket retry via `RetryingEdge`)](../../architecture.md) · [KDR-009 (LangGraph `SqliteSaver` checkpoints — preserved)](../../architecture.md) · [`ai_workflows/graph/tiered_node.py`](../../../ai_workflows/graph/tiered_node.py) (compiled `LLMStep` wraps this) · [`ai_workflows/graph/validator_node.py`](../../../ai_workflows/graph/validator_node.py) (paired with every `LLMStep`) · [`ai_workflows/graph/human_gate.py`](../../../ai_workflows/graph/human_gate.py) (compiled `GateStep` wraps this) · [`ai_workflows/graph/retrying_edge.py`](../../../ai_workflows/graph/retrying_edge.py) (compiled retry policy) · [`ai_workflows/workflows/_dispatch.py:540-602`](../../../ai_workflows/workflows/_dispatch.py#L540-L602) (the compile site that hands the synthesized `StateGraph` to LangGraph).
 
 ## What to Build

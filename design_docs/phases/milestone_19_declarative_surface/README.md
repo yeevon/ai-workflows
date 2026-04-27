@@ -1,6 +1,6 @@
 # Milestone 19 — Declarative Authoring Surface
 
-**Status:** 📝 Planned (drafted 2026-04-26 against [ADR-0008](../../adr/0008_declarative_authoring_surface.md); `/clean-tasks m19` will deepen each task spec and run the analyzer loop).
+**Status:** ✅ Complete (2026-04-26).
 **Grounding:** [ADR-0008 — Declarative authoring surface for external workflows](../../adr/0008_declarative_authoring_surface.md) (load-bearing identity decision; this milestone executes it) · [ADR-0007 — User-owned code contract](../../adr/0007_user_owned_code_contract.md) (composes — discovery surface preserved; only the *what* the consumer registers changes) · [architecture.md §3 + §4.3 + §9](../../architecture.md) · [`ai_workflows/workflows/_dispatch.py`](../../../ai_workflows/workflows/_dispatch.py) (the compile site the new compiler hands a `StateGraph` to; also the bug-fix site folded from M18) · [`ai_workflows/workflows/__init__.py`](../../../ai_workflows/workflows/__init__.py) (the registry surface the new entry point composes over) · [`docs/writing-a-workflow.md`](../../../docs/writing-a-workflow.md) (existing author guide; rewrites declarative-first under this milestone) · CS-300 pre-flight smoke 2026-04-25 (the trigger, recorded in ADR-0008 §Context) · in-conversation hostile re-read 2026-04-26 (12-finding contract-surface inventory — folded into ADR-0008's framing).
 
 ## Why this milestone exists
@@ -152,16 +152,16 @@ Both shapes are derivable from the M19-shipped doc set alone — no `_dispatch.p
 
 ## Task order (provisional — refined by `/clean-tasks`)
 
-| # | Task | Kind | Depends on |
-|---|---|---|---|
-| 01 | [`WorkflowSpec` + step-type taxonomy + custom-step extension hook + `register_workflow` entry point](task_01_workflow_spec.md) | code + test | — |
-| 02 | [Spec → `StateGraph` compiler — synthesises state class, edges, hooks; pairs validators by construction](task_02_compiler.md) | code + test | T01 |
-| 03 | [Result-shape correctness: artefact-field bug fix + `plan` → `artifact` rename with deprecation alias (folded from M18 T01)](task_03_result_shape.md) | code + test | — (independent of T01/T02) | ✅ Implemented (2026-04-26) |
-| 04 | [Ship `summarize` workflow as in-tree spec-API proof point + wire-level e2e verification](task_04_summarize_proof_point.md) | code + test | T01 + T02 + T03 | ✅ Implemented (2026-04-26) |
-| 05 | [Rewrite `docs/writing-a-workflow.md` declarative-first (Tier 1 + Tier 2)](task_05_writing_workflow_rewrite.md) | doc | T01 + T03 | ✅ Implemented (2026-04-26) |
-| 06 | [New `docs/writing-a-custom-step.md` (Tier 3 dedicated guide) + `compile_step_in_isolation` testing fixture](task_06_writing_custom_step.md) | doc + code (fixture) | T01 | ✅ Implemented (2026-04-26) |
-| 07 | [Four-tier framing across `architecture.md`, `README.md`, `writing-a-graph-primitive.md` + KDR table updates + Q5 deferral re-open trigger in `nice_to_have.md`](task_07_extension_model_propagation.md) | doc | T05 + T06 (so the cross-links land) | ✅ Implemented (2026-04-26) |
-| 08 | [Milestone close-out + 0.3.0 publish ceremony](task_08_milestone_closeout.md) | release | T01–T07 |
+| # | Task | Kind | Depends on | Status |
+|---|---|---|---|---|
+| 01 | [`WorkflowSpec` + step-type taxonomy + custom-step extension hook + `register_workflow` entry point](task_01_workflow_spec.md) | code + test | — | ✅ Complete (2026-04-26) |
+| 02 | [Spec → `StateGraph` compiler — synthesises state class, edges, hooks; pairs validators by construction](task_02_compiler.md) | code + test | T01 | ✅ Complete (2026-04-26) |
+| 03 | [Result-shape correctness: artefact-field bug fix + `plan` → `artifact` rename with deprecation alias (folded from M18 T01)](task_03_result_shape.md) | code + test | — (independent of T01/T02) | ✅ Complete (2026-04-26) |
+| 04 | [Ship `summarize` workflow as in-tree spec-API proof point + wire-level e2e verification](task_04_summarize_proof_point.md) | code + test | T01 + T02 + T03 | ✅ Complete (2026-04-26) |
+| 05 | [Rewrite `docs/writing-a-workflow.md` declarative-first (Tier 1 + Tier 2)](task_05_writing_workflow_rewrite.md) | doc | T01 + T03 | ✅ Complete (2026-04-26) |
+| 06 | [New `docs/writing-a-custom-step.md` (Tier 3 dedicated guide) + `compile_step_in_isolation` testing fixture](task_06_writing_custom_step.md) | doc + code (fixture) | T01 | ✅ Complete (2026-04-26) |
+| 07 | [Four-tier framing across `architecture.md`, `README.md`, `writing-a-graph-primitive.md` + KDR table updates + Q5 deferral re-open trigger in `nice_to_have.md`](task_07_extension_model_propagation.md) | doc | T05 + T06 (so the cross-links land) | ✅ Complete (2026-04-26) |
+| 08 | [Milestone close-out + 0.3.0 publish ceremony](task_08_milestone_closeout.md) | release | T01–T07 | ✅ Complete (2026-04-26) |
 
 **Eight tasks** (was nine; the slice_refactor port that would have been T05 is deferred per locked Q5 — see §Decisions item 4). Task 03 (the bug fix + rename) is independent of the spec-API work and can run in parallel with T01/T02. T04 (`summarize` workflow ship + `aiw run --input KEY=VALUE` extension per locked H1) is the in-tree proof point. T05–T07 are the documentation surface; T07 bundles the architecture + README + primitive-doc alignment + the Q5/H2 re-open trigger because the four-tier framing lands consistently across those surfaces at once (per locked Q2).
 
@@ -192,18 +192,56 @@ Both shapes are derivable from the M19-shipped doc set alone — no `_dispatch.p
 
 ## Propagation status
 
-Filled in at audit time. Anticipated forward-deferrals:
+Filled in at T08 close-out (2026-04-26):
 
-- **Spec API extensions for slice_refactor-shape patterns** — `nice_to_have.md` entry written by T07. Trigger: a second external workflow with conditional routing or sub-graph composition wants to use the spec API. (See §Decisions item 4 for the full re-open trigger language.)
-- **`register_workflow_from_yaml(path)`** — `nice_to_have.md` candidate. Trigger: a consumer surfaces a non-Python authoring environment (no-code tool, declarative-config-only deployment).
+- **Spec API extensions for slice_refactor-shape patterns** — `nice_to_have.md §23` entry written by T07 (2026-04-26). Trigger: a second external workflow with conditional routing or sub-graph composition wants to use the spec API. M19 takes exactly one `nice_to_have.md` slot (α = §23 per §Decisions item 1). M10's T05 re-greps at thaw and picks the next-free slot after §23.
+- **`register_workflow_from_yaml(path)`** — candidate for `nice_to_have.md` if a consumer surfaces a non-Python authoring environment. Not written to `nice_to_have.md` at M19 close — trigger has not fired.
 - **M17 (`scaffold_workflow`) onto spec API** — captured under M17's existing scope; M19 ships the surface M17 will eventually generate against.
-- **`capture_evals` on MCP `RunWorkflowInput`** — `nice_to_have.md` candidate carried forward from the M18 draft. Trigger: a downstream MCP consumer asks for eval capture from the MCP surface (CS-300 currently uses CLI for this).
-- **`plan` field alias removal at 1.0** — captured in CHANGELOG `### Deprecated` notice; one-time triggered by the 1.0 release.
-- **Custom-step graduation candidates** — T04's `summarize` workflow only uses built-in step types (`LLMStep` + `ValidateStep`); no custom step types are authored in M19. Post-M19, any custom step type a downstream consumer (or a future in-tree workflow) authors that proves usable across more than one workflow lands as a built-in in a future minor per ADR-0008's graduation pattern.
+- **`capture_evals` on MCP `RunWorkflowInput`** — candidate from M18 draft. Trigger: downstream MCP consumer asks for eval capture from the MCP surface. Not written to `nice_to_have.md` at M19 close — trigger has not fired.
+- **`plan` field alias removal at 1.0** — captured in CHANGELOG `### Deprecated` notice; triggered by the 1.0 release decision.
+- **Custom-step graduation candidates** — T04's `summarize` workflow only uses built-in step types (`LLMStep` + `ValidateStep`). No custom step types authored in M19 — no graduation candidates yet.
+
+**Release commit (design_branch pre-T08 tip):** `64fa32b`. T08 commit SHA filled at commit time.
+
+**Forward-deferral summary:** 1 `nice_to_have.md` entry written (§23). No new milestones triggered. M10 + M15 + M17 stay on hold at their existing triggering conditions.
+
+## Outcome
+
+(Filled in at T08 close-out, 2026-04-26.)
+
+**T01–T07 summary:**
+- **T01 (2026-04-26, `400a48c`)** — `WorkflowSpec` + step-type taxonomy (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`) + custom-step extension hook (`Step.execute` / `Step.compile`) + `register_workflow` entry point. Data-model layer only; no graph synthesis.
+- **T02 (2026-04-26, `43de951`)** — `_compiler.py`: spec → `StateGraph` synthesis. State class derived from `input_schema ⊕ output_schema`. `FINAL_STATE_KEY` resolution from `output_schema`'s first field. KDR-004 enforced by construction for `LLMStep`.
+- **T03 (2026-04-26, `f204af4`)** — Artefact-loss bug fixed (`_dispatch.py` all five `final.get("plan")` → `final.get(final_state_key)`). `RunWorkflowOutput.artifact` + `ResumeRunOutput.artifact` as canonical fields; `plan` deprecated alias through 0.2.x, removal target 1.0.
+- **T04 (2026-04-26, `0373d77`)** — `ai_workflows/workflows/summarize.py` — new in-tree spec-API proof point (`LLMStep + ValidateStep`). `aiw run --input KEY=VALUE` (repeatable) extension for arbitrary spec-API workflow inputs. Wire-level e2e: `tests/integration/test_spec_api_e2e.py` (5 tests, CLI + MCP).
+- **T05 (2026-04-26, `763875f`)** — `docs/writing-a-workflow.md` rewritten declarative-first (Tier 1 + Tier 2 worked examples, escape-hatch section, external-workflow section). Cycle 2 fixed HIGH-1/HIGH-2/MEDIUM-1/LOW-1/LOW-2 findings from cycle 1.
+- **T06 (2026-04-26, `c486e74`)** — New `docs/writing-a-custom-step.md` (Tier 3 dedicated guide: `execute` + `compile` paths, `WebFetchStep` example, `AddOneStep` doctest, `compile_step_in_isolation` fixture usage, graduation hints). New `ai_workflows/workflows/testing.py` with `compile_step_in_isolation` async fixture.
+- **T07 (2026-04-26, `d772477`)** — Four-tier extension model propagated: `design_docs/architecture.md §Extension model` (new ~35-line subsection), `README.md §Extending ai-workflows`, `docs/writing-a-graph-primitive.md` audience banner + cross-links, `docs/writing-a-custom-step.md` back-link, `design_docs/nice_to_have.md §23` re-open trigger.
+
+**Release artefact:** `jmdl-ai-workflows==0.3.0` on PyPI.
+- Wheel SHA256: `f7af3962075167aac3400ad2f81bee6a7a7efaf9c07fbcbfdc55370023b28f31` (cycle-2 rebuild — README + CHANGELOG changes rolled the hash from cycle-1 `d697f534…43343dd`)
+- PyPI URL: https://pypi.org/project/jmdl-ai-workflows/0.3.0/ (to be confirmed post-publish)
+- Publish-side commit: (to be filled at publish time)
+
+**Two-branch model:**
+- `design_branch` pre-T08 tip: `64fa32b` — /clean-implement auditor-agreement bypass
+- `main` pre-T08 tip: (current main HEAD — to be confirmed at release time)
+- Both post-T08 tips: filled at commit + push time.
+
+**Green-gate snapshot (2026-04-26, T08 close, design_branch):**
+- `uv run pytest` — 746 passed, 9 skipped, 22 warnings.
+- `uv run lint-imports` — 4 contracts kept, 0 broken.
+- `uv run ruff check` — clean.
+
+**Spec-API proof-point result:**
+T04 shipped `summarize` as the in-tree workflow validating the spec API end-to-end through both surfaces (`aiw run` + `aiw-mcp run_workflow`). Both planner and slice_refactor ports deferred (locked Q5 + locked H2 — both have the M8/M10 fault-tolerance overlay). One combined re-open trigger captured in `nice_to_have.md §23`. The original five built-in step types (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`) covered `summarize` without taxonomy extension.
+
+**Decision Q1 resolution (α — `nice_to_have.md` slot range):**
+M19 took exactly **one slot** at §23 ("Spec API extensions for slice_refactor-shape patterns"). The next-free slot after M19 is §24. M10's T05 slot-drift defensive clause picks up from §24 at thaw time.
 
 ## Issues
 
-Land under [issues/](issues/) after each task's first audit.
+Issues live under [issues/](issues/). All T01–T07 issue files closed clean per their own audit cycles.
 
 ## Release
 

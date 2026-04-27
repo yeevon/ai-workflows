@@ -1,6 +1,6 @@
 # Task 08 — Milestone close-out + 0.3.0 publish ceremony
 
-**Status:** 📝 Planned.
+**Status:** ✅ Complete (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008](../../adr/0008_declarative_authoring_surface.md) · [KDR-002 (MCP-as-substrate — preserved through release)](../../architecture.md) · Tasks 01–07 (the deliverables this close-out promotes) · [release_runbook.md](../milestone_13_v0_release/release_runbook.md) (the established release pattern) · [M16 Task 01 close-out](../milestone_16_external_workflows/task_01_external_workflow_modules.md) (most recent minor; M19 mirrors its release ritual) · [`CHANGELOG.md`](../../../CHANGELOG.md) (the file being promoted) · [`pyproject.toml`](../../../pyproject.toml) (the version field being bumped).
 
 ## What to Build
@@ -189,7 +189,7 @@ Update `~/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory/project_m13_
 - [ ] **AC-2:** `roadmap.md` M19 row updated with complete status + close-out date + one-paragraph summary in §M2–M19 summaries.
 - [ ] **AC-3:** Pre-publish gates pass per Deliverable 3 — pytest, lint-imports, ruff, summarize test sweep (`tests/workflows/test_summarize.py`), spec-API integration test sweep (`tests/integration/test_spec_api_e2e.py`), planner test suite (`-k planner`), slice_refactor test suite (`-k slice_refactor`; verifies the deferred-port escape-hatch path still works), Ollama-fallback test suite (`-k ollama_fallback`), compatibility shim probe, spec-API surface probe, release_smoke.sh.
 - [ ] **AC-4:** `ai_workflows/__init__.py` `__version__` bumped to "0.3.0" (single source of truth; `pyproject.toml` declares `dynamic = ["version"]` and reads from `__init__.py`). No static `version =` field added to `pyproject.toml`.
-- [ ] **AC-5:** CHANGELOG promoted on both branches per Deliverable 4. `design_branch` gets the audit-trail-inclusive M19 release section; `main` gets the user-facing `[0.3.0]` block with Added / Changed / Fixed / Deprecated sub-sections.
+- [ ] **AC-5:** CHANGELOG promoted on `design_branch` per Deliverable 4. `design_branch` carries **both** blocks: the user-facing `## [0.3.0] - YYYY-MM-DD` block (Added / Changed / Fixed / Deprecated sub-sections) placed **above** the audit-trail-inclusive `## [M19 Declarative Authoring Surface — 0.3.0 release] - YYYY-MM-DD` section. The `## [0.3.0]` block is cherry-picked to `main` during the user's publish ceremony; the M19 design-trail section is `design_branch`-only. AC-9 is the post-publish `### Published` footer stamp on whatever `main`-side block exists — that remains a user-owned step.
 - [ ] **AC-6:** `uv build` produces clean wheel + sdist; wheel-contents inspection per Deliverable 5 confirms only the four expected paths (ai_workflows/, LICENSE, README.md, CHANGELOG.md) — no `.env*` / `design_docs/` / `runs/` / `*.sqlite3`.
 - [ ] **AC-7:** `uv publish` succeeds; PyPI shows the 0.3.0 release.
 - [ ] **AC-8:** Live-smoke from `/tmp` passes per Deliverable 6 — `aiw version` reports 0.3.0; spec-API import probe + backward-compat import probe both succeed.

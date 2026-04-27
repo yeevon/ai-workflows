@@ -73,6 +73,22 @@ path = "ai_workflows/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["ai_workflows"]
 
+# CARRY-T01-HIGH-1 (T08 close-out): the sdist would leak .claude/, CLAUDE.md,
+# design_docs/, tests/skill/, and scripts/spikes/ without this exclusion block.
+# The wheel (consumed by uvx / uv tool install) is unaffected — wheel contents
+# are governed by [tool.hatch.build.targets.wheel].packages above.
+# Verify after uv build:
+#   tar -tzf dist/jmdl_ai_workflows-0.3.0.tar.gz | grep -E '(\.claude|CLAUDE|design_docs|tests/skill|scripts/spikes)'
+# → must return no matches.
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.claude",
+    "/CLAUDE.md",
+    "/design_docs",
+    "/tests/skill",
+    "/scripts/spikes",
+]
+
 # M13 Task 01 — force-include the repo-root ``migrations/`` directory
 # in the wheel. ``packages = ["ai_workflows"]`` sweeps the source
 # package only; ``yoyo-migrations`` reads migration scripts from an

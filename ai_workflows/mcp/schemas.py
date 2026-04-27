@@ -88,9 +88,11 @@ class RunWorkflowOutput(BaseModel):
     ``status`` is the run's state post-dispatch:
 
     * ``"pending"`` — the graph yielded at a :class:`HumanGate` interrupt
-      (``awaiting='gate'``). ``artifact`` carries the in-flight draft for
-      the operator to review; ``gate_context`` carries the gate prompt,
-      id, workflow id, and a projection-time ISO-8601 timestamp.
+      (``awaiting='gate'``). ``artifact`` follows ``FINAL_STATE_KEY``; may
+      be ``None`` if the workflow's ``FINAL_STATE_KEY`` channel is empty
+      at gate time (e.g. ``slice_refactor``'s ``applied_artifact_count``
+      is ``None`` at the review gate). ``gate_context`` carries the gate
+      prompt, id, workflow id, and a projection-time ISO-8601 timestamp.
     * ``"completed"`` — the graph reached its terminal artifact node.
       ``artifact`` carries the final artefact.
     * ``"aborted"`` — the Ollama-fallback circuit-breaker gate resolved
@@ -175,13 +177,14 @@ class ResumeRunOutput(BaseModel):
     ``status``:
 
     * ``"pending"`` — another gate fired post-resume
-      (``awaiting="gate"``). ``artifact`` carries the re-gated draft;
-      ``gate_context`` carries the new gate's prompt, id, workflow
-      id, and projection-time ISO-8601 timestamp.
+      (``awaiting="gate"``). ``artifact`` follows ``FINAL_STATE_KEY``; may
+      be ``None`` if the workflow's ``FINAL_STATE_KEY`` channel is empty at
+      gate time. ``gate_context`` carries the new gate's prompt, id,
+      workflow id, and projection-time ISO-8601 timestamp.
     * ``"completed"`` — approved → artefact persisted.
       ``artifact`` carries the final artefact.
     * ``"gate_rejected"`` — caller rejected at the gate. ``artifact``
-      carries the last-draft artefact (for audit review);
+      follows ``FINAL_STATE_KEY`` at rejection time (for audit review);
       ``gate_context`` is ``None`` because the gate has already
       resolved.
     * ``"aborted"`` — the Ollama-fallback gate resolved to ABORT on

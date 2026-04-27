@@ -1,6 +1,6 @@
 # Task 01 — `WorkflowSpec` + step-type taxonomy + custom-step extension hook + `register_workflow` entry point
 
-**Status:** 📝 Planned.
+**Status:** ✅ Complete (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Decision + §Step taxonomy + §Extension model](../../adr/0008_declarative_authoring_surface.md) · [KDR-004 (validator pairing — strengthened to construction invariant for `LLMStep`)](../../architecture.md) · [KDR-013 (external workflow discovery — surface preserved)](../../architecture.md) · [`ai_workflows/workflows/__init__.py`](../../../ai_workflows/workflows/__init__.py) (existing `register()` + `_REGISTRY` the new entry point composes over) · [`ai_workflows/workflows/loader.py`](../../../ai_workflows/workflows/loader.py) (the M16-shipped discovery surface this preserves).
 
 ## What to Build
@@ -123,10 +123,12 @@ class Step(BaseModel):
         contract.
         """
         # Implementation lands in T02; signature locked here.
+        # ``NotImplementedError(...)`` or ``...`` are both acceptable stub
+        # bodies — the locked contract is the signature, not the body.
         ...  # noqa: stub
 ```
 
-`CompiledStep` is a forward reference; T02 defines the dataclass. The base class default `compile()` body lands in T02 (T01 ships the signature + the `execute()` abstract method only).
+`CompiledStep` is a forward reference; T02 defines the dataclass. The base class default `compile()` body lands in T02 (T01 ships the signature + the `execute()` abstract method only). (CARRY-T01-LOW-3 amendment at T08 close-out: Builder shipped `raise NotImplementedError(...)` rather than `...`; both are acceptable — `NotImplementedError` produces a diagnostic failure while `Ellipsis` silently returns `None`, so the Builder's choice is strictly better. Spec annotated to match.)
 
 ### 4. Cross-step + cross-schema spec validation
 
@@ -216,7 +218,7 @@ Under `[Unreleased]` on both branches:
 - [ ] **AC-7:** Smoke verification in Deliverable 6 passes — `python -c` block prints `T01 smoke OK` and exits 0.
 - [ ] **AC-8:** `ai_workflows/workflows/__init__.py` re-exports the new surface alongside M16's surface; `__all__` lists every public spec name. Existing imports (`register`, `get`, `list_workflows`, `ExternalWorkflowImportError`, `load_extra_workflow_modules`) unaffected.
 - [ ] **AC-9:** Module docstring on `spec.py` cites M19 T01, ADR-0008, KDR-004 (response_format invariance), KDR-013 (existing discovery surface preserved), and the four-tier extension model. Public class docstrings cite their step-type's role + the audience (built-in vs. consumer-extension via subclass).
-- [ ] **AC-10:** Layer rule preserved — `uv run lint-imports` reports 4 contracts kept, 0 broken. `spec.py` imports stdlib + `pydantic` + `ai_workflows.workflows` only; no graph or primitives imports.
+- [ ] **AC-10:** Layer rule preserved — `uv run lint-imports` reports 4 contracts kept, 0 broken. `spec.py` imports stdlib + `pydantic` + `ai_workflows.primitives.retry` + `ai_workflows.primitives.tiers` only (the permitted `workflows → primitives` direction); no graph or surface imports. (CARRY-T01-LOW-2 amendment at T08 close-out: original wording "imports stdlib + `pydantic` + `ai_workflows.workflows` only" was more restrictive than the architecture; Deliverable 1 explicitly requires `primitives.retry` for `RetryPolicy` re-export and `primitives.tiers` for `TierConfig` typing.)
 - [ ] **AC-11:** Gates green on both branches. `uv run pytest`, `uv run lint-imports`, `uv run ruff check`.
 - [ ] **AC-12:** CHANGELOG entry under `[Unreleased]` matches Deliverable 7.
 

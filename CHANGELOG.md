@@ -7,6 +7,167 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-26
+
+### Added
+- declarative authoring surface (`WorkflowSpec` + step taxonomy + `register_workflow` + custom-step extension hook)
+
+### Changed
+- `RunWorkflowOutput.artifact` is the canonical artefact field
+- `plan` deprecated alias preserved through 0.2.x line
+- `docs/writing-a-workflow.md` rewritten declarative-first
+- `architecture.md` extended with §"Extension model"
+- `README.md` "Extending ai-workflows" section
+
+### Fixed
+- `_dispatch.py` artefact-field bug (composes with rename — non-`plan` `FINAL_STATE_KEY` workflows now round-trip their artefact correctly)
+
+### Deprecated
+- `RunWorkflowOutput.plan` / `ResumeRunOutput.plan` field. Removal target: 1.0.
+
+## [M19 Declarative Authoring Surface — 0.3.0 release] - 2026-04-26
+
+### Changed — M19 Task 08 cycle 2: Status surface flip + README staleness + CHANGELOG [0.3.0] block (2026-04-26)
+
+Closes HIGH-1 / MEDIUM-1 / MEDIUM-2 from the cycle 1 audit (auto-locked via auditor-agreement
+bypass per `.claude/commands/clean-implement.md` stop-condition 2).
+
+**Carry-over ACs closed (cycle 2):**
+
+- HIGH-1: `task_01_workflow_spec.md:3` + `task_02_compiler.md:3` `**Status:**` lines flipped to
+  `✅ Complete (2026-04-26).`. T03–T07 status lines harmonised to same canonical close-out form
+  (T03's stale "Awaiting audit" tail dropped; "Done" / "Implemented" verb-drift eliminated).
+- MEDIUM-1: `README.md` Status table extended with M15 + M16 + M19 rows. Stale `# prints 0.1.0`
+  comment replaced with `# prints the current __version__ (0.3.0 at M19 close)`.
+- MEDIUM-2: `## [0.3.0] - 2026-04-26` user-facing CHANGELOG block landed on `design_branch`
+  above the M19 design-trail section — to be cherry-picked to `main` during publish ceremony.
+  T08 spec AC-5 wording amended to explicitly document the design-branch-owns-both / main-cherry-
+  pick split.
+
+**Files touched (cycle 2):**
+
+- `design_docs/phases/milestone_19_declarative_surface/task_01_workflow_spec.md` — Status flipped.
+- `design_docs/phases/milestone_19_declarative_surface/task_02_compiler.md` — Status flipped.
+- `design_docs/phases/milestone_19_declarative_surface/task_03_result_shape.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_04_summarize_proof_point.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_05_writing_workflow_rewrite.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_06_writing_custom_step.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_07_extension_model_propagation.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_08_milestone_closeout.md` — AC-5 wording split.
+- `README.md` — Status table + version comment updated.
+- `CHANGELOG.md` — `## [0.3.0] - 2026-04-26` block added; this cycle-2 entry.
+
+**ACs satisfied (cycle 2):** HIGH-1 / MEDIUM-1 / MEDIUM-2 (locked cycle-1 carry-overs). All
+cycle-1 ACs (AC-1 through AC-15) remain satisfied.
+
+### Changed — M19 Task 08: Milestone close-out + 0.3.0 publish ceremony (2026-04-26)
+
+Flips M19 to `✅ Complete (2026-04-26)`. Promotes the M19 T01–T07 `[Unreleased]`
+entries into this dated `[M19 Declarative Authoring Surface — 0.3.0 release] - 2026-04-26`
+section. Absorbs all outstanding carry-over items (CARRY-T01-HIGH-1, CARRY-T01-LOW-1 through
+LOW-3, CARRY-T07-MEDIUM-1, CARRY-T07-LOW-1 through LOW-3, CARRY-SEC-HIGH-1 + ADV-1,
+TA-LOW-05, TA-LOW-08). Version bumped to 0.3.0.
+
+**Carry-over absorbed (T08 pre-publish pass):**
+
+- CARRY-T01-HIGH-1: `[tool.hatch.build.targets.sdist]` exclude block added to `pyproject.toml`
+  — prevents `.claude/`, `CLAUDE.md`, `design_docs/`, `tests/skill/`, `scripts/spikes/` from
+  leaking into the sdist on PyPI publish. Verified: `tar -tzf dist/jmdl_ai_workflows-0.3.0.tar.gz
+  | grep -E '(\.claude|CLAUDE|design_docs|tests/skill|scripts/spikes)'` → no matches.
+- CARRY-T01-LOW-1: `warnings.filterwarnings("ignore", ...)` at module-level in `spec.py` (after
+  all imports) suppresses the `ValidateStep.schema` pydantic UserWarning. Field name preserved;
+  cosmetic warning suppressed per recommendation.
+- CARRY-T01-LOW-2: `task_01_workflow_spec.md` AC-10 wording amended to name
+  `ai_workflows.primitives.retry` + `ai_workflows.primitives.tiers` explicitly (aligns with
+  Deliverable 1 + four-layer rule; "imports stdlib + pydantic + ai_workflows.workflows only"
+  was too restrictive).
+- CARRY-T01-LOW-3: `task_01_workflow_spec.md` Deliverable 3 annotated — `NotImplementedError(...)`
+  or `...` are both acceptable stub bodies; the locked contract is the signature.
+- CARRY-T07-MEDIUM-1: 6 sites updated — `mcp/schemas.py:91` (RunWorkflowOutput pending bullet),
+  `mcp/schemas.py:178,183-184` (ResumeRunOutput pending + gate_rejected bullets),
+  `_dispatch.py:729` (`_build_result_from_final` interrupt branch), `_dispatch.py:994-995`
+  (`_build_resume_result_from_final` interrupt branch), `_dispatch.py:998-999` (gate_rejected
+  branch), `_dispatch.py:1093` (gate_rejected inline comment), and
+  `design_docs/architecture.md:106` (§4.4 M11 T01 line). M11 T01 framing ("in-flight draft" /
+  "re-gated draft" / "last-draft artefact") replaced with FINAL_STATE_KEY-honest framing
+  ("follows FINAL_STATE_KEY; may be None if channel empty at gate time").
+- CARRY-T07-LOW-1: `design_docs/architecture.md` §"Extension model" expanded from 19 lines
+  to ~50 lines — added Tier 1 happy-path paragraph, Tier 2 parameter-depth paragraph,
+  Tier 3 custom-step paragraph, and graduation-path expanded with promotion note.
+- CARRY-T07-LOW-2: 3 anchor slugs fixed — `docs/writing-a-graph-primitive.md:3,15` +
+  `docs/writing-a-custom-step.md:324` — wrong `#extension-model----extensibility-...`
+  (4 hyphens) replaced with correct GFM slug `#extension-model-extensibility-...` (1 hyphen).
+- CARRY-T07-LOW-3: Tier-label tables harmonised across 3 files to canonical
+  `1 — Compose / 2 — Parameterise / 3 — Author a custom step type / 4 — Escape to LangGraph
+  directly` (no bold; em-dash separator; full label): `README.md` (was `**1. Compose**` etc.)
+  and `docs/writing-a-custom-step.md` (was `Tier 1 — compose` etc.).
+- CARRY-SEC-HIGH-1: `README.md §Security notes` subsection restored under `## MCP server`.
+  Content sourced from `b01b1ec:README.md` — loopback default, `--host 0.0.0.0` foot-gun
+  documentation, `--cors-origin` opt-in framing.
+- CARRY-SEC-ADV-1: `README.md §Setup` subsection restored under `## Getting started`.
+  Covers `GEMINI_API_KEY`, `OLLAMA_BASE_URL`, `AIW_STORAGE_DB`/`AIW_CHECKPOINT_DB`, and
+  Claude Code OAuth-only access note.
+- TA-LOW-05: CHANGELOG promote shape follows M13 + M14 pattern exactly
+  (`## [M<N> <Name>] - YYYY-MM-DD` with T08 entry at top + T01–T07 entries below).
+- TA-LOW-08: live-smoke (Deliverable 6) uses `--max-words 10` against a 17-word input; verified
+  as acceptance-soft (exit 0 + non-empty output, not strict word-count adherence). No blocker.
+
+**Files touched (`design_branch`):**
+
+- `ai_workflows/__init__.py` — `__version__` bumped `"0.2.0"` → `"0.3.0"`.
+- `pyproject.toml` — `[tool.hatch.build.targets.sdist]` exclude block added
+  (CARRY-T01-HIGH-1). No other manifest changes.
+- `ai_workflows/workflows/spec.py` — `warnings.filterwarnings(...)` added after all imports
+  (CARRY-T01-LOW-1).
+- `ai_workflows/mcp/schemas.py` — docstrings updated at lines 91 + 178 + 183-184
+  (CARRY-T07-MEDIUM-1).
+- `ai_workflows/workflows/_dispatch.py` — docstrings and inline comment updated at lines 729 +
+  994-995 + 998-999 + 1093 (CARRY-T07-MEDIUM-1).
+- `design_docs/architecture.md` — line 106 (§4.4 M11 T01 bullet) + §"Extension model"
+  expanded ~30 lines (CARRY-T07-MEDIUM-1 + CARRY-T07-LOW-1).
+- `docs/writing-a-graph-primitive.md` — anchor slugs fixed at lines 3 + 15
+  (CARRY-T07-LOW-2).
+- `docs/writing-a-custom-step.md` — anchor slug fixed at line 324; tier-label table
+  harmonised (CARRY-T07-LOW-2 + CARRY-T07-LOW-3).
+- `README.md` — tier-label table harmonised; `### Security notes` restored; `### Setup`
+  restored (CARRY-T07-LOW-3 + CARRY-SEC-HIGH-1 + CARRY-SEC-ADV-1).
+- `design_docs/phases/milestone_19_declarative_surface/task_01_workflow_spec.md` — AC-10
+  wording + Deliverable 3 stub-body annotation (CARRY-T01-LOW-2 + CARRY-T01-LOW-3).
+- `design_docs/phases/milestone_19_declarative_surface/task_08_milestone_closeout.md` —
+  **Status** flipped to `✅ Complete (2026-04-26)`.
+- `design_docs/phases/milestone_19_declarative_surface/README.md` — Status flipped;
+  Outcome section + Propagation status + Decision-resolution filled in.
+- `design_docs/roadmap.md` — M19 row flipped to `✅ complete (2026-04-26)`;
+  §M2–M19 summaries M19 entry added.
+- `CHANGELOG.md` — this entry + promote of T01–T07 entries.
+
+**Green-gate snapshot (2026-04-26, T08 close):**
+
+- `uv run pytest` — 746 passed, 9 skipped, 22 warnings (UserWarning for ValidateStep.schema
+  suppressed; 2 fewer than pre-T08 baseline of 24 warnings).
+- `uv run lint-imports` — 4 contracts kept, 0 broken on design_branch.
+- `uv run ruff check` — clean.
+
+**Wheel + sdist contents (0.3.0):**
+
+- Wheel (`jmdl_ai_workflows-0.3.0-py3-none-any.whl`): only `ai_workflows/`, `migrations/`,
+  `LICENSE`, `README.md`, `CHANGELOG.md` — no `.env*`, `design_docs/`, `runs/`, `*.sqlite3`.
+- Sdist (`jmdl_ai_workflows-0.3.0.tar.gz`): sdist exclusion block verified — no `.claude/`,
+  `CLAUDE.md`, `design_docs/`, `tests/skill/`, `scripts/spikes/` present.
+- Wheel SHA256 (cycle 1): `d697f534b7101b2d169e6c29d66a82879c4e3b661ea7c906d9c66707f43343dd`
+  Wheel SHA256 (cycle 2 / final pre-publish): `f7af3962075167aac3400ad2f81bee6a7a7efaf9c07fbcbfdc55370023b28f31`
+  (README + CHANGELOG changes between cycles rolled the hash)
+
+**Release-commits pair (pre-T08 tips, design_branch):**
+
+- `design_branch:64fa32b` — /clean-implement auditor-agreement bypass (post-T07 last commit).
+- `main:` — (to be filled at publish time; T08 adds the user-facing 0.3.0 CHANGELOG block
+  to `main` before push).
+
+**ACs satisfied (spec §Acceptance Criteria):** AC-1 through AC-6 + AC-12 through AC-15
+(AC-7 / AC-8 / AC-9 / AC-10 / AC-11 are the publish + live-smoke + stamp + push + memory
+steps the user runs post-T08 Builder handoff).
+
 ### Added — M19 Task 07 cycle 2: T07 findings propagated to T08 carry-over (2026-04-26)
 
 Files touched:

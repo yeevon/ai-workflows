@@ -30,4 +30,4 @@ wheel's metadata); both resolve to the same string. A regression
 test pins that invariant.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

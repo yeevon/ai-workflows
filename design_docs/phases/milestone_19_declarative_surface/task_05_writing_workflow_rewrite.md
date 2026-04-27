@@ -1,6 +1,6 @@
 # Task 05 — Rewrite `docs/writing-a-workflow.md` declarative-first (Tier 1 + Tier 2)
 
-**Status:** ✅ Done (implemented 2026-04-26).
+**Status:** ✅ Complete (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Documentation surface (the tier-by-tier doc disposition table)](../../adr/0008_declarative_authoring_surface.md) · [KDR-013 (the existing discovery surface preserved)](../../architecture.md) · [Task 01](task_01_workflow_spec.md) (the spec API the doc teaches) · [Task 02](task_02_compiler.md) (the compiler the doc references) · [Task 03](task_03_result_shape.md) (the renamed `artifact` field referenced in the doc's "what to read from the response" sub-section) · [`docs/writing-a-workflow.md`](../../../docs/writing-a-workflow.md) (the existing doc — 181 lines as of M16; rewrites under this task).
 
 ## What to Build

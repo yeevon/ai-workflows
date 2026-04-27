@@ -1,6 +1,6 @@
 # Task 04 — Ship `summarize` workflow as in-tree spec-API proof point + wire-level e2e verification
 
-**Status:** ✅ Done (implemented 2026-04-26).
+**Status:** ✅ Complete (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Consequences (in-tree workflows must port as M19 proof points; revised after analyzer round 2 — H2 lock)](../../adr/0008_declarative_authoring_surface.md) · [KDR-002 (MCP-as-substrate — the e2e verification rides through the MCP wire)](../../architecture.md) · [KDR-004 (validator pairing — exercised by the `summarize` workflow's `LLMStep` + `ValidateStep` composition)](../../architecture.md) · [Task 01](task_01_workflow_spec.md) (consumes the spec data model) · [Task 02](task_02_compiler.md) (consumes the compiler) · [Task 03](task_03_result_shape.md) (composes — `summarize`'s `FINAL_STATE_KEY = "summary"` round-trips through `RunWorkflowOutput.artifact`) · [Task 05](task_05_writing_workflow_rewrite.md) (the doc whose worked example shares source with this task's `summarize.py`) · [`ai_workflows/workflows/__init__.py`](../../../ai_workflows/workflows/__init__.py) (the registry surface the new workflow registers through) · [`ai_workflows/evals/_stub_adapter.py`](../../../ai_workflows/evals/_stub_adapter.py) (the LLM-stubbing surface the hermetic tests use).
 
 ## What to Build

@@ -726,10 +726,11 @@ async def _build_result_from_final(
 
     * ``__interrupt__`` in state → HumanGate pause. Stamp
       ``runs.total_cost_usd`` so ``aiw resume`` / ``resume_run`` can
-      reseed the cost tracker, project the in-flight draft ``artifact``
-      (and the ``plan`` deprecated alias) and a ``gate_context`` review
-      payload (M11 T01), and return ``status="pending"`` +
-      ``awaiting="gate"``.
+      reseed the cost tracker, project ``artifact`` (follows
+      ``FINAL_STATE_KEY``; may be ``None`` if the workflow's
+      ``FINAL_STATE_KEY`` channel is empty at gate time) and the ``plan``
+      deprecated alias, plus a ``gate_context`` review payload (M11 T01),
+      and return ``status="pending"`` + ``awaiting="gate"``.
     * ``state["hard_stop_failing_slice_ids"]`` populated → double-failure
       hard-stop fired upstream of the aggregator (M6 T07,
       architecture.md §8.2). Flip ``runs.status`` to ``"aborted"`` with
@@ -991,13 +992,14 @@ async def _build_resume_result_from_final(
     Four branches (mirrors the pre-refactor ``cli._emit_resume_final``):
 
     * ``__interrupt__`` in state → another gate fired; stamp cost at
-      pause, project the re-gated draft ``plan`` and a ``gate_context``
-      review payload (M11 T01), and return ``status="pending"`` +
-      ``awaiting="gate"``.
+      pause, project ``artifact`` (follows ``FINAL_STATE_KEY``; may be
+      ``None`` if the workflow's ``FINAL_STATE_KEY`` channel is empty at
+      gate time) and a ``gate_context`` review payload (M11 T01), and
+      return ``status="pending"`` + ``awaiting="gate"``.
     * ``state[f"gate_{terminal_gate_id}_response"] == "rejected"`` →
       flip ``runs.status`` to ``gate_rejected`` with ``finished_at``;
-      return ``status="gate_rejected"`` with the last-draft ``plan``
-      projected for audit (M11 T01).
+      return ``status="gate_rejected"`` with ``artifact`` following
+      ``FINAL_STATE_KEY`` at rejection time (for audit review; M11 T01).
     * ``state[final_state_key]`` populated (approved path reached its
       terminal artefact node) → flip ``runs.status`` to ``completed``;
       return ``status="completed"`` with the plan dumped to a plain
@@ -1090,7 +1092,8 @@ async def _build_resume_result_from_final(
             "run_id": run_id,
             "status": "gate_rejected",
             "awaiting": None,
-            # M11 T01: project the last-draft plan for audit review.
+            # M11 T01: project artifact (follows FINAL_STATE_KEY; may be
+            # None if the channel was empty at rejection time) for audit review.
             # ``gate_context`` stays ``None`` — the gate has already
             # resolved, no pending prompt to surface.
             "artifact": _artefact,

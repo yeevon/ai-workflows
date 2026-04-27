@@ -56,6 +56,19 @@ if TYPE_CHECKING:
     # as-yet-unshipped compiler module.
     from ai_workflows.workflows._compiler import CompiledStep
 
+# CARRY-T01-LOW-1 (T08 close-out): ``ValidateStep.schema`` shadows the pydantic
+# ``BaseModel.schema()`` classmethod.  The field name is locked by the public API
+# (Q1 — no rename until a breaking version change warrants it); suppress the
+# one-time-per-process UserWarning so downstream consumers do not see it.
+# The field works correctly — only the cosmetic warning is suppressed.
+# Placed after all imports so ruff E402 (module-level import not at top) is
+# not triggered on the primitives imports above.
+warnings.filterwarnings(
+    "ignore",
+    message=r'Field name "schema" in "ValidateStep" shadows an attribute in parent "Step"',
+    category=UserWarning,
+)
+
 __all__ = [
     "FanOutStep",
     "GateStep",

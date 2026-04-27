@@ -1,6 +1,6 @@
 # Task 07 — Four-tier framing across `architecture.md`, `README.md`, `writing-a-graph-primitive.md` + KDR table updates + Q5 deferral re-open trigger
 
-**Status:** ✅ Implemented (2026-04-26).
+**Status:** ✅ Complete (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Extension model + §Documentation surface (the propagation requirements this task lands)](../../adr/0008_declarative_authoring_surface.md) · [KDR-004 (validator pairing — strengthened to construction invariant; KDR table row update)](../../architecture.md) · [KDR-013 (user code is user-owned — boundary shifts; KDR table row update)](../../architecture.md) · [Task 05](task_05_writing_workflow_rewrite.md) (Tier 1+2 doc; cross-linked from `architecture.md §Extension model` + `README.md`) · [Task 06](task_06_writing_custom_step.md) (Tier 3 doc; cross-linked) · [`design_docs/architecture.md`](../../architecture.md) (the architecture-of-record being extended) · [`README.md`](../../../README.md) (the project entry point being extended) · [`docs/writing-a-graph-primitive.md`](../../../docs/writing-a-graph-primitive.md) (the existing Tier 4 doc being aligned) · [`design_docs/nice_to_have.md`](../../nice_to_have.md) (the parking lot where the Q5 slice_refactor-port re-open trigger lands).
 
 ## What to Build
