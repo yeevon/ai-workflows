@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M12 Task 03: Workflow wiring — cascade opt-in via module constant + env-var (2026-04-27)
+
+Wires `audit_cascade_node()` (M12 T02) into the `planner` and `slice_refactor` workflows
+as default-off, operator-opt-in behaviour controlled by module-level constants + env-var
+overrides (ADR-0009 / KDR-014). No quality knobs land on `*Input` models, `WorkflowSpec`,
+or CLI flags.
+
+**planner:** `_AUDIT_CASCADE_ENABLED_DEFAULT = False`; activated by `AIW_AUDIT_CASCADE=1`
+or `AIW_AUDIT_CASCADE_PLANNER=1`.  When enabled, `build_planner()` replaces the
+`explorer` + `explorer_validator` standard nodes with an `audit_cascade_node(...,
+name="planner_explorer_audit")` sub-graph plus a thin `cascade_bridge` node that copies
+the cascade's `primary_parsed` output into the `explorer_report` key expected by the
+downstream planner node.
+
+**slice_refactor:** `_AUDIT_CASCADE_ENABLED_DEFAULT = False`; activated by
+`AIW_AUDIT_CASCADE=1` or `AIW_AUDIT_CASCADE_SLICE_REFACTOR=1`.  When enabled,
+`_build_slice_branch_subgraph()` replaces `slice_worker` + `slice_worker_validator` with
+`audit_cascade_node(skip_terminal_gate=True, name="slice_worker_audit")` plus a
+`cascade_bridge` node (Option A isolation: cascade channels live on `SliceBranchState`
+only, NOT `SliceRefactorState`, preventing `InvalidUpdateError` on parallel fan-in).
+`_slice_branch_finalize()` handles `AuditFailure` as a structured exhaustion record with
+`audit_cascade_exhausted:` prefix.  Carry-over M12-T02-LOW-02: `RunnableConfig | None`
+→ `RunnableConfig = None` type annotation fix in `audit_cascade.py`.
+
+**Files touched:**
+- `ai_workflows/workflows/planner.py` — `_AUDIT_CASCADE_ENABLED_DEFAULT`, `_AUDIT_CASCADE_ENABLED`
+  constants; `## Quality knobs` module-docstring section; 9 cascade channels on `PlannerState`;
+  `build_planner()` branched on `_AUDIT_CASCADE_ENABLED`; `cascade_bridge` marker node.
+- `ai_workflows/workflows/slice_refactor.py` — same constant pattern; `AuditFailure` import;
+  9 cascade channels on `SliceBranchState` (NOT `SliceRefactorState`); `_slice_branch_finalize()`
+  updated; `_build_slice_branch_subgraph()` branched; `cascade_bridge` marker node.
+- `ai_workflows/graph/audit_cascade.py` — M12-T02-LOW-02 fix: `RunnableConfig | None`
+  → `RunnableConfig = None` in two `_wrapped` inner functions.
+- `tests/workflows/test_planner_cascade_enable.py` — NEW: 4 tests (AC-1 through AC-4/KDR-014
+  guard) + `_restore_registry` autouse fixture (module `__dict__` snapshot/restore pattern
+  prevents class-identity drift across test modules).
+- `tests/workflows/test_slice_refactor_cascade_enable.py` — NEW: 6 tests (AC-1 through AC-6,
+  including Option-A isolation structural test via `get_type_hints`) + same fixture.
+- `tests/test_kdr_014_no_quality_fields_on_input_models.py` — NEW: parametrized KDR-014
+  guard across all `*Input` models and `WorkflowSpec`.
+
+**KDRs satisfied:**
+- KDR-004: `ValidatorNode` pairing preserved in both standard and cascade paths.
+- KDR-006: `AuditFailure` routed via `RetryableSemantic` bucket; no bespoke retry loops.
+- KDR-014: Quality knobs at module level + env-var only; zero `*Input` / `WorkflowSpec`
+  field additions.
+
+**ACs satisfied:**
+- AC-1: `_AUDIT_CASCADE_ENABLED_DEFAULT = False` at module level in both workflows.
+- AC-2: `_AUDIT_CASCADE_ENABLED` evaluates `AIW_AUDIT_CASCADE` or per-workflow var; default False.
+- AC-3: `build_planner()` / `_build_slice_branch_subgraph()` branch on the constant at call time.
+- AC-4: When enabled, cascade sub-graph replaces standard LLM + validator nodes.
+- AC-5: `cascade_bridge` structural marker present in compiled graph iff cascade enabled.
+- AC-6: `SliceBranchState` carries all cascade channels; `SliceRefactorState` carries none (Option A).
+- AC-7: `_slice_branch_finalize()` handles `AuditFailure` with structured prefix.
+- AC-8: `_AUDIT_CASCADE_ENABLED_DEFAULT` and `_AUDIT_CASCADE_ENABLED` exported in `__all__`.
+- AC-9: All 13 new tests pass; KDR-014 guard parametrized across all Input models.
+- M12-T02-LOW-02: `RunnableConfig | None` → `RunnableConfig = None` annotation fix.
+- M12-T02-LOW-03: `audit_cascade_node()` call sites use `skip_terminal_gate=True` in slice_refactor.
+- TA-LOW-01: KDR-014 guard uses closed field-name list (not `.*_policy` regex).
+- TA-LOW-02: Tests 1-3 use `monkeypatch.delenv/setenv` + `importlib.reload` for order-independence.
+- TA-LOW-03/04: Both modules export `_AUDIT_CASCADE_ENABLED_DEFAULT` and `_AUDIT_CASCADE_ENABLED`.
+- TA-LOW-05: Module docstrings updated with `## Quality knobs` section.
+- TA-LOW-06: `AuditFailure` exhaustion record carries structured `audit_cascade_exhausted:` prefix.
+- TA-LOW-07/08: Planner sub-graph cascade decision is independent of slice_refactor's; verified by Test 5.
+
+**M12 T03 cycle 2 additions (2026-04-27) — HIGH-01 + LOW-01 + LOW-02:**
+- `ai_workflows/graph/audit_cascade.py` — **bug fix**: added `"slice": Any` to `_DynamicState`
+  in `audit_cascade_node()` so LangGraph passes the per-branch `slice` field from the outer
+  `SliceBranchState` into the cascade's internal state (LangGraph filters parent state to inner-schema
+  keys; without this entry `_slice_worker_prompt` raised `KeyError: 'slice'` inside the cascade).
+  Also added `slice: Any` to the `_CascadeState` documentation TypedDict for symmetry.
+  Updated module docstring line 46-47 (LOW-01): replaced stale `audit_cascade_enabled config field`
+  reference with the correct module-constant pattern description (ADR-0009 / KDR-014 / M12 T03).
+- `ai_workflows/workflows/slice_refactor.py` — LOW-02: added `_AUDIT_CASCADE_ENABLED_DEFAULT` +
+  `_AUDIT_CASCADE_ENABLED` to `__all__` for symmetry with `planner.py`.
+- `tests/workflows/test_slice_refactor_cascade_enable.py` — HIGH-01: added 3 new async e2e tests
+  (tests 7-9) with stub-adapter pattern (mirrors `tests/graph/test_audit_cascade.py`):
+  - `test_cascade_exhaustion_folded_into_slice_failure_prefix` — wire-level smoke for AC-10:
+    invokes `_build_slice_branch_subgraph()` directly; scripts 2 auditor-fail cycles; asserts
+    `SliceFailure.last_error.startswith("audit_cascade_exhausted:")` with `failure_reasons` +
+    `suggested_approach` embedded.
+  - `test_cascade_pass_lands_in_slice_results` — wire-level smoke for AC-11c: invokes branch
+    directly; scripts 1 primary + 1 auditor-pass; asserts `slice_results` has 1 entry.
+  - `test_cascade_parallel_fanin_no_invalid_update_error` — wire-level smoke for AC-11a: builds
+    minimal outer `StateGraph(SliceRefactorState)` with N=2 Send-dispatched branches; asserts no
+    `InvalidUpdateError` and `slice_results` has 2 entries (proves Option A isolation at runtime).
+
+**Deviations from spec:**
+- `audit_cascade.py` `_DynamicState` gained `"slice": Any` pass-through to fix a runtime bug
+  discovered while writing the HIGH-01 test: the cascade's inner state schema filtered out
+  `state["slice"]` which `_slice_worker_prompt` reads. The spec's AC-10/11 could not be satisfied
+  without this fix. Change is backward-compatible (new optional field, `total=False` TypedDict,
+  unused by the cascade primitive). Noted in `_DynamicState` comment and `_CascadeState` docstring.
+
 ### Changed — M12 Task 08: AuditCascadeNode skip_terminal_gate parameter (T02 amendment) (2026-04-27)
 
 Extends `audit_cascade_node()` (M12 T02) with a backward-compatible `skip_terminal_gate: bool = False`

@@ -20,17 +20,41 @@ tier registry that resolves ``planner-explorer`` / ``planner-synth`` is
 supplied by the CLI/MCP surface via ``config["configurable"]`` at run time
 — this module never reads env vars or imports the ``anthropic`` SDK
 (KDR-003).
+
+## Quality knobs (M12 Task 03 / ADR-0009 / KDR-014)
+
+The audit cascade for ``planner-explorer`` is opt-in via a module-level
+constant:
+
+- ``_AUDIT_CASCADE_ENABLED_DEFAULT = False`` — framework-author default;
+  flip to ``True`` post-T04 telemetry via code-edit + commit + release.
+- ``AIW_AUDIT_CASCADE=1`` — global env-var override; flips ALL workflows
+  that consult it.
+- ``AIW_AUDIT_CASCADE_PLANNER=1`` — per-workflow override; flips ONLY
+  this workflow.
+
+Per KDR-014, quality knobs MUST NOT appear on ``PlannerInput`` or any
+``WorkflowSpec``/CLI flag. The decision is made once per Python process at
+module-import time; the compiled graph reflects it. See ADR-0009 §Open
+questions for the enable-only asymmetry: a per-workflow var cannot DISABLE
+what the global enables.
+
+The ``_AUDIT_CASCADE_ENABLED`` constant has the same name in ``planner.py``
+and ``slice_refactor.py`` by design — each module owns its own decision;
+cross-module references must qualify with the module name.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
+from ai_workflows.graph.audit_cascade import audit_cascade_node
 from ai_workflows.graph.error_handler import wrap_with_error_handler
 from ai_workflows.graph.human_gate import human_gate
 from ai_workflows.graph.ollama_fallback_gate import (
@@ -46,9 +70,32 @@ from ai_workflows.primitives.retry import RetryPolicy
 from ai_workflows.primitives.tiers import ClaudeCodeRoute, LiteLLMRoute, TierConfig
 from ai_workflows.workflows import register
 
+# ---------------------------------------------------------------------------
+# M12 T03 / ADR-0009 / KDR-014 — cascade quality policy at module level.
+# Framework-author default; flip to True post-T04 telemetry per workflow,
+# code-edit + commit + release. NO ``audit_cascade_enabled`` field on
+# PlannerInput; per KDR-014 quality knobs MUST NOT land on Input models.
+# ---------------------------------------------------------------------------
+_AUDIT_CASCADE_ENABLED_DEFAULT = False
+
+# Operator override (read at module-import). Two granularities:
+#   AIW_AUDIT_CASCADE=1               — flips ALL workflows that consult it.
+#   AIW_AUDIT_CASCADE_PLANNER=1       — flips ONLY this workflow.
+# Semantics: per-workflow var is ENABLE-ONLY when the global is on.
+# To DISABLE a single workflow when AIW_AUDIT_CASCADE=1 is set, unset
+# the global and re-enable the workflows you want via per-workflow vars.
+# (Three-state per-workflow override deferred — see ADR-0009 §Open questions.)
+_AUDIT_CASCADE_ENABLED = (
+    _AUDIT_CASCADE_ENABLED_DEFAULT
+    or os.getenv("AIW_AUDIT_CASCADE", "0") == "1"
+    or os.getenv("AIW_AUDIT_CASCADE_PLANNER", "0") == "1"
+)
+
 __all__ = [
     "PLANNER_OLLAMA_FALLBACK",
     "PLANNER_RETRY_POLICY",
+    "_AUDIT_CASCADE_ENABLED_DEFAULT",
+    "_AUDIT_CASCADE_ENABLED",
     "OllamaFallback",
     "PlannerInput",
     "PlannerStep",
@@ -239,6 +286,19 @@ class PlannerState(TypedDict, total=False):
             three-bucket retry-taxonomy slots (KDR-006) written by
             :func:`wrap_with_error_handler` and read by
             :func:`retrying_edge`.
+
+    M12 T03 — cascade-prefixed channels populated when
+    ``_AUDIT_CASCADE_ENABLED`` is True. Declared ``total=False`` so the
+    disabled-default path does not trip on missing keys. Channel naming
+    uses ``planner_explorer_audit`` prefix matching
+    ``audit_cascade_node(name="planner_explorer_audit", ...)`` in
+    :func:`build_planner` to avoid collision if a future graph composes
+    two cascades in one outer state.
+
+    The two shared cascade channels (``cascade_role``, ``cascade_transcript``)
+    and the 7 prefixed channels are written by the cascade sub-graph.
+    ``total=False`` means they are typed-but-optional — the planner and
+    validator nodes do not populate them on the disabled-default path.
     """
 
     run_id: str
@@ -260,6 +320,20 @@ class PlannerState(TypedDict, total=False):
     ollama_fallback_decision: FallbackChoice
     gate_ollama_fallback_response: str
     ollama_fallback_aborted: bool
+
+    # M12 T03 — cascade channels populated when _AUDIT_CASCADE_ENABLED is True.
+    # Inert when False — the disabled-default path never writes these keys.
+    cascade_role: str  # Literal["author", "auditor", "verdict"] in spirit
+    # cascade_transcript inner shape: {"author_attempts": list[str],
+    # "auditor_verdicts": list[AuditVerdict]} — per audit_cascade.py:674-677
+    cascade_transcript: dict[str, list]
+    planner_explorer_audit_primary_output: str
+    planner_explorer_audit_primary_parsed: ExplorerReport
+    planner_explorer_audit_primary_output_revision_hint: str | None
+    planner_explorer_audit_auditor_output: str
+    planner_explorer_audit_auditor_output_revision_hint: str | None
+    planner_explorer_audit_audit_verdict: Any
+    planner_explorer_audit_audit_exhausted_response: str
 
 
 def _explorer_prompt(state: PlannerState) -> tuple[str, list[dict[str, str]]]:
@@ -464,32 +538,61 @@ def build_planner() -> StateGraph:
 
     Graph shape (KDR-004, §8.2):
 
+    When ``_AUDIT_CASCADE_ENABLED`` is False (default):
+
     ``START → explorer → explorer_validator → planner → planner_validator
            → gate → artifact → END``
 
-    with self-loop retries off each LLM node and a validator → LLM edge
-    on semantic failures.
+    When ``_AUDIT_CASCADE_ENABLED`` is True (M12 T03):
+
+    ``START → planner_explorer_audit (cascade sub-graph) → planner
+           → planner_validator → gate → artifact → END``
+
+    The cascade sub-graph composes primary (planner-explorer) →
+    validator → auditor (auditor-sonnet) → verdict. On auditor failure
+    the primary re-fires with enriched context; on exhaustion the cascade
+    routes to its internal ``HumanGate`` (the planner has no fan-out, so
+    the gate-interrupt semantic is correct). Per ADR-0009 / KDR-014, the
+    cascade decision is made once at module-import time; there is no
+    runtime conditional edge keyed off the policy flag.
     """
     policy = PLANNER_RETRY_POLICY
 
-    explorer = wrap_with_error_handler(
-        tiered_node(
-            tier="planner-explorer",
-            prompt_fn=_explorer_prompt,
-            output_schema=ExplorerReport,
+    if _AUDIT_CASCADE_ENABLED:
+        # Build-time only — do NOT call audit_cascade_node() in a
+        # per-slice or per-step inner loop.
+        explorer = audit_cascade_node(
+            primary_tier="planner-explorer",
+            primary_prompt_fn=_explorer_prompt,
+            primary_output_schema=ExplorerReport,
+            auditor_tier="auditor-sonnet",
+            policy=policy,
+            name="planner_explorer_audit",
+        )
+        # The cascade sub-graph writes to planner_explorer_audit_primary_parsed
+        # but the downstream planner node reads explorer_report. Add a thin
+        # bridge node to copy the parsed output into the expected key.
+        def _cascade_to_explorer_report(state: PlannerState) -> dict[str, Any]:
+            """Bridge cascade output to the explorer_report key expected downstream."""
+            parsed = state.get("planner_explorer_audit_primary_parsed")
+            if parsed is not None:
+                return {"explorer_report": parsed}
+            return {}
+
+        cascade_enabled = True
+    else:
+        # Existing M11-shape: wrap_with_error_handler(tiered_node(...))
+        explorer = wrap_with_error_handler(
+            tiered_node(
+                tier="planner-explorer",
+                prompt_fn=_explorer_prompt,
+                output_schema=ExplorerReport,
+                node_name="explorer",
+            ),
             node_name="explorer",
-        ),
-        node_name="explorer",
-    )
-    explorer_validator = wrap_with_error_handler(
-        validator_node(
-            schema=ExplorerReport,
-            input_key="explorer_output",
-            output_key="explorer_report",
-            node_name="explorer_validator",
-        ),
-        node_name="explorer_validator",
-    )
+        )
+        cascade_enabled = False
+
     planner = wrap_with_error_handler(
         tiered_node(
             tier="planner-synth",
@@ -516,45 +619,7 @@ def build_planner() -> StateGraph:
         ),
         strict_review=True,
     )
-    ollama_fallback = build_ollama_fallback_gate(
-        tier_name=PLANNER_OLLAMA_FALLBACK.logical,
-        fallback_tier=PLANNER_OLLAMA_FALLBACK.fallback_tier,
-    )
 
-    decide_after_explorer_base = retrying_edge(
-        on_transient="explorer",
-        on_semantic="explorer",
-        on_terminal="explorer_validator",
-        policy=policy,
-    )
-
-    def _decide_after_explorer_with_fallback(state: PlannerState) -> str:
-        """CircuitOpen-aware wrapper around :func:`decide_after_explorer_base`.
-
-        Intercepts :class:`CircuitOpen` on ``state['last_exception']``
-        before delegating to the three-bucket :func:`retrying_edge`. First
-        trip in the run → route to ``ollama_fallback_stamp`` → gate.
-        Second trip (gate already fired; operator already chose) →
-        escalate directly to :func:`_planner_hard_stop` rather than
-        double-prompting or falling into ``retrying_edge``'s
-        ``on_terminal`` branch (which would land the run on
-        ``explorer_validator`` with no ``explorer_output`` — a confusing
-        downstream error).
-        """
-        exc = state.get("last_exception")
-        already_fired = state.get("_ollama_fallback_fired") or False
-        if isinstance(exc, CircuitOpen):
-            if already_fired:
-                return "planner_hard_stop"
-            return "ollama_fallback_stamp"
-        return decide_after_explorer_base(state)
-
-    decide_after_explorer_validator = retrying_edge(
-        on_transient="explorer",
-        on_semantic="explorer",
-        on_terminal="planner",
-        policy=policy,
-    )
     decide_after_planner = retrying_edge(
         on_transient="planner",
         on_semantic="planner",
@@ -569,53 +634,130 @@ def build_planner() -> StateGraph:
     )
 
     g: StateGraph = StateGraph(PlannerState)
-    g.add_node("explorer", explorer)
-    g.add_node("explorer_validator", explorer_validator)
-    g.add_node("planner", planner)
-    g.add_node("planner_validator", planner_validator)
-    g.add_node("gate", gate)
-    g.add_node("artifact", _artifact_node)
-    g.add_node("ollama_fallback_stamp", _stamp_ollama_fallback_ctx)
-    g.add_node("ollama_fallback", ollama_fallback)
-    g.add_node("ollama_fallback_dispatch", _ollama_fallback_dispatch)
-    g.add_node("planner_hard_stop", _planner_hard_stop)
 
-    g.add_edge(START, "explorer")
-    g.add_conditional_edges(
-        "explorer",
-        _decide_after_explorer_with_fallback,
-        [
+    if cascade_enabled:
+        # Cascade path: explorer is a compiled cascade sub-graph; the bridge
+        # node copies planner_explorer_audit_primary_parsed → explorer_report.
+        g.add_node("explorer", explorer)
+        g.add_node("cascade_bridge", _cascade_to_explorer_report)
+        g.add_node("planner", planner)
+        g.add_node("planner_validator", planner_validator)
+        g.add_node("gate", gate)
+        g.add_node("artifact", _artifact_node)
+
+        g.add_edge(START, "explorer")
+        g.add_edge("explorer", "cascade_bridge")
+        g.add_edge("cascade_bridge", "planner")
+        g.add_conditional_edges(
+            "planner",
+            decide_after_planner,
+            ["planner", "planner_validator"],
+        )
+        g.add_conditional_edges(
+            "planner_validator",
+            decide_after_planner_validator,
+            ["planner", "gate"],
+        )
+        g.add_edge("gate", "artifact")
+        g.add_edge("artifact", END)
+    else:
+        # Standard M11 path: explorer + explorer_validator with Ollama fallback.
+        explorer_validator = wrap_with_error_handler(
+            validator_node(
+                schema=ExplorerReport,
+                input_key="explorer_output",
+                output_key="explorer_report",
+                node_name="explorer_validator",
+            ),
+            node_name="explorer_validator",
+        )
+        ollama_fallback = build_ollama_fallback_gate(
+            tier_name=PLANNER_OLLAMA_FALLBACK.logical,
+            fallback_tier=PLANNER_OLLAMA_FALLBACK.fallback_tier,
+        )
+        decide_after_explorer_base = retrying_edge(
+            on_transient="explorer",
+            on_semantic="explorer",
+            on_terminal="explorer_validator",
+            policy=policy,
+        )
+
+        def _decide_after_explorer_with_fallback(state: PlannerState) -> str:
+            """CircuitOpen-aware wrapper around :func:`decide_after_explorer_base`.
+
+            Intercepts :class:`CircuitOpen` on ``state['last_exception']``
+            before delegating to the three-bucket :func:`retrying_edge`. First
+            trip in the run → route to ``ollama_fallback_stamp`` → gate.
+            Second trip (gate already fired; operator already chose) →
+            escalate directly to :func:`_planner_hard_stop` rather than
+            double-prompting or falling into ``retrying_edge``'s
+            ``on_terminal`` branch (which would land the run on
+            ``explorer_validator`` with no ``explorer_output`` — a confusing
+            downstream error).
+            """
+            exc = state.get("last_exception")
+            already_fired = state.get("_ollama_fallback_fired") or False
+            if isinstance(exc, CircuitOpen):
+                if already_fired:
+                    return "planner_hard_stop"
+                return "ollama_fallback_stamp"
+            return decide_after_explorer_base(state)
+
+        decide_after_explorer_validator = retrying_edge(
+            on_transient="explorer",
+            on_semantic="explorer",
+            on_terminal="planner",
+            policy=policy,
+        )
+
+        g.add_node("explorer", explorer)
+        g.add_node("explorer_validator", explorer_validator)
+        g.add_node("planner", planner)
+        g.add_node("planner_validator", planner_validator)
+        g.add_node("gate", gate)
+        g.add_node("artifact", _artifact_node)
+        g.add_node("ollama_fallback_stamp", _stamp_ollama_fallback_ctx)
+        g.add_node("ollama_fallback", ollama_fallback)
+        g.add_node("ollama_fallback_dispatch", _ollama_fallback_dispatch)
+        g.add_node("planner_hard_stop", _planner_hard_stop)
+
+        g.add_edge(START, "explorer")
+        g.add_conditional_edges(
             "explorer",
+            _decide_after_explorer_with_fallback,
+            [
+                "explorer",
+                "explorer_validator",
+                "ollama_fallback_stamp",
+                "planner_hard_stop",
+            ],
+        )
+        g.add_conditional_edges(
             "explorer_validator",
-            "ollama_fallback_stamp",
-            "planner_hard_stop",
-        ],
-    )
-    g.add_conditional_edges(
-        "explorer_validator",
-        decide_after_explorer_validator,
-        ["explorer", "planner"],
-    )
-    g.add_conditional_edges(
-        "planner",
-        decide_after_planner,
-        ["planner", "planner_validator"],
-    )
-    g.add_conditional_edges(
-        "planner_validator",
-        decide_after_planner_validator,
-        ["planner", "gate"],
-    )
-    g.add_edge("gate", "artifact")
-    g.add_edge("artifact", END)
-    g.add_edge("ollama_fallback_stamp", "ollama_fallback")
-    g.add_edge("ollama_fallback", "ollama_fallback_dispatch")
-    g.add_conditional_edges(
-        "ollama_fallback_dispatch",
-        _route_after_fallback_dispatch,
-        {"explorer": "explorer", "planner_hard_stop": "planner_hard_stop"},
-    )
-    g.add_edge("planner_hard_stop", END)
+            decide_after_explorer_validator,
+            ["explorer", "planner"],
+        )
+        g.add_conditional_edges(
+            "planner",
+            decide_after_planner,
+            ["planner", "planner_validator"],
+        )
+        g.add_conditional_edges(
+            "planner_validator",
+            decide_after_planner_validator,
+            ["planner", "gate"],
+        )
+        g.add_edge("gate", "artifact")
+        g.add_edge("artifact", END)
+        g.add_edge("ollama_fallback_stamp", "ollama_fallback")
+        g.add_edge("ollama_fallback", "ollama_fallback_dispatch")
+        g.add_conditional_edges(
+            "ollama_fallback_dispatch",
+            _route_after_fallback_dispatch,
+            {"explorer": "explorer", "planner_hard_stop": "planner_hard_stop"},
+        )
+        g.add_edge("planner_hard_stop", END)
+
     return g
 
 

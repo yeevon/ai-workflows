@@ -1,6 +1,6 @@
 # Task 03 — Workflow wiring (module-constant cascade enable + planner / slice_refactor integration)
 
-**Status:** 📝 Planned (drafted 2026-04-27, rewritten 2026-04-27 to apply KDR-014 / ADR-0009).
+**Status:** ✅ Implemented (2026-04-27).
 **Grounding:** [milestone README](README.md) · [ADR-0004 §Decision items 3 + 5](../../adr/0004_tiered_audit_cascade.md) · [ADR-0009 — framework owns quality policy](../../adr/0009_framework_owns_policy.md) · [architecture.md §4.2 / §4.3 / §9 KDR-004 / KDR-006 / KDR-011 / KDR-014](../../architecture.md) · [task_02 close-out (cascade primitive landed)](task_02_audit_cascade_node.md) · [graph/audit_cascade.py](../../../ai_workflows/graph/audit_cascade.py) · [workflows/planner.py:148-160 (PlannerInput)](../../../ai_workflows/workflows/planner.py#L148-L160) · [workflows/slice_refactor.py:413-470 (SliceRefactorInput)](../../../ai_workflows/workflows/slice_refactor.py#L413-L470).
 
 ## What to Build

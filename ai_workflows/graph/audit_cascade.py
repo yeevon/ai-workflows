@@ -44,7 +44,8 @@ Relationship to sibling modules
   here; :class:`AuditFailure` is a ``RetryableSemantic`` subclass so the
   existing ``RetryingEdge`` routes it without taxonomy changes (KDR-006).
 * ``workflows/`` — this module is graph-layer only; workflow integration
-  (``audit_cascade_enabled`` config field) lands at M12 T03.
+  lands via module-level ``_AUDIT_CASCADE_ENABLED`` constants in
+  ``planner.py`` / ``slice_refactor.py`` per ADR-0009 / KDR-014 (M12 T03).
 """
 
 from __future__ import annotations
@@ -99,6 +100,22 @@ class _CascadeState(TypedDict, total=False):
     (``audit_cascade_*``) are for the default ``name="audit_cascade"``; callers
     that pass a custom ``name`` will use different concrete key names but the
     same schema shape.
+
+    Pass-through channels
+    ----------------------
+    LangGraph filters parent-graph state to only the keys declared here when
+    invoking the cascade as an embedded sub-graph node.  Any field the
+    ``primary_prompt_fn`` / ``auditor_prompt_fn`` needs to read from the
+    parent state MUST be declared in this TypedDict, or it will be silently
+    dropped at the sub-graph boundary.
+
+    * ``slice`` — pass-through for the per-Send :class:`SliceSpec` payload
+      that the ``slice_refactor`` workflow's ``_slice_worker_prompt`` reads.
+      Typed ``Any`` (no coupling to ``SliceSpec``) — the cascade primitive
+      does not use or modify this field; it is strictly a transparent carrier
+      for embedding workflows whose prompt_fn reads per-branch context.
+      Added M12 T03 (cycle 2): discovered when end-to-end runtime test for
+      AC-10 / AC-11 showed ``state["slice"]`` missing inside the cascade.
     """
 
     # Standard LangGraph / error-handler channels (KDR-006 / KDR-009)
@@ -125,6 +142,9 @@ class _CascadeState(TypedDict, total=False):
 
     # Human-gate response channel (name-prefixed)
     audit_cascade_audit_exhausted_response: str
+
+    # Pass-through for embedding workflows (see class docstring).
+    slice: Any
 
 
 def audit_cascade_node(
@@ -466,6 +486,15 @@ def audit_cascade_node(
             f"{name}_audit_verdict": Any,
             # Gate channel
             f"{name}_audit_exhausted_response": str,
+            # Pass-through for embedding workflows — see _CascadeState docstring.
+            # Declared Any so no coupling to the SliceSpec type from slice_refactor.
+            # The cascade primitive does not read or write this field; it is a
+            # transparent carrier for per-branch context that prompt_fns need
+            # (e.g. _slice_worker_prompt reads state["slice"] per-branch).
+            # Added M12 T03 cycle 2: discovered when runtime test for AC-10/11
+            # showed LangGraph filtering slice from SliceBranchState → cascade
+            # state because the key was absent from _DynamicState.
+            "slice": Any,
         },
         total=False,
     )
@@ -551,7 +580,7 @@ def _wrap_verdict_with_transcript(
     ``last_exception`` / ``_retry_counts`` / ``_non_retryable_failures`` keys.
     """
     async def _wrapped(
-        state: GraphState, config: RunnableConfig | None = None
+        state: GraphState, config: RunnableConfig = None
     ) -> dict[str, Any]:
         try:
             return await node(state)
@@ -606,7 +635,7 @@ def _stamp_role_on_success(
     if accepts_config:
 
         async def _wrapped_with_config(
-            state: GraphState, config: RunnableConfig | None = None
+            state: GraphState, config: RunnableConfig = None
         ) -> dict[str, Any]:
             result = await node(state, config)
             if isinstance(result, dict) and result.get("last_exception") is None:

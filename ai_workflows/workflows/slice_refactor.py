@@ -1,5 +1,33 @@
 """Slice-refactor workflow (M6).
 
+.. note::
+
+   **Quality knobs (M12 Task 03 / ADR-0009 / KDR-014)**
+
+   The audit cascade for ``slice-worker`` is opt-in via a module-level
+   constant:
+
+   - ``_AUDIT_CASCADE_ENABLED_DEFAULT = False`` — framework-author default.
+   - ``AIW_AUDIT_CASCADE=1`` — global env-var override; flips ALL workflows.
+   - ``AIW_AUDIT_CASCADE_SLICE_REFACTOR=1`` — per-workflow override.
+
+   Per KDR-014, quality knobs MUST NOT appear on ``SliceRefactorInput`` or
+   any ``WorkflowSpec``/CLI flag. The decision is made once per Python process
+   at module-import time. See ADR-0009 §Open questions for the enable-only
+   asymmetry.
+
+   The ``_AUDIT_CASCADE_ENABLED`` constant has the same name in ``planner.py``
+   and ``slice_refactor.py`` by design — each module owns its own decision;
+   cross-module references must qualify with the module name.
+
+   The composed planner sub-graph inherits the planner module's own cascade
+   decision via ``build_planner()`` — its compiled graph reflects whatever the
+   planner module decided at its own import. ``slice_refactor``'s cascade
+   decision applies only to the ``slice-worker`` node inside
+   ``_build_slice_branch_subgraph()``.
+
+Original module docstring follows.
+
 Outer DAG that composes the M3/M5 ``planner`` sub-graph with a parallel
 per-slice worker fan-out, strict-review gate, and ``apply`` terminal.
 Introduced by **M6 Task 01** (slice-discovery phase); extended by
@@ -146,6 +174,7 @@ from __future__ import annotations
 
 import json
 import operator
+import os
 from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -153,6 +182,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from ai_workflows.graph.audit_cascade import audit_cascade_node
 from ai_workflows.graph.error_handler import wrap_with_error_handler
 from ai_workflows.graph.human_gate import human_gate
 from ai_workflows.graph.ollama_fallback_gate import (
@@ -164,6 +194,7 @@ from ai_workflows.graph.retrying_edge import retrying_edge
 from ai_workflows.graph.tiered_node import tiered_node
 from ai_workflows.primitives.circuit_breaker import CircuitOpen
 from ai_workflows.primitives.retry import (
+    AuditFailure,
     NonRetryable,
     RetryableSemantic,
     RetryPolicy,
@@ -179,7 +210,31 @@ from ai_workflows.workflows.planner import (
     planner_tier_registry,
 )
 
+# ---------------------------------------------------------------------------
+# M12 T03 / ADR-0009 / KDR-014 — cascade quality policy at module level.
+# Same-named constant as planner.py by design — each module owns its own
+# decision; cross-module references must qualify with the module name.
+# Framework-author default; flip to True post-T04 telemetry per workflow,
+# code-edit + commit + release. NO ``audit_cascade_enabled`` field on
+# SliceRefactorInput; per KDR-014 quality knobs MUST NOT land on Input models.
+# ---------------------------------------------------------------------------
+_AUDIT_CASCADE_ENABLED_DEFAULT = False
+
+# Operator override (read at module-import). Two granularities:
+#   AIW_AUDIT_CASCADE=1                      — flips ALL workflows.
+#   AIW_AUDIT_CASCADE_SLICE_REFACTOR=1       — flips ONLY this workflow.
+# Same enable-only-asymmetry semantics as planner.py: per-workflow var
+# cannot disable what the global enables. See ADR-0009 §Open questions
+# for the three-state-override deferral.
+_AUDIT_CASCADE_ENABLED = (
+    _AUDIT_CASCADE_ENABLED_DEFAULT
+    or os.getenv("AIW_AUDIT_CASCADE", "0") == "1"
+    or os.getenv("AIW_AUDIT_CASCADE_SLICE_REFACTOR", "0") == "1"
+)
+
 __all__ = [
+    "_AUDIT_CASCADE_ENABLED_DEFAULT",
+    "_AUDIT_CASCADE_ENABLED",
     "SLICE_REFACTOR_OLLAMA_FALLBACK",
     "SliceRefactorInput",
     "SliceSpec",
@@ -657,6 +712,22 @@ class SliceBranchState(TypedDict, total=False):
     _circuit_open_slice_ids: Annotated[list[str], operator.add]
     _mid_run_tier_overrides: dict[str, str]
 
+    # M12 T03 — cascade channels populated when slice_refactor's
+    # _AUDIT_CASCADE_ENABLED is True. Per-branch only — parent
+    # SliceRefactorState does NOT declare these (Option A locked
+    # 2026-04-27; see issue file for round-3 H1 arbitration).
+    cascade_role: str  # Literal["author", "auditor", "verdict"] in spirit
+    # cascade_transcript inner shape: {"author_attempts": list[str],
+    # "auditor_verdicts": list[AuditVerdict]} — per audit_cascade.py:674-677
+    cascade_transcript: dict[str, list]
+    slice_worker_audit_primary_output: str
+    slice_worker_audit_primary_parsed: SliceResult  # branch-local; not propagated up
+    slice_worker_audit_primary_output_revision_hint: str | None
+    slice_worker_audit_auditor_output: str
+    slice_worker_audit_auditor_output_revision_hint: str | None
+    slice_worker_audit_audit_verdict: Any
+    slice_worker_audit_audit_exhausted_response: str
+
 
 def _slice_list_normalize(
     state: SliceRefactorState, config: RunnableConfig
@@ -873,6 +944,34 @@ def _slice_branch_finalize(state: SliceBranchState) -> dict[str, Any]:
     already_fired = state.get("_ollama_fallback_fired") or False
     if isinstance(exc, CircuitOpen) and not already_fired:
         return {"_circuit_open_slice_ids": [slice_id]}
+    # M12 T03 — cascade-exhausted branches: when _AUDIT_CASCADE_ENABLED is True
+    # and audit_cascade_node(skip_terminal_gate=True) routes exhaustion to END,
+    # the exception in state['last_exception'] at line 935 (the
+    # state.get("last_exception") read) is an AuditFailure carrying structured
+    # verdict data. Fold it into a SliceFailure with a structured prefix so
+    # the parent's M11 gate-context projection distinguishes cascade exhaustion
+    # from ordinary worker failures. The isinstance(exc, AuditFailure) check
+    # must precede the generic RetryableSemantic branch because AuditFailure
+    # is a RetryableSemantic subclass.
+    if isinstance(exc, AuditFailure):
+        reasons_joined = "; ".join(exc.failure_reasons) if exc.failure_reasons else "(none)"
+        suggested = exc.suggested_approach or "(none)"
+        audit_count = len(
+            (state.get("cascade_transcript") or {}).get("auditor_verdicts") or []
+        )
+        last_error = (
+            f"audit_cascade_exhausted: {audit_count} attempts; "
+            f"reasons=[{reasons_joined}]; suggested_approach={suggested}"
+        )
+        return {
+            "slice_failures": [
+                SliceFailure(
+                    slice_id=slice_id,
+                    last_error=last_error,
+                    failure_bucket="retryable_semantic",
+                )
+            ]
+        }
     # The else branch covers NonRetryable (the T03 escalation pattern),
     # exhausted RetryableTransient (further retries are impossible, so
     # the effect matches non_retryable), any unclassified exception
@@ -930,53 +1029,106 @@ def _build_slice_branch_subgraph() -> Any:
     Compiled without a checkpointer per KDR-009 — the parent's
     :class:`AsyncSqliteSaver` is shared at run time by LangGraph so
     Send-branch state rides the same durable store as the parent.
+
+    M12 T03: when ``_AUDIT_CASCADE_ENABLED`` is True, the plain
+    ``slice_worker`` node is replaced by an ``audit_cascade_node(...)``
+    compiled cascade sub-graph with ``skip_terminal_gate=True`` (T08 —
+    branch-local exhaustion folds into :class:`SliceFailure` via
+    :func:`_slice_branch_finalize` without triggering N parallel operator
+    interrupts). See ``slice_refactor.py`` module docstring §Quality knobs.
     """
     policy = SLICE_WORKER_RETRY_POLICY
 
-    worker = wrap_with_error_handler(
-        tiered_node(
-            tier="slice-worker",
-            prompt_fn=_slice_worker_prompt,
-            output_schema=SliceResult,
-            node_name="slice_worker",
-        ),
-        node_name="slice_worker",
-    )
-    validator = wrap_with_error_handler(
-        _slice_worker_validator,
-        node_name="slice_worker_validator",
-    )
-
-    decide_after_worker = retrying_edge(
-        on_transient="slice_worker",
-        on_semantic="slice_worker",
-        on_terminal="slice_worker_validator",
-        policy=policy,
-    )
-    decide_after_validator = retrying_edge(
-        on_transient="slice_worker",
-        on_semantic="slice_worker",
-        on_terminal="slice_branch_finalize",
-        policy=policy,
-    )
-
     g: StateGraph = StateGraph(SliceBranchState)
-    g.add_node("slice_worker", worker)
-    g.add_node("slice_worker_validator", validator)
-    g.add_node("slice_branch_finalize", _slice_branch_finalize)
 
-    g.add_edge(START, "slice_worker")
-    g.add_conditional_edges(
-        "slice_worker",
-        decide_after_worker,
-        ["slice_worker", "slice_worker_validator"],
-    )
-    g.add_conditional_edges(
-        "slice_worker_validator",
-        decide_after_validator,
-        ["slice_worker", "slice_branch_finalize"],
-    )
-    g.add_edge("slice_branch_finalize", END)
+    if _AUDIT_CASCADE_ENABLED:
+        # Build-time only — do NOT call audit_cascade_node() in a
+        # per-slice or per-step inner loop.
+        slice_worker_node = audit_cascade_node(
+            primary_tier="slice-worker",
+            primary_prompt_fn=_slice_worker_prompt,
+            primary_output_schema=SliceResult,
+            auditor_tier="auditor-sonnet",
+            policy=policy,
+            name="slice_worker_audit",
+            skip_terminal_gate=True,  # T08 — branch-local exhaustion folds into SliceFailure
+        )
+
+        # The cascade sub-graph writes results into slice_worker_audit_primary_parsed
+        # and failures into last_exception. The slice_branch_finalize node handles
+        # both the happy path (cascade-passed: slice_worker_audit_primary_parsed has
+        # the SliceResult) and the exhausted path (AuditFailure in last_exception).
+        def _cascade_to_slice_results(state: SliceBranchState) -> dict[str, Any]:
+            """Bridge cascade output to the slice_results key expected by the parent.
+
+            Reads ``slice_worker_audit_primary_parsed`` written by the cascade on
+            the success path and folds it into the reducer-backed ``slice_results``
+            channel so the parent's ``operator.add`` reducer accumulates it.
+            On the failure path (AuditFailure in last_exception) this node
+            returns ``{}`` — the finalize node handles the failure record.
+            """
+            exc = state.get("last_exception")
+            if exc is not None:
+                # Failure path — finalize handles it.
+                return {}
+            parsed = state.get("slice_worker_audit_primary_parsed")
+            if parsed is not None:
+                return {"slice_results": [parsed]}
+            return {}
+
+        g.add_node("slice_worker", slice_worker_node)
+        g.add_node("cascade_bridge", _cascade_to_slice_results)
+        g.add_node("slice_branch_finalize", _slice_branch_finalize)
+
+        g.add_edge(START, "slice_worker")
+        g.add_edge("slice_worker", "cascade_bridge")
+        g.add_edge("cascade_bridge", "slice_branch_finalize")
+        g.add_edge("slice_branch_finalize", END)
+    else:
+        # Standard M11 path.
+        worker = wrap_with_error_handler(
+            tiered_node(
+                tier="slice-worker",
+                prompt_fn=_slice_worker_prompt,
+                output_schema=SliceResult,
+                node_name="slice_worker",
+            ),
+            node_name="slice_worker",
+        )
+        validator = wrap_with_error_handler(
+            _slice_worker_validator,
+            node_name="slice_worker_validator",
+        )
+
+        decide_after_worker = retrying_edge(
+            on_transient="slice_worker",
+            on_semantic="slice_worker",
+            on_terminal="slice_worker_validator",
+            policy=policy,
+        )
+        decide_after_validator = retrying_edge(
+            on_transient="slice_worker",
+            on_semantic="slice_worker",
+            on_terminal="slice_branch_finalize",
+            policy=policy,
+        )
+
+        g.add_node("slice_worker", worker)
+        g.add_node("slice_worker_validator", validator)
+        g.add_node("slice_branch_finalize", _slice_branch_finalize)
+
+        g.add_edge(START, "slice_worker")
+        g.add_conditional_edges(
+            "slice_worker",
+            decide_after_worker,
+            ["slice_worker", "slice_worker_validator"],
+        )
+        g.add_conditional_edges(
+            "slice_worker_validator",
+            decide_after_validator,
+            ["slice_worker", "slice_branch_finalize"],
+        )
+        g.add_edge("slice_branch_finalize", END)
     return g.compile()
 
 
