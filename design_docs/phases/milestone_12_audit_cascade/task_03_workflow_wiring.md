@@ -323,7 +323,7 @@ All four invocations must print their `OK:` line. The smoke fails closed: any as
 
 - **T01** — `auditor-sonnet` / `auditor-opus` tiers must exist in the workflow registries. **Met:** T01 shipped at `a7f3e8f`.
 - **T02** — `audit_cascade_node` primitive must exist. **Met:** T02 shipped at `fc8ef19`.
-- **T08** — `audit_cascade_node()` `skip_terminal_gate: bool = False` parameter must exist (T02 amendment for cascade-exhausted-without-interrupt path; load-bearing for slice_refactor's per-branch cascade). **Required predecessor — T03 cannot ship until T08 closes.** Spec at `task_08_audit_cascade_skip_terminal_gate.md` (drafted 2026-04-27 after round-4 H1 arbitration). Roadmap-selector's sequential walk must respect this — T08 ships before T03 even though T03's number is lower.
+- **T08** — `audit_cascade_node()` `skip_terminal_gate: bool = False` parameter must exist (T02 amendment for cascade-exhausted-without-interrupt path; load-bearing for slice_refactor's per-branch cascade). **Required predecessor — T03 cannot ship until T08 closes.** **Met:** T08 shipped at `e7e8a31`.
 - **ADR-0009 / KDR-014** — must be committed to architecture.md §9 + the ADR file before T03 implements (per autonomous-mode KDR-isolation rule, KDR additions land on a separate isolated commit). **Met:** committed at `91ca343`.
 
 ## Out of scope (explicit)
