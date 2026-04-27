@@ -41,8 +41,9 @@ services:
       # (if any) does not collide with the container's Python ABI.
       - aiw_venv:/home/papa-jochy/prj/ai-workflows/.venv
       # Persistent uv download cache — first sync is slow, subsequent
-      # are fast.
-      - aiw_uv_cache:/root/.cache/uv
+      # are fast. Container user is aiw (HOME=/home/aiw); cache lives
+      # under that user's home, not /root.
+      - aiw_uv_cache:/home/aiw/.cache/uv
       # Persistent Claude CLI state (auth tokens, plugins, settings,
       # plans, history). Container-isolated by default — host
       # credentials are NOT shared (point 5: user re-auths inside).
@@ -52,6 +53,14 @@ services:
       # so memory persists between host and container while auth /
       # settings stay container-local.
       - ${HOME}/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory:/home/aiw/.claude/projects/-home-papa-jochy-prj-ai-workflows/memory
+      # Read-only bind of host SSH config so the container can `git
+      # push origin design_branch` against the SSH remote
+      # (git@github.com:...) using the operator's existing host keys.
+      # UID/GID 1000 inside the container matches the host user, so
+      # SSH's strict ownership checks pass without chown gymnastics.
+      # Read-only (`:ro`) — no key material can be written or
+      # rotated from inside the sandbox.
+      - ${HOME}/.ssh:/home/aiw/.ssh:ro
     env_file:
       # Optional. .env is gitignored at repo root; runtime keys
       # (GEMINI_API_KEY, PYPI_TOKEN) live there. Compose tolerates a

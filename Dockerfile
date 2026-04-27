@@ -81,6 +81,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         make \
         gnupg \
         gosu \
+        openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js (for the `claude` CLI, distributed as @anthropic-ai/claude-code
