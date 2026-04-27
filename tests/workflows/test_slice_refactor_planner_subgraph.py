@@ -238,6 +238,7 @@ def test_initial_state_hook_constructs_planner_input_for_subgraph() -> None:
 
     state = _build_initial_state(
         module,
+        "slice_refactor",
         "run-hook",
         {"goal": "Split the monolith.", "context": None, "max_steps": 5},
     )

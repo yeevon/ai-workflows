@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-26
+
+### Fixed
+- **Spec-API workflow dispatch (yanks 0.3.0).** ``register_workflow(spec)`` now
+  persists the ``WorkflowSpec`` in a parallel ``_SPEC_REGISTRY`` so dispatch's
+  ``_build_initial_state`` can construct typed input via
+  ``spec.input_schema(**inputs)``. Without this, every spec-API workflow
+  invoked through ``aiw run`` or the MCP ``run_workflow`` tool failed with
+  ``ValueError: workflow ... exposes no Input schema`` (0.3.0 dropped the spec
+  on the floor at registration time). The headline declarative authoring
+  surface from 0.3.0 was non-functional for downstream consumers; this
+  release fixes the dispatch path and yanks 0.3.0 from PyPI.
+- New ``ai_workflows.workflows.get_spec(name)`` helper exposes the spec
+  registry for introspection tooling.
+
+### Added
+- ``tests/release/test_install_smoke.py`` — real-install end-to-end smoke that
+  ``uv build``s the wheel, ``uv pip install``s it into a fresh venv, registers
+  a synthetic no-LLM spec-API workflow via ``AIW_EXTRA_WORKFLOW_MODULES``, and
+  runs ``aiw run`` against the installed binary. The 0.3.0 break would have
+  failed this gate. Tests under ``tests/release/`` run by default (no
+  ``AIW_E2E=1`` opt-in) so the regression can never silently re-ship.
+- ``scripts/release_smoke.sh`` Stage 7 — same end-to-end check at the
+  pre-publish bash gate.
+
+### Changed
+- ``CLAUDE.md §Non-negotiables`` — new "Real-install release smoke" rule.
+  Tests that pre-register workflows via fixtures bypass the dispatch path the
+  published CLI uses; they don't count as wire-level proof. Every release
+  must clear ``tests/release/`` plus ``scripts/release_smoke.sh``.
+
 ## [0.3.0] - 2026-04-26
+
+**Yanked 2026-04-26 — broken declarative-API dispatch. Use 0.3.1 or later.**
 
 Declarative authoring surface (ADR-0008). Downstream consumers — and the
 in-tree workflows themselves — can now describe an `ai-workflows` workflow

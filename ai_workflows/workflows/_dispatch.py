@@ -311,31 +311,42 @@ def _resolve_final_state_key(module: Any) -> str:
 
 def _build_initial_state(
     module: Any,
+    workflow_name: str,
     run_id: str,
     inputs: dict[str, Any],
 ) -> dict[str, Any]:
     """Construct the workflow's initial state dict.
 
-    Resolution order (M6 T01):
+    Resolution order:
 
     1. If the workflow module exposes a callable ``initial_state(run_id,
        inputs) -> dict``, call it. This is the **convention hook** that
-       lets workflows whose initial state is not a simple ``PlannerInput``
-       participate in shared dispatch without dispatch knowing their
-       Input schema name.
-    2. Otherwise fall back to the legacy path: look up ``PlannerInput``
-       by name and instantiate from ``inputs`` — unchanged for the
-       planner workflow so M3's surface behaviour is identical.
-
-    The hook form lets slice_refactor (M6 T01) supply an initial state
-    whose ``input`` channel is a :class:`PlannerInput` constructed from a
-    caller-supplied :class:`SliceRefactorInput`, without dispatch
-    hardcoding either class name. Future workflows follow the same
-    pattern.
+       lets imperative workflows whose initial state is not a simple
+       ``PlannerInput`` participate in shared dispatch without dispatch
+       knowing their Input schema name (M6 T01).
+    2. Else if ``workflow_name`` resolves through
+       :func:`ai_workflows.workflows.get_spec`, the workflow is a
+       declarative-API ``WorkflowSpec``: build typed input via
+       ``spec.input_schema(**inputs).model_dump()`` and spread the fields
+       directly into state alongside ``run_id``. Spec-API workflows expect
+       state to expose input fields at the top level so prompt templates
+       can reference them as ``{field_name}`` (0.3.1 fix — 0.3.0 dropped
+       the spec at registration time so this path returned ``None``).
+    3. Otherwise fall back to the legacy ``PlannerInput`` lookup by
+       module attribute — unchanged for the planner workflow so M3's
+       surface behaviour is identical.
     """
+    from ai_workflows.workflows import get_spec  # local — avoids circular at module load
+
     hook = getattr(module, "initial_state", None)
     if callable(hook):
         return hook(run_id, inputs)
+    spec = get_spec(workflow_name)
+    if spec is not None:
+        return {
+            "run_id": run_id,
+            **spec.input_schema(**inputs).model_dump(),
+        }
     input_cls = getattr(module, "PlannerInput", None)
     if input_cls is None:
         raise ValueError(f"workflow {module.__name__!r} exposes no Input schema")
@@ -569,7 +580,7 @@ async def run_workflow(
     run_id_resolved = run_id or _generate_ulid()
     base_registry = _resolve_tier_registry(workflow, workflow_module)
     tier_registry = _apply_tier_overrides(base_registry, tier_overrides)
-    initial_state = _build_initial_state(workflow_module, run_id_resolved, inputs)
+    initial_state = _build_initial_state(workflow_module, workflow, run_id_resolved, inputs)
     final_state_key = _resolve_final_state_key(workflow_module)
 
     storage = await SQLiteStorage.open(default_storage_path())

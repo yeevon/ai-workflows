@@ -88,6 +88,7 @@ __all__ = [
     "WorkflowBuilder",
     "register",
     "get",
+    "get_spec",
     "list_workflows",
     "ExternalWorkflowImportError",
     "load_extra_workflow_modules",
@@ -106,6 +107,7 @@ __all__ = [
 WorkflowBuilder = Callable[[], Any]
 
 _REGISTRY: dict[str, WorkflowBuilder] = {}
+_SPEC_REGISTRY: dict[str, WorkflowSpec] = {}
 
 
 def register(name: str, builder: WorkflowBuilder) -> None:
@@ -144,6 +146,22 @@ def get(name: str) -> WorkflowBuilder:
         ) from None
 
 
+def get_spec(name: str) -> WorkflowSpec | None:
+    """Return the ``WorkflowSpec`` registered under ``name`` or ``None``.
+
+    Spec-API workflows register both a builder (via :func:`register`) and the
+    originating :class:`WorkflowSpec` (via :func:`register_workflow`). Imperative
+    workflows registered via :func:`register` directly have no spec — this
+    helper returns ``None`` for those.
+
+    Dispatch's ``_build_initial_state`` consults this lookup to construct the
+    typed input from ``spec.input_schema`` for spec-API workflows; without the
+    spec, dispatch falls back to the imperative ``initial_state`` hook /
+    ``PlannerInput`` lookup path.
+    """
+    return _SPEC_REGISTRY.get(name)
+
+
 def list_workflows() -> list[str]:
     """Return all registered workflow names, sorted alphabetically."""
     return sorted(_REGISTRY)
@@ -165,6 +183,7 @@ def _reset_for_tests() -> None:
     import sys
 
     _REGISTRY.clear()
+    _SPEC_REGISTRY.clear()
     prefix = "ai_workflows.workflows._compiled_"
     stale = [k for k in sys.modules if k.startswith(prefix)]
     for key in stale:
