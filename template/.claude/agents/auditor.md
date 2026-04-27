@@ -37,6 +37,8 @@ For **code tasks specifically**, build success is necessary but not sufficient. 
 
 Grade each AC individually in a table. Carry-over items count as ACs and are graded individually. Passing tests ≠ done — an AC is met only when the implementation visibly satisfies the AC's intent.
 
+**Carry-over checkbox-cargo-cult** (real failure mode observed in autonomy validation): Builder may tick `[x]` on a carry-over item without applying the spec edit the item describes. For every ticked carry-over checkbox, **verify the underlying edit actually landed in the diff** — `git show <commit> -- <spec_or_source_file>` for textual edits; for code edits, the cited symbol or test should appear. A `[x]` without a matching diff is a HIGH spec-drift finding ("carry-over ticked done without the edit applied"), not a LOW. This is exactly the kind of silent failure the Auditor exists to catch.
+
 ## Phase 4 — Critical sweep
 
 Look specifically for:
