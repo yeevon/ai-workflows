@@ -1,6 +1,6 @@
 # Milestone 20 — Autonomy Loop Optimization
 
-**Status:** 📝 Drafting (revised 2026-04-27 after research-brief synthesis). Branch: `workflow_optimization` (user-named; milestone doc uses `autonomy_loop_optimization` to avoid overloading the existing `ai_workflows/workflows/` package term). Grounding: research brief `design_docs/analysis/m20_orchestration_research_brief.md` (Q1–Q2 2026 best-practices synthesis post-Opus-4.6) · project memory `project_autonomy_optimization_followups.md` · `architecture.md` §9 KDRs · autonomy validation (M12 T01 a7f3e8f, T02 fc8ef19, T03 1677889 — autopilot end-to-end validation 2026-04-27).
+**Status:** 📝 Drafting (revised 2026-04-27 after research-brief synthesis; **split 2026-04-27 — Phases E/F/G moved to [M21](../milestone_21_autonomy_loop_continuation/README.md)** per audit recommendation M3). Branch: `workflow_optimization` (user-named; milestone doc uses `autonomy_loop_optimization` to avoid overloading the existing `ai_workflows/workflows/` package term). Grounding: research brief `design_docs/analysis/m20_orchestration_research_brief.md` (Q1–Q2 2026 best-practices synthesis post-Opus-4.6) · project memory `project_autonomy_optimization_followups.md` · `architecture.md` §9 KDRs · autonomy validation (M12 T01 a7f3e8f, T02 fc8ef19, T03 1677889 — autopilot end-to-end validation 2026-04-27).
 
 **Scope note.** Every milestone before M20 changed the runtime (`ai_workflows/` package). M20 changes the autonomy infrastructure — agent prompts (`.claude/agents/`), slash commands (`.claude/commands/`), and the project context doc (`CLAUDE.md`). Runtime code is read-only at this milestone except where a finding requires a runtime hook (e.g. a structured log line the orchestrator parses, or per-agent telemetry capture). KDR drift checks still apply — M20 must not violate the seven load-bearing KDRs while reshaping the loop that enforces them.
 
@@ -36,12 +36,10 @@ Beyond these shifts, the per-task token cost has four leaks compounding multipli
 3. **Empirically-grounded model dispatch.** Shadow-Audit study lands first on a 6-cell matrix (Sonnet/Opus-4.6/Opus-4.7 × Builder/Auditor across 5 tasks). Study produces verdict-count delta, token-cost delta, wall-clock delta, **and Max-subscription weekly-quota consumption delta** per cell — quota is the binding constraint per KDR-003, not per-token price. Default-Sonnet + `--expert` Opus override + `--cheap` Haiku for mechanical roles is conditional on the study showing strict-loop-compliance holds. No defaults flip without the data.
 4. **Adaptive-thinking migration.** Eliminate every `thinking: max` and `budget_tokens` reference in the agent prompts and slash-commands; migrate to `thinking: {type: "adaptive"}` + per-role `effort` settings. Required for forward compatibility with Opus 4.7 and any future model that rejects manual budgets.
 5. **Defense-in-depth integrity.** Gate-output integrity check (parse raw stdout, fail-closed on missing output, paired with SDK-native `outputFormat: json_schema` enforcement) plus task-integrity check (orchestrator independently verifies non-empty diff, non-empty test diff for feature work, and at least one named gate before stamping AUTO-CLEAN).
-6. **Agent-prompt deduplication.** Extract shared non-negotiables into `.claude/agents/_common/`; each agent's prompt declares it follows the shared block instead of inlining it. CLAUDE.md becomes a thin index — agent-specific sections (threat model, KDR table, verification discipline) move into the agents that read them.
-7. **MD-file discoverability.** One topic per file in `agent_docs/`, ≤500-token sections with `##` anchors, top-of-file 3-line summary, no inlined code (link to `src/foo.py:42` instead). One-time work that pays off every sub-agent spawn thereafter.
-8. **Cache-breakpoint discipline.** Pin orchestrator and sub-agent cache breakpoints on the *last stable block* (loaded non_negotiables + agent system prompt + tool definitions), explicitly *before* the dynamic per-cycle context. Verify with empirical cache-hit telemetry. Critical: the literature documents 5–20× session cost blowups from misplaced breakpoints.
-9. **Per-cycle telemetry.** Wrap each sub-agent invocation to capture `cache_read_input_tokens`, `cache_creation_input_tokens`, `input_tokens`, `output_tokens`, model, effort. Persist to `.cycle/{agent}.usage.json`. This is the basis for evidence-based decisions on T07 defaults and for catching the metering-opacity failure mode (anthropics/claude-code #52502).
-10. **New productivity commands.** At least one of (`/triage`, `/check`, `/ship`, `/sweep`) lands as a productivity surface alongside the optimization work; full set scoped per task spec. Structure as Skills (`.claude/skills/triage/`) following the Anthropic Agent Skills pattern (progressive disclosure, ~100 tokens metadata, full skill loads only on trigger).
-11. **Parallel-builders foundation.** Spec format extension that enumerates per-slice file/symbol scope (T17). Worktree-coordinated parallel Builder spawn (T18) and orchestrator-owned close-out (T19) lean on Claude Code v2.1.49's native `--worktree` and `isolation: worktree` frontmatter. Stretch goals — explicit defer-to-M21 if scope grows.
+6. **Cache-breakpoint discipline.** Pin orchestrator and sub-agent cache breakpoints on the *last stable block* (loaded non_negotiables + agent system prompt + tool definitions), explicitly *before* the dynamic per-cycle context. Verify with empirical cache-hit telemetry. Critical: the literature documents 5–20× session cost blowups from misplaced breakpoints.
+7. **Per-cycle telemetry.** Wrap each sub-agent invocation to capture `cache_read_input_tokens`, `cache_creation_input_tokens`, `input_tokens`, `output_tokens`, model, effort. Persist to `.cycle/{agent}.usage.json`. This is the basis for evidence-based decisions on T07 defaults and for catching the metering-opacity failure mode (anthropics/claude-code #52502).
+
+**Goals 8-11 (agent-prompt deduplication, MD-file discoverability, productivity commands, parallel-builders foundation) moved to [M21](../milestone_21_autonomy_loop_continuation/README.md) per audit recommendation M3.**
 
 ---
 
@@ -59,12 +57,10 @@ Beyond these shifts, the per-task token cost has four leaks compounding multipli
 8. **(G4)** Zero `budget_tokens` references and zero `thinking: max` literal directives anywhere in `.claude/agents/*.md` and `.claude/commands/*.md`. All replaced by `thinking: {type: "adaptive"}` plus per-role `effort` setting. Test: `grep -rE "budget_tokens|thinking:[[:space:]]*max" .claude/` returns zero hits.
 9. **(G5)** Loop controller parses raw stdout of gate commands (or `tail -3` of a captured log file) before stamping AUTO-CLEAN. Missing structured output = treat as failed gate. SDK `outputFormat: json_schema` retry-on-mismatch is the first line of defence; raw-stdout parsing with fail-closed is the second. Test: synthetic Builder report claiming "all gates pass" with empty actual stdout — orchestrator catches and halts.
 10. **(G5)** Pre-commit ceremony: `git diff --stat <prev-commit>..HEAD` confirms non-trivial diff. For feature work, separate non-empty *test* diff assertion (a Builder can satisfy a non-empty-diff check by editing a comment). Empty diff after AUTO-CLEAN = halt. Orchestrator independently re-runs at least one named gate (e.g. `pytest -q` tail) before stamping.
-11. **(G6)** `.claude/agents/_common/non_negotiables.md` exists, ≤ 500 tokens, referenced explicitly in each agent's frontmatter. CLAUDE.md slim: threat-model section moves to `security-reviewer.md`, seven-KDR table moves to `auditor.md` + `task-analyzer.md` + `architect.md` + `dependency-auditor.md`, "Verification discipline" block moves to `_common/verification_discipline.md`. **Each removed section retains a 1-paragraph summary + section-anchor pointer in CLAUDE.md** (e.g. threat-model summary → `[.claude/agents/security-reviewer.md#threat-model]`). This preserves main-context Claude's ad-hoc answer capacity for "is this safe?" / "does this violate KDR-X?" questions without spawning a sub-agent every time. Test: `wc -l CLAUDE.md` shows ≥ 30% reduction; `grep -c "^## " CLAUDE.md` confirms each removed section has a placeholder summary + anchor link. Agent-specific detail loads only when the agent runs.
-12. **(G7)** MD-file discoverability audit completed. Every file in `agent_docs/` and `.claude/agents/*.md` has: (a) one topic per file, (b) ≤500-token sections with `##` heading anchors, (c) top-of-file 3-line summary, (d) no inline code (links to `src/foo.py:line` instead). Sub-agents can request just the section they need.
-13. **(G8)** Cache breakpoints pinned on the last stable block in every orchestrator and sub-agent invocation. Verified empirically: send the same orchestrator prompt twice, confirm `cache_read_input_tokens` ≈ static prefix size on call 2. If 0, the breakpoint is wrong and must be repaired before the task closes.
-14. **(G9)** Per-sub-agent telemetry wrapper captures cache + input + output token counts plus model + effort, persists to `.cycle/{agent}.usage.json`, aggregates into `iter_<N>_shipped.md`. The basis for T07 defaults and for surfacing accounting opacity early.
-15. **(G10)** At least one new productivity command lands as a Skill (`/triage` recommended — "this task halted, help me understand why" — reads latest issue file + recommendation file + recent commits in one shot). Spec covers full set; M20 ships at minimum the highest-value surface.
-16. **(G11)** `/clean-tasks` spec format extension enumerates per-slice file/symbol scope when ACs decompose into file-disjoint slices. Gates the parallel-build flag on this format being present; tasks without it run serial as today. Native `isolation: worktree` frontmatter on the parallel-builder sub-agent. Concurrency capped at 3–4 worktrees. Tasks T18 + T19 stretch — explicit "deferred to M21 if scope-bounded" line in M20 close-out.
+11. **(G6)** Cache breakpoints pinned on the last stable block in every orchestrator and sub-agent invocation. Verified empirically: send the same orchestrator prompt twice, confirm `cache_read_input_tokens` ≈ static prefix size on call 2. If 0, the breakpoint is wrong and must be repaired before the task closes.
+12. **(G7)** Per-sub-agent telemetry wrapper captures cache + input + output token counts plus model + effort, persists to `.cycle/{agent}.usage.json`, aggregates into `iter_<N>_shipped.md`. The basis for T07 defaults and for surfacing accounting opacity early.
+
+**Exit criteria for slimming (former G6/G7), productivity commands (former G10), parallel-builders foundation (former G11) are now [M21](../milestone_21_autonomy_loop_continuation/README.md) exit criteria.**
 
 ---
 
@@ -137,35 +133,11 @@ The pool is reorganized into seven phases keyed to the optimization themes. Each
 | 20 | Carry-over checkbox-cargo-cult catch — extended to inspect (a) checkboxes marked done without diff/test, (b) two consecutive cycles producing near-identical output, (c) Auditor rubber-stamping pattern | SUPPORT + EXTEND (T20 from #5) | Safeguards / doc | 📝 Candidate |
 | 23 | **NEW** — Cache-breakpoint discipline (pin breakpoints on last stable block; verify empirically with 2-call cache-hit telemetry; addresses the 5–20× session-cost blowup failure mode) | NEW (research-brief T23) | Safeguards / code | 📝 Candidate |
 | 27 | **NEW** — Tool-result clearing for long Auditor runs (`clear_tool_uses_20250919` strategy with `keep` window of 3–5 most recent tool results) | NEW (research-brief T27) | Safeguards / code | 📝 Candidate |
+| ZZ | M20 milestone close-out (Phases A-D done; baseline measurements published; M21 unblocked) | n/a | Closeout / doc | 📝 Planned |
 
-### Phase E — Slimming (deduplication + on-demand context loading)
+### Phases E (Slimming), F (Productivity commands), G (Parallel-builders) — moved to M21
 
-| # | Task | Research-brief verdict | Phase / Kind | Status |
-|---|---|---|---|---|
-| 10 | Common-rules extraction (`.claude/agents/_common/non_negotiables.md` ≤500 tokens, plus `_common/verification_discipline.md`; each agent's frontmatter references them) | SUPPORT + EXTEND (T10 from #4) | Slimming / doc | 📝 Candidate |
-| 11 | CLAUDE.md slim (threat-model → `security-reviewer.md`; seven-KDR table → `auditor.md` + `task-analyzer.md` + `architect.md` + `dependency-auditor.md`; CLAUDE.md becomes a one-page index) | STRONGLY SUPPORT (T11 from #3) | Slimming / doc | 📝 Candidate |
-| 12 | Skills extraction (per-agent capabilities; canonical SKILL.md frontmatter with tight `description:` for routing; body references helper files rather than inlining) | SUPPORT + MODIFY (T12 from #1) | Slimming / code + doc | 📝 Candidate |
-| 24 | **NEW** — MD-file discoverability audit (one topic per file in `agent_docs/`; ≤500-token sections with `##` anchors; top-of-file 3-line summary; no inline code — links to `src/foo.py:line` instead) | NEW (research-brief T24) | Slimming / doc | 📝 Candidate |
-| 25 | **NEW** — Periodic skill / scheduled-task efficiency audit (quarterly audit prompt over each Skill and slash-command: redundant tool round-trips? screenshots where text-extraction would do? re-reads of files already in memory? missing tool declarations forcing repeated ToolSearch?) | NEW (research-brief T25, citing Nate Jones / Nicholas Rhodes "automated task bloat" pattern) | Slimming / doc + code | 📝 Candidate |
-| 26 | **NEW** — Two-prompt long-running pattern for multi-cycle Builder runs (initializer prompt produces `iter_<N>_plan.md` and `iter_<N>_progress.md`; subsequent cycles update only progress file) | NEW (research-brief T26) | Slimming / doc + code | 📝 Candidate |
-
-### Phase F — Productivity commands (independent; pick highest-value first)
-
-| # | Task | Research-brief verdict | Phase / Kind | Status |
-|---|---|---|---|---|
-| 13 | `/triage` (halt-diagnosis surface — reads latest issue file + recommendation file + recent commits) — structured as Skill (`.claude/skills/triage/`) | SUPPORT + MODIFY (T13 from #2a) | Productivity / code + doc | 📝 Candidate |
-| 14 | `/check` (verify on-disk vs pushed state) — Skill | SUPPORT + MODIFY (T14 from #2b) | Productivity / code + doc | 📝 Candidate |
-| 15 | `/ship` (manual happy-path: build wheel + release_smoke + uv publish; host-only) — Skill | SUPPORT + MODIFY (T15 from #2c) | Productivity / code + doc | 📝 Candidate |
-| 16 | `/sweep` (sr-dev + sr-sdet + security-reviewer against current diff, no auto-implement loop) — Skill | SUPPORT + MODIFY (T16 from #2d) | Productivity / code + doc | 📝 Candidate |
-
-### Phase G — Parallel-builders foundation (T17 in scope; T18/T19 stretch)
-
-| # | Task | Research-brief verdict | Phase / Kind | Status |
-|---|---|---|---|---|
-| 17 | Spec format extension — per-slice file/symbol scope (parallel-Builders foundation; benefits serial Builders too via clearer review signatures) | STRONGLY SUPPORT (T17 from #15-X) | Parallelism / doc + code | 📝 Candidate |
-| 18 | Worktree-coordinated parallel Builder spawn — leans on Claude Code v2.1.49 `--worktree` and `isolation: worktree` frontmatter; concurrency capped at 3–4 | STRONGLY SUPPORT + MODIFY (T18 from #15-Y) | Parallelism / code | 📝 Stretch |
-| 19 | Orchestrator-owned close-out (CHANGELOG + status-surface flips after parallel-builder merge) | SUPPORT (T19 from #15-Z) | Parallelism / code | 📝 Stretch |
-| ZZ | Milestone close-out | n/a | Closeout / doc | 📝 Planned |
+Per audit recommendation M3 (2026-04-27), M20's original 27-task scope was too large for a single milestone. **Phases E, F, and G now live in [M21 — Autonomy Loop Continuation](../milestone_21_autonomy_loop_continuation/README.md).** M21 prerequisites M20 close-out (the slimming wins are measured against M20's post-shipment baseline). Tasks T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T24, T25, T26 all live in M21's scope.
 
 ---
 
@@ -177,9 +149,8 @@ The pool is reorganized into seven phases keyed to the optimization themes. Each
 | **B — Parallel terminal gate (perf)** | T05 | Independent of Phase A. Could run in parallel iteration with Phase A. |
 | **C — Model-tier rationalization** | T21 → T22 → T06 → T07 (gated on T06) | T21 (adaptive-thinking migration) lands first — confirmed 6 hits of `thinking: max` across `.claude/commands/` 2026-04-27 will 400-error on Opus 4.7 mid-study otherwise. T22 (telemetry) lands second — T06 cannot produce evidence without measurement infrastructure. T06 study third. T07 conditional on T06 GO verdict. |
 | **D — Safeguards** | T08 → T09 → T20 → T23 → T27 | Defense-in-depth. T23 (cache-breakpoint discipline) is the highest-impact-per-effort item in this phase. **Lands BEFORE Phase C completes** in priority — Sonnet-default makes safeguards more load-bearing. Re-order if Phase C is deferred. |
-| **E — Slimming (redundancy + on-demand)** | T11 → T10 → T24 → T12 → T26 → T25 | T11 (CLAUDE.md slim) must land after T10 (`_common/` extraction) so the moved sections have a destination — but T11 is the higher-leverage anchor, so it leads in scoping. T24 (MD discoverability) before T12 (Skills) because Skills depend on having scannable source material. T26 (two-prompt pattern) and T25 (periodic audit) are continuous-improvement, not blocking. |
-| **F — Productivity commands** | T13 → T14 → T16 → T15 | Independent of A–E. `/triage` highest value (post-halt diagnosis is the most-frequent user need). `/ship` last because it's host-only and has the largest blast radius. |
-| **G — Parallel-builders foundation** | T17 → (T18, T19 stretch) | T17 spec extension benefits any reviewer (precise per-slice signatures help even serial Builders). T18+T19 stretch — explicit defer-to-M21 if M20 scope grows. |
+
+Phases **E, F, G** moved to **[M21](../milestone_21_autonomy_loop_continuation/README.md)** per audit recommendation M3 (split). M20 close-out (post-Phase-D baseline measurements) is M21's prerequisite.
 
 ---
 
@@ -190,9 +161,8 @@ The pool is reorganized into seven phases keyed to the optimization themes. Each
 - **T07** (default-Sonnet) → makes T08 + T09 + T22 + T23 effectively required. Sonnet is more likely to confidently misreport than Opus; safeguards become load-bearing.
 - **T21** (adaptive thinking) → blocks **T06** AND **T07**. Blocks T06 because the study's Opus 4.7 cells will 400-error without adaptive-thinking migration. Blocks T07 because shipping dispatch with deprecated `thinking: max` directives breaks on the next model migration.
 - **T22** (telemetry) → blocks **T06**. The study cannot produce per-cell deltas (verdict-count, token, wall-clock, quota-consumption) without measurement infrastructure. T22 is also strongly precedent to T07 — `--cheap` Haiku flag scope and `--expert` Opus threshold should be calibrated against telemetry data, not picked from priors.
-- **T17** → blocks **T18** and **T19**.
-- **T11** (CLAUDE.md slim) → must land after **T10** (common-rules extraction) so the moved sections have a destination.
-- **T24** (MD discoverability) → strongly precedes T12 (Skills) — Skills' progressive-disclosure pattern depends on the source MDs being scannable.
+
+**Cross-milestone:** M20 close-out → blocks M21 (slimming wins are measured against M20's post-shipment baseline; before M20 closes, M21 numbers are noisy).
 
 ---
 
