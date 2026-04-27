@@ -117,3 +117,14 @@ Append to the issue file under `## Sr. SDET review (YYYY-MM-DD)`:
 - A finding implies the spec didn't actually require the AC the test pins (escalate to user).
 - A finding implies the test infrastructure is wrong (a fixture in `conftest.py` affecting multiple tests).
 - A `pytest.xfail(strict=True)` block looks logically inverted.
+## Verification discipline (avoids unnecessary harness prompts)
+
+Prefer the `Read` tool for file-content inspection. Reach for `Bash` only when verification needs a runtime command (running pytest, listing wheel contents, invoking a CLI). For Bash:
+
+- One-line `grep -n PATTERN file` is preferred over chained pipes.
+- Do not use multi-line `python -c "..."` blocks for verification — if Python is genuinely needed, write a one-liner or a temp script.
+- Do not use `echo` to narrate your reasoning. Use your own thinking. `echo` is for surfacing structured results to the orchestrator, not for thinking aloud.
+- Avoid Bash patterns that trip Claude Code's shell-injection heuristics: newline + `#` inside a quoted string, `=` in unquoted arguments (zsh equals-expansion), `{...}` containing quote characters (expansion obfuscation). These prompt the user even with `defaultMode: bypassPermissions` and break unattended autonomy.
+
+These are agent-quality rules, not safety rules. Following them keeps the autonomy loop unblocked.
+
