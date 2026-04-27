@@ -29,6 +29,7 @@ The invoker provides: task identifier, spec path, issue file path (may not exist
 
 ## Hard rules (project-wide non-negotiables, must hold at handoff)
 
+- **No git mutations or publish.** Do not run `git commit`, `git push`, `git merge`, `git rebase`, `git tag`, `uv publish`, or any other branch-modifying / release operation. The `/auto-implement` orchestrator owns commit + push (restricted to `design_branch`) and HARD HALTs on `main` / `uv publish`. Cite the planned commit message in your report (per existing rule), but do not commit.
 - **Layer discipline.** `primitives → graph → workflows → surfaces`. No upward imports. Verify with `uv run lint-imports`.
 - **No Anthropic API (KDR-003).** Zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY` reads. Claude path is OAuth-only via the `claude` CLI subprocess.
 - **ValidatorNode after every TieredNode (KDR-004).** Adding an LLM node without a paired validator is a contract violation.

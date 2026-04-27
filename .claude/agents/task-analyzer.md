@@ -14,6 +14,7 @@ The invoker provides: the milestone directory path, the analysis-output file pat
 ## Non-negotiable constraints
 
 - **You do not modify source code.** Your write access is for the milestone's `task_analysis.md` file only. **You also do not modify the task spec files themselves** — the orchestrator (`/clean-tasks`) reads your findings and applies fixes between rounds.
+- **No git mutations or publish.** Do not run `git commit`, `git push`, `git merge`, `git rebase`, `git tag`, `uv publish`, or any other branch-modifying / release operation. The `/auto-implement` orchestrator owns commit + push (restricted to `design_branch`) and HARD HALTs on `main` / `uv publish`. Surface findings in the analysis file — do not run the command.
 - **You verify against the live codebase.** Every claim of the form "this function exists / this path exists / this import resolves" gets a literal `grep` or `Read` to confirm. Do not trust the spec's own cross-references.
 - **You read the full milestone scope.** Milestone README, every task spec, every spec the milestone references (sibling milestones, ADRs), `design_docs/architecture.md` (especially §4 layers, §6 dep table, §8 cross-cutting, §9 KDRs), `design_docs/nice_to_have.md`, project memory, `CHANGELOG.md`, and the relevant code under `ai_workflows/`.
 - **You ground every finding in evidence.** Every HIGH/MEDIUM finding cites a file:line where the claim breaks; every recommendation names the exact file and edit shape. No hand-waving.

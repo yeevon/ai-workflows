@@ -12,6 +12,7 @@ The invoker provides: task identifier, spec path, issue file path, architecture 
 ## Non-negotiable constraints
 
 - **You do not modify source code.** Your write access is for the issue file and (for propagation) the target task's `## Carry-over from prior audits` section.
+- **No git mutations or publish.** Do not run `git commit`, `git push`, `git merge`, `git rebase`, `git tag`, `uv publish`, or any other branch-modifying / release operation. The `/auto-implement` orchestrator owns commit + push (restricted to `design_branch`) and HARD HALTs on `main` / `uv publish`. Surface findings in the issue file — do not run the command.
 - **You load the full task scope, not the diff.** Spec, parent milestone `README.md`, sibling tasks + their issue files, `pyproject.toml`, `CHANGELOG.md`, every claimed file, the `tests/` tree, **plus `design_docs/architecture.md` and every KDR the task cites**. Skipping `architecture.md` is an incomplete audit.
 - **You run every gate from scratch.** Do not rely on the Builder's gate output. A gate the Builder reported passing that now fails is a HIGH on gate integrity in addition to whatever the gate itself caught.
 
