@@ -1,4 +1,5 @@
-"""AuditCascadeNode graph primitive (M12 Task 02 — KDR-004, KDR-006, KDR-009, KDR-011,
+"""AuditCascadeNode graph primitive (M12 Task 02 / amended M12 Task 08 — KDR-004,
+KDR-006, KDR-009, KDR-011,
 [architecture.md §4.2 / §8.2 / §9](../../design_docs/architecture.md)).
 
 Composes ``TieredNode(primary) → ValidatorNode(shape) → TieredNode(auditor)
@@ -9,7 +10,14 @@ KDR-006); :func:`retrying_edge` routes it back to the primary ``TieredNode``
 which picks up the rendered revision template via
 ``state['last_exception'].revision_hint``.  After
 ``RetryPolicy.max_semantic_attempts`` exhaustion the cascade routes to a strict
-:func:`human_gate` carrying the full cascade transcript.
+:func:`human_gate` carrying the full cascade transcript (default path).
+
+M12 Task 08 amendment: :func:`audit_cascade_node` gains a ``skip_terminal_gate``
+keyword-only parameter (default ``False``, backward-compatible).  When ``True``
+the cascade's terminal :func:`human_gate` node is omitted entirely from the
+compiled sub-graph; exhaustion routes to ``END`` with
+``state['last_exception']`` set to the terminal exception so the caller's outer
+graph can handle escalation (e.g. M12 T03's slice_refactor parallel fan-out).
 
 Relationship to sibling modules
 -------------------------------
@@ -128,6 +136,10 @@ def audit_cascade_node(
     policy: RetryPolicy,
     auditor_prompt_fn: Callable[[GraphState], tuple[str | None, list[dict]]] | None = None,
     cascade_context_fn: Callable[[GraphState], tuple[str, str]] | None = None,
+    # NEW (M12 T08): if True, exhaustion routes to END with the terminal exception
+    # in state['last_exception'] instead of triggering the cascade's internal
+    # human_gate.  Default False preserves T02 behaviour (backward-compatible).
+    skip_terminal_gate: bool = False,
     name: str = "audit_cascade",
 ) -> CompiledStateGraph:
     """Compile a cascade sub-graph: primary → validator → auditor → verdict.
@@ -173,6 +185,36 @@ def audit_cascade_node(
         to the empty string. Override when the workflow has additional context
         state (e.g. multi-turn slice-worker history) that should be appended
         after the audit-feedback block.
+    skip_terminal_gate:
+        When ``False`` (default), the cascade's verdict-exhaustion path routes to
+        a strict :func:`human_gate` (KDR-011's standard escalation). The gate
+        calls ``interrupt(payload)`` and pauses the parent graph for operator
+        arbitration via the cascade transcript. **This is the right shape when
+        the cascade is the workflow's terminal escalation surface** (e.g. planner
+        workflow's explorer cascade — single graph, single operator interrupt on
+        exhaustion).
+
+        When ``True``, the cascade's verdict-exhaustion path instead routes to
+        ``END`` with ``state['last_exception']`` set to the terminal exception
+        (an :class:`AuditFailure` for verdict-exhaustion paths, or a
+        :class:`NonRetryable` for double-failure or NonRetryable paths). The
+        cascade's :func:`human_gate` node is **not added** to the compiled
+        sub-graph at all — the caller's outer graph is responsible for handling
+        the exhausted state, typically by inspecting ``state['last_exception']``
+        after the cascade returns and folding the auditor's verdict into a
+        workflow-specific terminal shape.
+
+        **Use case:** parallel fan-out workflows where the cascade lives inside a
+        per-branch sub-graph (e.g. M12 T03's slice_refactor integration). The
+        cascade's normal ``interrupt()`` semantics would trigger N parallel
+        operator interrupts, one per cascade-exhausted branch — almost always the
+        wrong UX. With ``skip_terminal_gate=True``, the per-branch cascade
+        exhaustion stays branch-local, the branch's own terminal step folds it
+        into the workflow's existing per-branch failure aggregation (e.g.
+        ``SliceFailure`` row), and the parent graph aggregates as usual.
+
+        **Backward-compatibility:** ``False`` default preserves T02 behaviour
+        exactly. No SEMVER concern.
     name:
         Sub-graph node-name prefix. Defaults to ``"audit_cascade"``; override
         when composing more than one cascade in the same outer graph to keep
@@ -288,12 +330,18 @@ def audit_cascade_node(
 
     # ------------------------------------------------------------------
     # Human gate for exhaustion / terminal escalation.
+    # Only constructed when skip_terminal_gate=False (the default).
+    # When skip_terminal_gate=True the gate node is omitted from the
+    # compiled sub-graph entirely; exhaustion routes to END instead.
     # ------------------------------------------------------------------
-    gate = human_gate(
-        gate_id=f"{name}_audit_exhausted",
-        prompt_fn=_cascade_gate_prompt_fn(name=name),
-        strict_review=True,
-    )
+    if not skip_terminal_gate:
+        gate = human_gate(
+            gate_id=f"{name}_audit_exhausted",
+            prompt_fn=_cascade_gate_prompt_fn(name=name),
+            strict_review=True,
+        )
+    else:
+        gate = None
 
     # ------------------------------------------------------------------
     # Edge functions
@@ -326,11 +374,12 @@ def audit_cascade_node(
         to ``NonRetryable``.  The stock ``retrying_edge`` would forward that
         to ``on_terminal=auditor``, which would audit a shape-invalid primary
         output — incorrect behaviour.  This wrapper intercepts ``NonRetryable``
-        and routes directly to the human_gate instead.
+        and routes to ``END`` (when ``skip_terminal_gate=True``) or to the
+        cascade's ``human_gate`` (default path).
         """
         exc = state.get("last_exception")
         if isinstance(exc, NonRetryable):
-            return f"{name}_human_gate"
+            return END if skip_terminal_gate else f"{name}_human_gate"
         return _decide_after_validator_base(state)
 
     # After auditor: on_terminal=verdict serves as the success path.
@@ -354,10 +403,15 @@ def audit_cascade_node(
         * ``RetryableTransient`` under budget → primary
         * ``RetryableSemantic`` (AuditFailure) under budget → primary
         * Any exception at/over budget, or ``NonRetryable`` → human_gate
+          (default path) or END (when ``skip_terminal_gate=True``, with
+          ``state['last_exception']`` carrying the terminal exception for
+          the caller to inspect)
         """
+        _terminal = END if skip_terminal_gate else f"{name}_human_gate"
+
         failures = state.get("_non_retryable_failures") or 0
         if failures >= 2:
-            return f"{name}_human_gate"
+            return _terminal
 
         exc = state.get("last_exception")
 
@@ -368,17 +422,17 @@ def audit_cascade_node(
 
         if isinstance(exc, RetryableTransient):
             if retry_counts.get(f"{name}_primary", 0) >= policy.max_transient_attempts:
-                return f"{name}_human_gate"
+                return _terminal
             return f"{name}_primary"
 
         if isinstance(exc, RetryableSemantic):
             # AuditFailure is a RetryableSemantic subclass.
             if retry_counts.get(f"{name}_primary", 0) >= policy.max_semantic_attempts:
-                return f"{name}_human_gate"
+                return _terminal
             return f"{name}_primary"
 
         # NonRetryable or unknown → terminal
-        return f"{name}_human_gate"
+        return _terminal
 
     # ------------------------------------------------------------------
     # Compile the sub-graph.
@@ -421,7 +475,12 @@ def audit_cascade_node(
     g.add_node(f"{name}_validator", validator_wrapped)
     g.add_node(f"{name}_auditor", auditor_node)
     g.add_node(f"{name}_verdict", verdict_node)
-    g.add_node(f"{name}_human_gate", gate)
+    # Gate node is omitted entirely when skip_terminal_gate=True (M12 T08).
+    # LangGraph compile-time validates every destination-list member is a
+    # registered node; omitting the gate node from add_node and from all
+    # destination lists keeps the compile clean.
+    if not skip_terminal_gate:
+        g.add_node(f"{name}_human_gate", gate)
 
     g.add_edge(START, f"{name}_primary")
 
@@ -430,22 +489,39 @@ def audit_cascade_node(
         decide_after_primary,
         [f"{name}_primary", f"{name}_validator"],
     )
-    g.add_conditional_edges(
-        f"{name}_validator",
-        _decide_after_validator,
-        [f"{name}_primary", f"{name}_auditor", f"{name}_human_gate"],
-    )
+    if skip_terminal_gate:
+        # Without the gate node in the graph, NonRetryable exits to END.
+        g.add_conditional_edges(
+            f"{name}_validator",
+            _decide_after_validator,
+            [f"{name}_primary", f"{name}_auditor", END],
+        )
+    else:
+        g.add_conditional_edges(
+            f"{name}_validator",
+            _decide_after_validator,
+            [f"{name}_primary", f"{name}_auditor", f"{name}_human_gate"],
+        )
     g.add_conditional_edges(
         f"{name}_auditor",
         decide_after_auditor,
         [f"{name}_auditor", f"{name}_verdict"],
     )
-    g.add_conditional_edges(
-        f"{name}_verdict",
-        _decide_after_verdict,
-        [f"{name}_primary", f"{name}_human_gate", END],
-    )
-    g.add_edge(f"{name}_human_gate", END)
+    if skip_terminal_gate:
+        # Without the gate node, exhaustion exits to END instead of human_gate.
+        g.add_conditional_edges(
+            f"{name}_verdict",
+            _decide_after_verdict,
+            [f"{name}_primary", END],
+        )
+    else:
+        g.add_conditional_edges(
+            f"{name}_verdict",
+            _decide_after_verdict,
+            [f"{name}_primary", f"{name}_human_gate", END],
+        )
+    if not skip_terminal_gate:
+        g.add_edge(f"{name}_human_gate", END)
 
     return g.compile()
 

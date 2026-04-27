@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M12 Task 08: AuditCascadeNode skip_terminal_gate parameter (T02 amendment) (2026-04-27)
+
+Extends `audit_cascade_node()` (M12 T02) with a backward-compatible `skip_terminal_gate: bool = False`
+keyword-only parameter (inserted between `cascade_context_fn` and `name`).  Default `False`
+preserves T02 behaviour byte-for-byte.  When `True`, the cascade's `human_gate` node is omitted
+entirely from the compiled sub-graph; verdict-exhaustion and validator-exhaustion (NonRetryable)
+both route to `END` with `state['last_exception']` carrying the terminal exception for the caller
+to inspect.  T03 prerequisite: T03's slice_refactor parallel fan-out calls this parameter to
+avoid N parallel operator interrupts on cascade-exhausted branches.
+
+**Files touched:**
+- `ai_workflows/graph/audit_cascade.py` — new `skip_terminal_gate` kwarg; docstring `Parameters`
+  block updated with use-case explanation; module docstring amended to cite T08; gate construction
+  wrapped in `if not skip_terminal_gate:`; `_decide_after_validator` and `_decide_after_verdict`
+  use closure-captured `skip_terminal_gate` to route to `END` vs `f"{name}_human_gate"`;
+  `add_node` / `add_conditional_edges` / `add_edge` for the gate node wrapped in the same
+  conditional so LangGraph compile-time validation sees no unregistered destinations.
+- `tests/graph/test_audit_cascade.py` — 4 new tests (cascade test count grows 7 → 11):
+  `test_skip_terminal_gate_default_false_preserves_t02_behaviour`,
+  `test_skip_terminal_gate_true_omits_human_gate_node_from_compiled_subgraph`,
+  `test_skip_terminal_gate_true_routes_exhaustion_to_END_with_audit_failure_in_state`,
+  `test_skip_terminal_gate_true_routes_validator_exhaustion_to_END_with_nonretryable_in_state`.
+  Imports of `AuditFailure` + `NonRetryable` added for T08 assertions.
+
+**KDR preservation:**
+- KDR-006 (RetryingEdge taxonomy) preserved — `AuditFailure` still routes via `RetryableSemantic`
+  bucket; only the terminal route changes when `skip_terminal_gate=True`.
+- KDR-011 (cascade primitive contract) preserved — default behaviour unchanged; the new mode is
+  an explicit caller-opt-in that does not alter the standard escalation path.
+
+**Backward-compatibility:** `False` default preserves T02 behaviour byte-for-byte. All 7 prior
+cascade tests + 5 audit-feedback-template tests still pass (regression guard confirmed).
+
+**ACs satisfied:**
+- AC-1: `skip_terminal_gate: bool = False` keyword-only parameter added between `cascade_context_fn` and `name`.
+- AC-2: Docstring `Parameters` block documents the new parameter with parallel fan-out use-case explanation.
+- AC-3: Default `False` verified by re-running all 7 prior cascade tests — all pass unchanged.
+- AC-4: `f"{name}_human_gate" not in compiled.nodes` when `skip_terminal_gate=True` (structural, not just unreachable).
+- AC-5: Verdict-exhaustion routes to `END` with `AuditFailure` in `state["last_exception"]` when `skip_terminal_gate=True`.
+- AC-6: Validator-exhaustion (NonRetryable) routes to `END` with `NonRetryable` in `state["last_exception"]`; auditor never invoked.
+- AC-7: All 4 new tests pass.
+- AC-8: All 7 prior T02 cascade tests + 5 template tests still pass.
+- AC-9: No `ai_workflows/workflows/` diff; no `ai_workflows/mcp/` diff; no `primitives/retry.py` diff; no `pyproject.toml` diff.
+- AC-10/11: KDR-003 guardrail tests pass; no `anthropic` import added.
+- AC-12: `uv run pytest` + `uv run lint-imports` (5 contracts kept) + `uv run ruff check` all clean.
+- AC-13: CHANGELOG entry under `[Unreleased]` uses `### Changed` (not `### Added`) citing T02 amendment, KDR preservation, and backward-compat.
+- AC-14 (smoke): `test_skip_terminal_gate_true_routes_exhaustion_to_END_with_audit_failure_in_state` PASSED — wire-level smoke invokes the compiled cascade through real `tiered_node` + `validator_node` + `wrap_with_error_handler` + `retrying_edge` with only LLM dispatch stubbed.
+
+**Carry-over satisfied:**
+- TA-T08-LOW-01: No positional test-number references in new docstrings/comments; test names are canonical.
+- TA-T08-LOW-02: T03 dependency-block hash substitution deferred to orchestrator commit-ceremony (per spec).
+
 ### Added — M12 Task 02: AuditCascadeNode primitive + AuditFailure exception (2026-04-27)
 
 Implements the foundational cascade sub-graph primitive (KDR-004, KDR-006, KDR-011) that

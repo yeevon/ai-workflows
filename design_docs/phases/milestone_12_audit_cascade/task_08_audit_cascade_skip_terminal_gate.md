@@ -1,6 +1,6 @@
 # Task 08 — T02 amendment: `audit_cascade_node(skip_terminal_gate=True)` for cascade-exhaustion-without-interrupt path
 
-**Status:** 📝 Planned (drafted 2026-04-27 after T03 round-4 H1 user arbitration).
+**Status:** ✅ Complete (2026-04-27).
 **Grounding:** [milestone README](README.md) · [task_03 §Folding cascade exhaustion](task_03_workflow_wiring.md) (the consumer of this amendment) · [task_02 close-out (cascade primitive shipped)](task_02_audit_cascade_node.md) · [ai_workflows/graph/audit_cascade.py](../../../ai_workflows/graph/audit_cascade.py) (the module amended) · [ADR-0004](../../adr/0004_tiered_audit_cascade.md) · [architecture.md §4.2 / §9 KDR-006 / KDR-011](../../architecture.md).
 
 ## Why this task exists (sequencing exception)
@@ -157,7 +157,7 @@ Under `## [Unreleased]`, add `### Changed — M12 Task 08: AuditCascadeNode skip
 
 ## Carry-over from task analysis
 
-- [ ] **TA-T08-LOW-01 — Test #2 cross-reference uses positional number that drifts** (severity: LOW, source: task_analysis.md round 1 L1)
+- [x] **TA-T08-LOW-01 — Test #2 cross-reference uses positional number that drifts** (severity: LOW, source: task_analysis.md round 1 L1)
       Test #4 in T08's spec mirrors an existing `tests/graph/test_audit_cascade.py` test by name (`test_cascade_pure_shape_failure_never_invokes_auditor`) — already corrected during round-1 fix application; the original positional citation ("test 7") drifted from the live file's order (test #5 by position). The test name is canonical; positional references should be avoided.
       **Recommendation:** Builder should avoid positional test references in any new docstrings or comments referencing this test; use the test name only.
 

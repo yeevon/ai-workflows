@@ -1,18 +1,28 @@
-"""Tests for ``ai_workflows.graph.audit_cascade`` (M12 Task 02 — KDR-004, KDR-006, KDR-011).
+"""Tests for ``ai_workflows.graph.audit_cascade`` (M12 Task 02 / amended M12 Task 08
+— KDR-004, KDR-006, KDR-011).
 
-Six hermetic tests exercising the compiled cascade sub-graph with stub provider
+Eleven hermetic tests exercising the compiled cascade sub-graph with stub provider
 adapters.  No real LLM call, no subprocess.  The stub pattern mirrors
 ``tests/graph/test_tiered_node.py:104,172`` — ``monkeypatch.setattr`` on the
 module-level adapter names inside ``ai_workflows.graph.tiered_node``.
 
-Tests cover:
+T02 tests (cascade tests 1-7 in this file):
 1. Pass-through — auditor passes on first try (wire-level smoke per CLAUDE.md
    non-inferential rule).
 2. Re-fire with audit-feedback in revision_hint — auditor fails once then passes.
 3. Exhaustion → strict HumanGate with cascade transcript.
-4. Validator failure short-circuits the auditor.
-5. Cascade is a ``CompiledStateGraph`` composable as a node in an outer graph.
-6. Role tags stamped on state by each cascade sub-node.
+4. Validator failure short-circuits the auditor (hybrid scenario).
+5. Pure-shape-failure exhaustion — auditor never invoked.
+6. Cascade is a ``CompiledStateGraph`` composable as a node in an outer graph.
+7. Role tags stamped on state by each cascade sub-node.
+
+T08 tests (cascade tests 8-11 in this file):
+8. Default False preserves T02 behaviour — exhaustion still routes to human_gate.
+9. skip_terminal_gate=True omits the gate node from the compiled sub-graph.
+10. skip_terminal_gate=True routes verdict-exhaustion to END with AuditFailure
+    in state['last_exception'] (wire-level smoke for T08 per CLAUDE.md rule).
+11. skip_terminal_gate=True routes validator-exhaustion (NonRetryable) to END
+    with NonRetryable in state['last_exception']; auditor never invoked.
 """
 
 from __future__ import annotations
@@ -31,7 +41,7 @@ from ai_workflows.graph.audit_cascade import audit_cascade_node
 from ai_workflows.graph.checkpointer import build_async_checkpointer
 from ai_workflows.graph.cost_callback import CostTrackingCallback
 from ai_workflows.primitives.cost import CostTracker, TokenUsage
-from ai_workflows.primitives.retry import RetryableSemantic, RetryPolicy
+from ai_workflows.primitives.retry import AuditFailure, NonRetryable, RetryableSemantic, RetryPolicy
 from ai_workflows.primitives.storage import SQLiteStorage
 from ai_workflows.primitives.tiers import ClaudeCodeRoute, LiteLLMRoute, TierConfig
 
@@ -633,3 +643,226 @@ def _build_outer_graph(cascade: CompiledStateGraph, *, name: str) -> Any:
     g.add_edge(START, "cascade")
     g.add_edge("cascade", END)
     return g.compile()
+
+
+def _cascade_skip(*, name: str = "ac", policy: RetryPolicy = _POLICY_3) -> CompiledStateGraph:
+    """Factory for a skip_terminal_gate=True cascade sub-graph used in T08 tests."""
+    return audit_cascade_node(
+        primary_tier="primary-litellm",
+        primary_prompt_fn=_primary_prompt_fn,
+        primary_output_schema=_PrimaryOutput,
+        auditor_tier="auditor-sonnet",
+        policy=policy,
+        skip_terminal_gate=True,
+        name=name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 8 (T08): default False preserves T02 behaviour — exhaustion → human_gate
+# ---------------------------------------------------------------------------
+
+
+async def test_skip_terminal_gate_default_false_preserves_t02_behaviour(
+    tmp_path: Path,
+) -> None:
+    """Test 8 / T08-AC: omitting skip_terminal_gate (or passing False) preserves T02.
+
+    Drives a pure audit-failure exhaustion scenario with max_semantic_attempts=2.
+    Asserts:
+    * cascade reaches the human_gate node — ``__interrupt__`` is non-empty
+    * ``strict_review=True`` is set on the interrupt payload
+    * default-False path is structurally equivalent to the T02 exhaustion test
+
+    Pins the default-False contract so the new conditional branch does not
+    accidentally regress T02's exhaustion behaviour.
+    """
+    # primary always returns valid JSON; auditor always fails (2 cycles → exhausted)
+    _StubLiteLLMAdapter.script = [(_PRIMARY_JSON, 0.001), (_PRIMARY_JSON, 0.001)]
+    _StubClaudeCodeAdapter.script = [(_AUDIT_FAIL_JSON, 0.0), (_AUDIT_FAIL_JSON, 0.0)]
+
+    checkpointer = await build_async_checkpointer(tmp_path / "cp_t08a.sqlite")
+    storage = await SQLiteStorage.open(tmp_path / "storage_t08a.sqlite")
+    await storage.create_run("r_t08a", "cascade_skip_default_false", None)
+
+    # Explicitly pass skip_terminal_gate=False — same as default.
+    cascade = audit_cascade_node(
+        primary_tier="primary-litellm",
+        primary_prompt_fn=_primary_prompt_fn,
+        primary_output_schema=_PrimaryOutput,
+        auditor_tier="auditor-sonnet",
+        policy=_POLICY_2,
+        skip_terminal_gate=False,
+        name="ac",
+    )
+    outer = _build_outer_graph(cascade, name="ac")
+    cfg = _build_config(tmp_path, "r_t08a", checkpointer, storage)
+
+    try:
+        paused = await outer.ainvoke({"run_id": "r_t08a"}, cfg)
+    finally:
+        await checkpointer.conn.close()
+
+    # Cascade interrupted at human_gate — same as T02 test 3.
+    assert "__interrupt__" in paused
+    interrupt_payload = paused["__interrupt__"][0].value
+    assert interrupt_payload["strict_review"] is True
+
+
+# ---------------------------------------------------------------------------
+# Test 9 (T08): skip_terminal_gate=True omits the gate node from compiled graph
+# ---------------------------------------------------------------------------
+
+
+async def test_skip_terminal_gate_true_omits_human_gate_node_from_compiled_subgraph(
+    tmp_path: Path,
+) -> None:
+    """Test 9 / T08-AC: with skip_terminal_gate=True, the gate node is structurally absent.
+
+    Asserts:
+    * ``f"{name}_human_gate" not in compiled.nodes`` — the gate is never registered,
+      not just unreachable.
+
+    This pins the "no gate allocated at all" contract — the caller does not pay the
+    gate-allocation cost when skip_terminal_gate=True.
+    """
+    cascade = _cascade_skip(name="ac")
+    gate_key = "ac_human_gate"
+    assert gate_key not in cascade.nodes, (
+        f"Expected '{gate_key}' absent from compiled sub-graph nodes when "
+        "skip_terminal_gate=True, but it was present."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 10 (T08): skip_terminal_gate=True → verdict-exhaustion → END + AuditFailure
+# Wire-level smoke (CLAUDE.md non-inferential rule)
+# ---------------------------------------------------------------------------
+
+
+async def test_skip_terminal_gate_true_routes_exhaustion_to_END_with_audit_failure_in_state(
+    tmp_path: Path,
+) -> None:
+    """Test 10 / T08 wire-level smoke: verdict-exhaustion routes to END with AuditFailure.
+
+    Drives an auditor-fail-every-attempt scenario with max_semantic_attempts=2
+    and skip_terminal_gate=True.
+
+    Asserts:
+    * graph reaches END (no ``__interrupt__`` in state)
+    * ``state["last_exception"]`` is an :class:`AuditFailure` instance
+    * ``state["last_exception"].failure_reasons`` matches the auditor's last verdict
+    * ``state["last_exception"].suggested_approach`` matches the auditor's last verdict
+    * ``state["cascade_transcript"]["author_attempts"]`` length is 2
+    * ``state["cascade_transcript"]["auditor_verdicts"]`` length is 2
+    """
+    # primary always returns valid JSON; auditor always fails (2 cycles → exhausted)
+    _StubLiteLLMAdapter.script = [(_PRIMARY_JSON, 0.001), (_PRIMARY_JSON, 0.001)]
+    _StubClaudeCodeAdapter.script = [(_AUDIT_FAIL_JSON, 0.0), (_AUDIT_FAIL_JSON, 0.0)]
+
+    checkpointer = await build_async_checkpointer(tmp_path / "cp_t08b.sqlite")
+    storage = await SQLiteStorage.open(tmp_path / "storage_t08b.sqlite")
+    await storage.create_run("r_t08b", "cascade_skip_exhaustion", None)
+
+    cascade = _cascade_skip(name="ac", policy=_POLICY_2)
+    outer = _build_outer_graph(cascade, name="ac")
+    cfg = _build_config(tmp_path, "r_t08b", checkpointer, storage)
+
+    try:
+        final = await outer.ainvoke({"run_id": "r_t08b"}, cfg)
+    finally:
+        await checkpointer.conn.close()
+
+    # No interrupt — cascade exhausted to END (not human_gate).
+    assert "__interrupt__" not in final, (
+        "Expected cascade to exit to END (not interrupt) when skip_terminal_gate=True"
+    )
+
+    # last_exception carries AuditFailure from the final verdict cycle.
+    exc = final.get("last_exception")
+    assert isinstance(exc, AuditFailure), (
+        f"Expected AuditFailure in state['last_exception'], got {type(exc)}"
+    )
+
+    # AuditFailure payload matches the auditor's verdict from _AUDIT_FAIL_JSON.
+    assert exc.failure_reasons == ["bad shape"], (
+        f"Expected failure_reasons=['bad shape'], got {exc.failure_reasons}"
+    )
+    assert exc.suggested_approach == "try Y", (
+        f"Expected suggested_approach='try Y', got {exc.suggested_approach}"
+    )
+
+    # Transcript accumulated 2 author attempts + 2 auditor verdicts.
+    # On all-failure runs, _wrap_verdict_with_transcript preserves cascade_transcript
+    # from exc.cascade_transcript on each cycle; the last cycle's transcript state
+    # is written to the outer state dict by the cascade sub-graph wrapper.
+    transcript = final.get("cascade_transcript") or {}
+    assert len(transcript.get("author_attempts", [])) == 2, (
+        f"Expected 2 author_attempts, got {len(transcript.get('author_attempts', []))}"
+    )
+    assert len(transcript.get("auditor_verdicts", [])) == 2, (
+        f"Expected 2 auditor_verdicts, got {len(transcript.get('auditor_verdicts', []))}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 11 (T08): skip_terminal_gate=True → validator-exhaustion → END + NonRetryable
+# ---------------------------------------------------------------------------
+
+
+async def test_skip_terminal_gate_true_routes_validator_exhaustion_to_END_with_nonretryable_in_state(  # noqa: E501
+    tmp_path: Path,
+) -> None:
+    """Test 11 / T08-AC: pure shape-failure exhaustion routes to END (not human_gate).
+
+    Mirrors ``test_cascade_pure_shape_failure_never_invokes_auditor`` shape but
+    with skip_terminal_gate=True.  Every primary attempt returns shape-invalid
+    output; the in-validator escalation (M6 T07 pattern) converts
+    RetryableSemantic → NonRetryable on the final attempt; the
+    ``_decide_after_validator`` intercepts NonRetryable and routes to END
+    (not human_gate) when skip_terminal_gate=True.
+
+    Asserts:
+    * graph reaches END (no ``__interrupt__`` in state)
+    * ``state["last_exception"]`` is a :class:`NonRetryable` instance
+    * auditor adapter call count is 0 (auditor never invoked under pure-shape-failure)
+    """
+    # Every primary attempt returns invalid JSON — shape validation always fails.
+    _StubLiteLLMAdapter.script = [
+        ("not json at all", 0.001),
+        ("also not json", 0.001),
+    ]
+    # Auditor script is empty — it must never be invoked.
+    _StubClaudeCodeAdapter.script = []
+
+    checkpointer = await build_async_checkpointer(tmp_path / "cp_t08c.sqlite")
+    storage = await SQLiteStorage.open(tmp_path / "storage_t08c.sqlite")
+    await storage.create_run("r_t08c", "cascade_skip_shapefail", None)
+
+    # _POLICY_2 (max_semantic_attempts=2) — exhausts after 2 shape-failing attempts.
+    cascade = _cascade_skip(name="ac", policy=_POLICY_2)
+    outer = _build_outer_graph(cascade, name="ac")
+    cfg = _build_config(tmp_path, "r_t08c", checkpointer, storage)
+
+    try:
+        final = await outer.ainvoke({"run_id": "r_t08c"}, cfg)
+    finally:
+        await checkpointer.conn.close()
+
+    # No interrupt — cascade exhausted to END (not human_gate).
+    assert "__interrupt__" not in final, (
+        "Expected cascade to exit to END (not interrupt) when skip_terminal_gate=True "
+        "and validator exhausts shape budget."
+    )
+
+    # last_exception carries NonRetryable from the validator escalation.
+    exc = final.get("last_exception")
+    assert isinstance(exc, NonRetryable), (
+        f"Expected NonRetryable in state['last_exception'], got {type(exc)}"
+    )
+
+    # Auditor was NEVER invoked — pure shape-failure path bypasses the auditor.
+    assert len(_StubClaudeCodeAdapter.calls) == 0, (
+        f"Auditor should not be invoked under pure shape-failure with "
+        f"skip_terminal_gate=True, but was called {len(_StubClaudeCodeAdapter.calls)} time(s)."
+    )

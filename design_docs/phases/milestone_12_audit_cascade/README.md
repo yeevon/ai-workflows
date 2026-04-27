@@ -68,7 +68,7 @@ The mechanism to close this is a **tiered audit cascade**: pair every generative
 | 05 | `run_audit_cascade` MCP tool + SKILL.md ad-hoc-audit section | code + test + doc | 📝 Planned |
 | 06 | Eval harness — author/auditor fixture convention + golden cases for one opt-in workflow | code + test + doc | 📝 Planned |
 | 07 | Milestone close-out | doc | 📝 Planned |
-| 08 | [T02 amendment — `audit_cascade_node(skip_terminal_gate=True)` for cascade-exhaustion-without-interrupt path](task_08_audit_cascade_skip_terminal_gate.md) | code + test | 📝 Planned (T03 prerequisite — drafted 2026-04-27 after T03 round-4 H1 arbitration; ships before T03) |
+| 08 | [T02 amendment — `audit_cascade_node(skip_terminal_gate=True)` for cascade-exhaustion-without-interrupt path](task_08_audit_cascade_skip_terminal_gate.md) | code + test | ✅ Complete (2026-04-27) |
 
 Per-task spec files land as each predecessor closes (same convention as M10 / M11 — scope stays calibrated against landed surface). **Sequencing exception:** T08 is a T02 amendment surfaced during T03 spec hardening (round-4 H1 — slice_refactor's parallel fan-out cannot tolerate the cascade's hard-wired terminal `human_gate` triggering N parallel operator interrupts). T08 ships **before** T03 even though its number is higher — the roadmap-selector's sequential default rule defers to T03's explicit `## Dependencies` declaration. Adding the parameter is backward-compatible (default `False` preserves T02's existing behaviour); land as an isolated T02-amendment commit per autonomy decision 2.
 
