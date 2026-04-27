@@ -38,6 +38,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   published CLI uses; they don't count as wire-level proof. Every release
   must clear ``tests/release/`` plus ``scripts/release_smoke.sh``.
 
+### Published
+
+- **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.3.1/>
+- **Wheel:** `jmdl_ai_workflows-0.3.1-py3-none-any.whl` (195132 bytes).
+- **SHA256:** `a0349ed800ac15cd025b8746cf79f1d52985a760eaeb70f08e1bfe5a55b9da27`
+- **Sdist:** `jmdl_ai_workflows-0.3.1.tar.gz` SHA256
+  `8005364380c7014247de830a6555a6278aa6ff9e6aa0839aa729d4082568587f`.
+- **Publish-side commit:** `main:6cc536b` (the 0.3.1 hotfix commit whose
+  wheel was uploaded; sits atop `main:d130e2b` which recovers the
+  yanked 0.3.0 release commit so git history matches the PyPI record).
+- **Post-publish live smoke:** `uvx --refresh --from
+  jmdl-ai-workflows==0.3.1 aiw run release_smoke_workflow --input
+  message=live-smoke-from-pypi` from `/tmp` round-trips the input
+  through a synthetic no-LLM spec-API workflow registered via
+  `AIW_EXTRA_WORKFLOW_MODULES`, proving the 0.3.0 dispatch regression
+  is fixed in the published wheel; `aiw version` from `/tmp` prints
+  `0.3.1`.
+
 ## [0.3.0] - 2026-04-26
 
 **Yanked 2026-04-26 — broken declarative-API dispatch. Use 0.3.1 or later.**
