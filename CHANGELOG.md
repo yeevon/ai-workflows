@@ -7,7 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-26
+
+### Fixed
+- **Spec-API workflow dispatch (yanks 0.3.0).** ``register_workflow(spec)`` now
+  persists the ``WorkflowSpec`` in a parallel ``_SPEC_REGISTRY`` so dispatch's
+  ``_build_initial_state`` can construct typed input via
+  ``spec.input_schema(**inputs)``. Without this, every spec-API workflow
+  invoked through ``aiw run`` or the MCP ``run_workflow`` tool failed with
+  ``ValueError: workflow ... exposes no Input schema`` (0.3.0 dropped the spec
+  on the floor at registration time). The headline declarative authoring
+  surface from 0.3.0 was non-functional for downstream consumers; this
+  release fixes the dispatch path and yanks 0.3.0 from PyPI.
+- New ``ai_workflows.workflows.get_spec(name)`` helper exposes the spec
+  registry for introspection tooling.
+
+### Added
+- ``tests/release/test_install_smoke.py`` — real-install end-to-end smoke that
+  ``uv build``s the wheel, ``uv pip install``s it into a fresh venv, registers
+  a synthetic no-LLM spec-API workflow via ``AIW_EXTRA_WORKFLOW_MODULES``, and
+  runs ``aiw run`` against the installed binary. The 0.3.0 break would have
+  failed this gate. Tests under ``tests/release/`` run by default (no
+  ``AIW_E2E=1`` opt-in) so the regression can never silently re-ship.
+- ``scripts/release_smoke.sh`` Stage 7 — same end-to-end check at the
+  pre-publish bash gate.
+
+### Changed
+- ``CLAUDE.md §Non-negotiables`` — new "Real-install release smoke" rule.
+  Tests that pre-register workflows via fixtures bypass the dispatch path the
+  published CLI uses; they don't count as wire-level proof. Every release
+  must clear ``tests/release/`` plus ``scripts/release_smoke.sh``.
+
+## [M19 Patch — 0.3.1 dispatch hotfix + real-install gate] - 2026-04-26
+
+### Changed — M19 hotfix: ``register_workflow`` → dispatch plumbing (2026-04-26)
+
+Closes a publish-quality regression that 0.3.0's audit + security gate + dependency-auditor +
+"wire-level e2e proof" all missed: spec-API workflows registered via ``register_workflow(spec)``
+could not be invoked through the published CLI because ``_dispatch._build_initial_state`` had no
+way to find the spec. The integration test that "proved" wire-level behaviour (``tests/integration/
+test_spec_api_e2e.py``) used a fixture that imperatively re-registered ``summarize`` via
+``register("summarize", compile_spec(_SPEC))`` — the fixture path bypassed the broken dispatch
+lookup. The 0.3.0 PyPI live-smoke caught it on the first invocation.
+
+- ``ai_workflows/workflows/__init__.py`` — added ``_SPEC_REGISTRY`` and
+  ``get_spec(name)`` exporting from public surface.
+- ``ai_workflows/workflows/spec.py`` — ``register_workflow`` now writes to
+  ``_SPEC_REGISTRY[spec.name]`` after compiling + registering the builder.
+- ``ai_workflows/workflows/_dispatch.py`` — ``_build_initial_state`` accepts
+  the ``workflow_name`` and consults ``get_spec(workflow_name)``; spec-API
+  workflows get ``{"run_id": ..., **spec.input_schema(**inputs).model_dump()}``;
+  imperative workflows fall through unchanged.
+- ``tests/release/test_install_smoke.py`` (NEW) — wheel-install + spec-API
+  ``aiw run`` smoke. Runs by default.
+- ``scripts/release_smoke.sh`` Stage 7 (NEW) — same check at the bash gate.
+- ``CLAUDE.md`` — codified the real-install release-smoke discipline.
+
+**Audit-pipeline lesson.** Every code task spec must name a smoke test that
+runs against the **same code path the published CLI uses**, not a fixture that
+pre-registers things. T04's audit accepted the integration test as proof; it
+wasn't proof of the dispatch path. The new ``tests/release/`` gate prevents
+this class of false-positive from re-occurring.
+
 ## [0.3.0] - 2026-04-26
+
+**Yanked 2026-04-26 — broken declarative-API dispatch. Use 0.3.1 or later.**
 
 ### Added
 - declarative authoring surface (`WorkflowSpec` + step taxonomy + `register_workflow` + custom-step extension hook)

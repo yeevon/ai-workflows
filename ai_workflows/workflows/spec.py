@@ -401,7 +401,7 @@ def register_workflow(spec: WorkflowSpec) -> None:
     ValueError
         On empty step list, unknown tier reference, or name collision.
     """
-    from ai_workflows.workflows import register  # local import avoids circular
+    from ai_workflows.workflows import _SPEC_REGISTRY, register  # local — avoids circular
 
     # --- cross-step invariants ---
 
@@ -423,6 +423,11 @@ def register_workflow(spec: WorkflowSpec) -> None:
 
     builder = compile_spec(spec)
     register(spec.name, builder)
+    # 0.3.1 hotfix: persist the spec so dispatch's _build_initial_state can
+    # construct typed input from spec.input_schema without falling through to
+    # the imperative-only PlannerInput lookup. 0.3.0 dropped the spec on the
+    # floor here, leaving the dispatch path with no way to know the input shape.
+    _SPEC_REGISTRY[spec.name] = spec
 
 
 def _validate_llm_step_tiers(spec: WorkflowSpec) -> None:

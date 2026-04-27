@@ -40,7 +40,7 @@ echo
 # -----------------------------------------------------------------------------
 # Stage 1: build wheel
 # -----------------------------------------------------------------------------
-echo "[1/6] uv build --wheel ..."
+echo "[1/7] uv build --wheel ..."
 uv build --wheel --out-dir "$TMP_DIR/dist" > "$TMP_DIR/build.log" 2>&1 || {
     echo "FAIL: uv build failed. Log:" >&2
     cat "$TMP_DIR/build.log" >&2
@@ -61,7 +61,7 @@ echo "      built: $(basename "$WHEEL_PATH")"
 # -----------------------------------------------------------------------------
 # Stage 2: create clean venv outside the repo
 # -----------------------------------------------------------------------------
-echo "[2/6] uv venv (fresh, outside repo) ..."
+echo "[2/7] uv venv (fresh, outside repo) ..."
 uv venv "$TMP_DIR/venv" > "$TMP_DIR/venv.log" 2>&1 || {
     echo "FAIL: uv venv failed. Log:" >&2
     cat "$TMP_DIR/venv.log" >&2
@@ -73,7 +73,7 @@ VENV_BIN="$TMP_DIR/venv/bin"
 # -----------------------------------------------------------------------------
 # Stage 3: install the built wheel
 # -----------------------------------------------------------------------------
-echo "[3/6] uv pip install <wheel> ..."
+echo "[3/7] uv pip install <wheel> ..."
 uv pip install --python "$VENV_PY" "$WHEEL_PATH" > "$TMP_DIR/install.log" 2>&1 || {
     echo "FAIL: wheel install failed. Log:" >&2
     cat "$TMP_DIR/install.log" >&2
@@ -83,7 +83,7 @@ uv pip install --python "$VENV_PY" "$WHEEL_PATH" > "$TMP_DIR/install.log" 2>&1 |
 # -----------------------------------------------------------------------------
 # Stage 4: help-smoke both CLI entry points
 # -----------------------------------------------------------------------------
-echo "[4/6] aiw --help + aiw-mcp --help ..."
+echo "[4/7] aiw --help + aiw-mcp --help ..."
 "$VENV_BIN/aiw" --help > "$TMP_DIR/aiw_help.log" 2>&1 || {
     echo "FAIL: aiw --help failed." >&2
     cat "$TMP_DIR/aiw_help.log" >&2
@@ -102,7 +102,7 @@ echo "[4/6] aiw --help + aiw-mcp --help ..."
 # from the wheel-bundled migrations/ directory via yoyo. If the T01
 # force-include hook ever regresses, yoyo raises "no migration scripts
 # found" and this stage fails loudly.
-echo "[5/6] aiw list-runs against fresh AIW_STORAGE_DB (migrations apply) ..."
+echo "[5/7] aiw list-runs against fresh AIW_STORAGE_DB (migrations apply) ..."
 export AIW_STORAGE_DB="$TMP_DIR/storage.db"
 export AIW_CHECKPOINT_DB="$TMP_DIR/checkpoints.db"
 "$VENV_BIN/aiw" list-runs > "$TMP_DIR/list_runs.log" 2>&1 || {
@@ -116,12 +116,81 @@ if [[ ! -f "$AIW_STORAGE_DB" ]]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Stage 6 (optional): real-provider planner run
+# Stage 6: spec-API dispatch smoke (the 0.3.1 hotfix gate)
+# -----------------------------------------------------------------------------
+# 0.3.0 shipped a non-functional declarative-API path: register_workflow()
+# compiled the spec but discarded it, leaving _build_initial_state with no
+# way to construct typed input. Every existing "wire-level" test side-stepped
+# this by re-registering the workflow imperatively. The fix is the
+# _SPEC_REGISTRY plumbing in 0.3.1; this stage exercises it against the
+# installed wheel + a synthetic no-LLM spec-API workflow registered through
+# AIW_EXTRA_WORKFLOW_MODULES. Mirrors tests/release/test_install_smoke.py at
+# the bash gate so the publish ceremony catches the same class of regression
+# even when running the script standalone (without uv run pytest).
+echo "[6/7] aiw run spec-api smoke against installed wheel (0.3.1 hotfix gate) ..."
+WORKFLOW_DIR="$TMP_DIR/workflow_pkg"
+mkdir -p "$WORKFLOW_DIR"
+cat > "$WORKFLOW_DIR/release_smoke_workflow.py" <<'PYEOF'
+"""No-LLM spec-API workflow used by scripts/release_smoke.sh Stage 6."""
+
+from pydantic import BaseModel
+
+from ai_workflows.workflows import (
+    ValidateStep,
+    WorkflowSpec,
+    register_workflow,
+)
+
+
+class SmokeInput(BaseModel):
+    message: str
+
+
+class SmokeOutput(BaseModel):
+    message: str
+
+
+register_workflow(
+    WorkflowSpec(
+        name="release_smoke_workflow",
+        input_schema=SmokeInput,
+        output_schema=SmokeOutput,
+        tiers={},
+        steps=[
+            ValidateStep(target_field="message", schema=SmokeOutput),
+        ],
+    )
+)
+PYEOF
+
+PYTHONPATH="$WORKFLOW_DIR" \
+AIW_EXTRA_WORKFLOW_MODULES="release_smoke_workflow" \
+"$VENV_BIN/aiw" run release_smoke_workflow \
+    --input message=release-smoke-stage-6 \
+    > "$TMP_DIR/spec_api_run.log" 2>&1 || {
+    echo "FAIL: aiw run on spec-API workflow exited non-zero." >&2
+    echo "      The 0.3.0 dispatch regression may have resurfaced." >&2
+    cat "$TMP_DIR/spec_api_run.log" >&2
+    exit 1
+}
+if grep -q "exposes no Input schema" "$TMP_DIR/spec_api_run.log"; then
+    echo "FAIL: 0.3.0 dispatch regression detected — _build_initial_state could not resolve spec." >&2
+    cat "$TMP_DIR/spec_api_run.log" >&2
+    exit 1
+fi
+if ! grep -q "release-smoke-stage-6" "$TMP_DIR/spec_api_run.log"; then
+    echo "FAIL: spec-API workflow did not surface the input message in stdout." >&2
+    cat "$TMP_DIR/spec_api_run.log" >&2
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Stage 7 (optional): real-provider planner run
 # -----------------------------------------------------------------------------
 # Gated by BOTH env vars. When either is missing, print a skip line and
 # continue with exit 0. Not run in the default release gate — matches
 # the tests/e2e/ double-gate pattern.
-echo "[6/6] real-provider planner run (optional) ..."
+echo "[7/7] real-provider planner run (optional) ..."
 if [[ "${AIW_E2E:-0}" == "1" && -n "${GEMINI_API_KEY:-}" ]]; then
     echo "      AIW_E2E=1 + GEMINI_API_KEY set — driving aiw run planner"
     timeout 60 "$VENV_BIN/aiw" run planner \
