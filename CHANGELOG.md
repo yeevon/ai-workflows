@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M19 Task 07 cycle 2: T07 findings propagated to T08 carry-over (2026-04-26)
+
+Files touched:
+- `design_docs/phases/milestone_19_declarative_surface/task_08_milestone_closeout.md` — new
+  `## Carry-over from M19 T07 audit (2026-04-26)` subsection added after the existing T01 carry-over
+  section. Absorbs all 4 T07 cycle 1 findings deferred by user (option 2): CARRY-T07-MEDIUM-1
+  (class-level + function-level docstring prose drift from M11 T01 framing in `mcp/schemas.py` +
+  `_dispatch.py` + `architecture.md:106`), CARRY-T07-LOW-1 (§Extension model section length below
+  spec target — optional polish), CARRY-T07-LOW-2 (wrong anchor slugs in 3 cross-links to
+  §Extension model), CARRY-T07-LOW-3 (tier-label format divergence across 3 tier tables). No source
+  code or doc surface changes; pure propagation cycle.
+
+ACs satisfied: T07 cycle 2 propagation-only scope per user-locked option 2 on MEDIUM-1.
+Deviations from spec: none.
+
+### Changed — M19 Task 07: four-tier extension model propagated across architecture + README + primitive doc + nice_to_have re-open trigger (2026-04-26)
+
+Files touched:
+- `design_docs/architecture.md` — new §"Extension model" subsection (~35 lines) between §7 and §8
+  makes the four-tier framing part of the architecture-of-record. Includes framing paragraph, tier
+  table (Tier 1–4 with guide pointers), out-of-scope-for-external-authors paragraph, graduation
+  paragraph, gate-pause projection note (T03 MEDIUM-1 carry-over: `FINAL_STATE_KEY` controls
+  `artifact` projection; empty channel → `artifact=None` at gate time), and reference to ADR-0008.
+  KDR-004 row in §9 updated to reflect M19 construction-invariant graduation (source col adds
+  ADR-0008). KDR-013 row updated to reflect boundary shift (specs are data; custom step types
+  remain code; source col adds ADR-0008).
+- `README.md` — new "## Extending ai-workflows" section above "## MCP server" with one-paragraph
+  framing per tier and pointer table to each tier's guide. Three outdated "(builder-only, on design
+  branch)" annotations scrubbed per AC-7.
+- `docs/writing-a-graph-primitive.md` — audience-clarification banner at top naming framework
+  contributors (not downstream consumers) as the audience, with pointers to Tier 1+2 and Tier 3
+  guides. Existing "promote when pattern appears in 2+ workflows" heuristic restated as the Tier 3
+  → graph-layer graduation path (new §"When to write a new graph primitive" lead paragraph).
+  Cross-link to `architecture.md §Extension model` added. Three "(builder-only, on design branch)"
+  annotations scrubbed.
+- `docs/writing-a-custom-step.md` — back-link to `architecture.md §Extension model` added in
+  §Pointers to adjacent tiers (T06-ISS-LOW-1 carry-over: T06 intentionally omitted the anchor
+  until T07 ships the section).
+- `design_docs/nice_to_have.md` — new §23 entry "Spec API extensions for slice_refactor-shape
+  patterns" with explicit re-open trigger (second external workflow with conditional routing or
+  sub-graph composition; per M19 §Decisions Q5 + H2). Includes `gate_review_payload_field` knob
+  candidate per T03 MEDIUM-1 carry-over.
+- `CHANGELOG.md` — this entry.
+
+ACs satisfied: AC-1 (architecture.md §Extension model ~35-line subsection, framing+table+OOS+
+graduation+ADR-0008), AC-2 (KDR-004 + KDR-013 rows updated), AC-3 (no new KDR), AC-4 (README
+§Extending section above §MCP server, framing + tier table), AC-5 (audience-clarification banner
+at top of writing-a-graph-primitive.md), AC-6 (graduation-path restatement + cross-link to
+architecture.md §Extension model), AC-7 (cross-refs audited; (builder-only, on design branch)
+annotations scrubbed from writing-a-graph-primitive.md and README.md), AC-8 (smoke passes; all
+referenced files exist), AC-9 (four-tier framing consistent across all surfaces), AC-10 (existing
+content unchanged outside new/updated sections), AC-11 (nice_to_have.md §23 entry with re-open
+trigger language matching Deliverable 5), AC-12 (gates green), AC-13 (this entry).
+
+Carry-over ACs satisfied: T03-MEDIUM-1 Path A (gate-pause projection note in architecture.md
+§Extension model + gate_review_payload_field candidate in nice_to_have.md §23),
+T06-ISS-LOW-1 (architecture.md §Extension model back-link added to writing-a-custom-step.md),
+M18-R1/R2 ((builder-only, on design branch) annotations scrubbed from writing-a-graph-primitive.md
+and README.md per M18 inventory cross-reference rot items).
+
+Deviations from spec: none. Deliverables 1–7 implemented as specified.
+
+**KDRs:** KDR-004 (validator pairing — M19 construction-invariant framing), KDR-013 (user-owned
+code — boundary shift to data/code split under M19 spec API).
+
 ### Added — M19 Task 06: docs/writing-a-custom-step.md (Tier 3 dedicated guide) + compile_step_in_isolation testing fixture (2026-04-26)
 
 Files touched:

@@ -534,6 +534,26 @@ Re-evaluated during the 2026-04-21 [M9 post-close-out deep-analysis](phases/mile
 
 ---
 
+## 23. Spec API extensions for slice_refactor-shape patterns
+
+**Status:** Deferred at M19 (2026-04-26) per ADR-0008 + M19 README §Decisions Q5.
+
+**What this would extend:**
+- Sub-spec composition step (`SubSpecStep(spec=other_spec)`) — for workflows that compose other registered specs as sub-graphs.
+- Conditional routing step (`BranchStep(condition=Callable, branches={...})`) — for workflows whose graph topology depends on runtime state.
+- Hard-stop / multi-terminal step types — for workflows with distinct error-terminals beyond the default completion path.
+- Mid-run tier override propagation in `FanOutStep` — for fault-tolerance overlays like the M8/M10 Ollama-fallback.
+- `wrap_with_error_handler` integration into `LLMStep` — for workflows that need retry-counter bookkeeping + last_exception carry.
+- `gate_review_payload_field` knob on `WorkflowSpec` — for configurable gate-pause projection (the current projection follows `FINAL_STATE_KEY`; workflows whose `FINAL_STATE_KEY` channel is empty at gate time see `artifact=None`; a downstream consumer needing a different gate-time projection can request this knob).
+
+**Why deferred:** `slice_refactor` and `planner` are the only in-tree workflows that use these patterns; one workflow family doesn't prove the taxonomy needs the extensions. The risk of premature extension is over-engineering the spec API around one workflow's edge cases; the framework's value is the simpler authoring contract.
+
+**Trigger to re-open:** When a **second** external workflow (downstream consumer OR new in-tree workflow) with conditional routing or sub-graph composition wants to use the spec API. At that point, the second example proves the pattern is reusable, and a new milestone proposal scopes the taxonomy extension. Until then, `slice_refactor` and `planner` stay on their existing `register("slice_refactor", build_slice_refactor)` and `register("planner", build_planner)` escape hatches (Tier 4) — which is their current shape and continues to work unchanged.
+
+**What does NOT trigger a re-open:** A single workflow (`slice_refactor`, `planner`, or any other) that wants the extensions; cosmetic preference for declarative authoring over the escape hatch; future minor releases that add other features. The bar is "second forcing function fires" — not "we have time."
+
+---
+
 ## Revisit cadence
 
 Re-read this file:

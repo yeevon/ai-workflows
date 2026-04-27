@@ -248,6 +248,56 @@ These four items surfaced in M19 T01's `/clean-implement` cycle 1 audit + securi
 - [ ] **CARRY-T01-LOW-3 — `Step.compile()` body framing in T01 spec.** Spec Deliverable 3 shows the stub body as `...  # noqa: stub`; Builder shipped `raise NotImplementedError("...lands in M19 T02 (_compiler.py)...")` instead. Builder's choice is **better** (a typed-return method with `Ellipsis` body silently returns `None` if invoked; `NotImplementedError` produces a diagnostic failure) but the spec text doesn't sanction the deviation.
       **Action at T08 Deliverable 1:** edit `task_01_workflow_spec.md` Deliverable 3 to annotate the stub-body shape — *"`NotImplementedError(...)` or `...` are both acceptable; the locked contract is the signature, not the body."* No source-code change required.
 
+## Carry-over from M19 T07 audit (2026-04-26)
+
+These four items surfaced in M19 T07's cycle 1 audit (see [`issues/task_07_issue.md`](issues/task_07_issue.md)). User locked option 2 (defer to T08) for MEDIUM-1 and chose to bundle LOW-1 + LOW-2 + LOW-3 into the same T08 carry-over. All four items are non-blocking for T07's PASS verdict but must be addressed during T08's doc-pass before the 0.3.0 publish. Items are mechanical doc-prose edits; no behaviour change; verify gates green after each touch.
+
+- [ ] **CARRY-T07-MEDIUM-1 — Class-level + function-level docstring prose drift (M11 T01 framing residue).**
+      Sources: T03 cycle 2 LOW-3 + T03 cycle 1 §4.4 doc drift. Both forward-deferred to T07; T07 spec carry-over did not include them; T07 cycle 1 audit re-deferred to T08 per locked option 2.
+      **Action at T08 release-ceremony doc pass (before `uv build`):** mechanical search-and-replace pass updating these 6 sites:
+      - `ai_workflows/mcp/schemas.py:91` (class-level docstring on `RunWorkflowOutput.plan` legacy alias).
+      - `ai_workflows/mcp/schemas.py:178, 183-184` (`ResumeRunOutput.plan` + the two `plan_at_pause` lines).
+      - `ai_workflows/workflows/_dispatch.py:729, 994, 999, 1093` (function-level docstrings on `_build_result_from_final` / `_build_resume_result_from_final`).
+      - `design_docs/architecture.md:106` (the §4.4 M11 T01 line: *"`RunWorkflowOutput.plan` / `ResumeRunOutput.plan` carry the in-flight draft plan..."*).
+      Replace M11 T01 framing ("in-flight draft" / "re-gated draft" / "last-draft artefact") with the post-T03 honest framing: "follows `FINAL_STATE_KEY`; may be `None` at gate-pause for workflows whose `FINAL_STATE_KEY` channel is empty pre-gate." Composes with the T07-shipped §"Extension model" gate-pause projection note in architecture.md.
+      One-line search-and-replace touches; no behaviour change. Verify gates green after each touch.
+
+- [ ] **CARRY-T07-LOW-1 — `architecture.md §"Extension model"` shipped at 19 lines vs. spec's ~50-80 line target.**
+      Source: T07 cycle 1 audit LOW-1.
+      **Action at T08 doc pass:** optional polish — expand the §"Extension model" section closer to spec target by adding examples, more detailed framing of the four-tier promise, deeper elaboration of the graduation pattern. Per T07 issue file's recommendation: "Total expansion ~25-30 lines, taking the section to ~50 lines (lower bound of the spec target)." All 5 required structural elements are already present at 19 lines (framing + tier table + out-of-scope + graduation + ADR-0008 ref + gate-pause note); the expansion is depth, not new content. Mark optional — Builder discretion at T08 implement time.
+
+- [ ] **CARRY-T07-LOW-2 — Anchor slugs in 3 cross-links to `architecture.md §"Extension model"` computed wrong.**
+      Source: T07 cycle 1 audit LOW-2.
+      3 sites use `#extension-model----extensibility-is-a-first-class-capability` (4 hyphens; wrong); GFM renders the actual section heading as `#extension-model-extensibility-is-a-first-class-capability` (1 hyphen; em-dash dropped). File-level link resolves; in-page jump broken.
+      Sites:
+      - `docs/writing-a-graph-primitive.md:3` (audience banner)
+      - `docs/writing-a-graph-primitive.md:15` (lead paragraph in §When to write a new graph primitive)
+      - `docs/writing-a-custom-step.md:324` (Pointers to adjacent tiers — T06-LOW-1 absorption)
+      **Action at T08 doc pass:** 3 one-line edits replacing the wrong anchor with the GFM-rendered slug. Mechanical search-and-replace.
+
+- [ ] **CARRY-T07-LOW-3 — Tier-label format diverges across 3 tier tables.**
+      Source: T07 cycle 1 audit LOW-3.
+      3 tier tables show the same 4 tiers with divergent display labels:
+      - `design_docs/architecture.md:174-177` — `1 — Compose / 2 — Parameterise / 3 — Author a custom step type / 4 — Escape to LangGraph directly`
+      - `README.md:82-85` — `**1. Compose** / **2. Parameterise** / **3. Author a custom step type** / **4. Escape to LangGraph directly**`
+      - `docs/writing-a-custom-step.md:12-15` (T06-shipped) — `Tier 1 — compose / Tier 2 — parameterise / Tier 3 — author a custom step / Tier 4 — escape hatch`
+      Pick canonical form + align all three. Auditor's recommended canonical: architecture.md's `1 — Compose / 2 — Parameterise / 3 — Author a custom step type / 4 — Escape to LangGraph directly` (no bold; em-dash separator; full label).
+      **Action at T08 doc pass:** harmonize the 3 tier tables to a single canonical format. Mechanical edits.
+
+## Carry-over from M19 T07 security review (2026-04-26)
+
+These items surfaced in M19 T07's security gate (see [`issues/task_07_issue.md`](issues/task_07_issue.md) §Security review). Verdict was FIX-THEN-SHIP — T07's own diff is clean; SEC-HIGH-1 is a pre-existing regression from M16 T01 that this doc-touching task surfaced. Natural owner is T08 pre-publish.
+
+- [ ] **CARRY-SEC-HIGH-1 — Restore `README.md §Security notes` subsection (PyPI long-description surface).**
+      Source: T07 security review SEC-HIGH-1.
+      The `### Security notes` subsection (present in 0.1.3 release `b01b1ec` and the 0.2.0 release-prep commit `e3607a9`) was dropped at M16 T01 (`01ceb9b`) and is absent from the current committed HEAD. The threat model (§4 MCP HTTP transport bind address) explicitly requires this content: the `--host 0.0.0.0` foot-gun documentation + `--cors-origin` opt-in framing. The default is safe (loopback) and no docs actively teach `--host 0.0.0.0`, so this is a "could-be-better" gap on the PyPI README rather than an active mislead — but it must close before 0.3.0 ships.
+      **Action at T08 release-ceremony doc pass (before `uv build`):** restore a one-paragraph `### Security notes` subsection under `## MCP server` (or its post-T07 equivalent location) covering: (1) `aiw-mcp` defaults to loopback (`127.0.0.1`); (2) `--host 0.0.0.0` exposes the server to every process on the host and to the LAN with no built-in auth (use only behind a reverse proxy that adds auth); (3) `--cors-origin` is opt-in and not required for stdio or loopback HTTP. Source the canonical wording from the 0.1.3 README at commit `b01b1ec` (verifiable via `git show b01b1ec:README.md`). Verify the restored section after running `uv build` + the wheel-contents check.
+
+- [ ] **CARRY-SEC-ADV-1 — (Optional) Restore `README.md §Setup` env-var + Claude OAuth guidance.**
+      Source: T07 security review SEC-ADV-1 (advisory; not blocking).
+      The `## Setup` section with environment variable / Claude OAuth subprocess guidance was also dropped at M16 T01. Less urgent than SEC-HIGH-1 (no foot-gun documented) but its restoration alongside CARRY-SEC-HIGH-1 makes the README coherent again.
+      **Action at T08 doc pass:** optional restoration alongside CARRY-SEC-HIGH-1. Builder discretion at T08 implement time.
+
 ## Carry-over from task analysis
 
 ## Carry-over from task analysis

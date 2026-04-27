@@ -1,6 +1,6 @@
 # Task 07 — Four-tier framing across `architecture.md`, `README.md`, `writing-a-graph-primitive.md` + KDR table updates + Q5 deferral re-open trigger
 
-**Status:** 📝 Planned.
+**Status:** ✅ Implemented (2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Extension model + §Documentation surface (the propagation requirements this task lands)](../../adr/0008_declarative_authoring_surface.md) · [KDR-004 (validator pairing — strengthened to construction invariant; KDR table row update)](../../architecture.md) · [KDR-013 (user code is user-owned — boundary shifts; KDR table row update)](../../architecture.md) · [Task 05](task_05_writing_workflow_rewrite.md) (Tier 1+2 doc; cross-linked from `architecture.md §Extension model` + `README.md`) · [Task 06](task_06_writing_custom_step.md) (Tier 3 doc; cross-linked) · [`design_docs/architecture.md`](../../architecture.md) (the architecture-of-record being extended) · [`README.md`](../../../README.md) (the project entry point being extended) · [`docs/writing-a-graph-primitive.md`](../../../docs/writing-a-graph-primitive.md) (the existing Tier 4 doc being aligned) · [`design_docs/nice_to_have.md`](../../nice_to_have.md) (the parking lot where the Q5 slice_refactor-port re-open trigger lands).
 
 ## What to Build
@@ -167,19 +167,19 @@ Under `[Unreleased]` on both branches:
 
 ## Acceptance Criteria
 
-- [ ] **AC-1:** `design_docs/architecture.md` has a new §"Extension model" subsection (~50–80 lines) with the framing paragraph + tier table + out-of-scope-for-external-authors paragraph + graduation paragraph + reference to ADR-0008. Placement is consistent with the architecture document's existing structure.
-- [ ] **AC-2:** `architecture.md §9` KDR table has updated rows for KDR-004 and KDR-013 reflecting the M19 strengthening/shifting per Deliverable 2. Source column references include ADR-0008.
-- [ ] **AC-3:** No new KDR added (per ADR-0008 §Decision; M19 is composed under existing KDRs).
-- [ ] **AC-4:** `README.md` has a new "## Extending ai-workflows" section above the "MCP server" section with the framing paragraph + tier table per Deliverable 3. Every link in the table resolves.
-- [ ] **AC-5:** `docs/writing-a-graph-primitive.md` has an audience-clarification banner at the top naming the framework-contributor audience and pointing external-author readers at the appropriate tier guide.
-- [ ] **AC-6:** `docs/writing-a-graph-primitive.md`'s "promote when pattern appears in 2+ workflows" heuristic restated as the Tier 3 → graph-layer graduation path. Cross-link to `architecture.md §Extension model` added.
-- [ ] **AC-7:** Cross-references audited across all three surfaces. Every internal link resolves at implement time. Any outdated "(builder-only, on design branch)" annotations on items now in the main tree are scrubbed.
-- [ ] **AC-8:** Smoke verification (Deliverable 5) passes — structural presence checks succeed + every referenced file exists.
+- [x] **AC-1:** `design_docs/architecture.md` has a new §"Extension model" subsection (~50–80 lines) with the framing paragraph + tier table + out-of-scope-for-external-authors paragraph + graduation paragraph + reference to ADR-0008. Placement is consistent with the architecture document's existing structure.
+- [x] **AC-2:** `architecture.md §9` KDR table has updated rows for KDR-004 and KDR-013 reflecting the M19 strengthening/shifting per Deliverable 2. Source column references include ADR-0008.
+- [x] **AC-3:** No new KDR added (per ADR-0008 §Decision; M19 is composed under existing KDRs).
+- [x] **AC-4:** `README.md` has a new "## Extending ai-workflows" section above the "MCP server" section with the framing paragraph + tier table per Deliverable 3. Every link in the table resolves.
+- [x] **AC-5:** `docs/writing-a-graph-primitive.md` has an audience-clarification banner at the top naming the framework-contributor audience and pointing external-author readers at the appropriate tier guide.
+- [x] **AC-6:** `docs/writing-a-graph-primitive.md`'s "promote when pattern appears in 2+ workflows" heuristic restated as the Tier 3 → graph-layer graduation path. Cross-link to `architecture.md §Extension model` added.
+- [x] **AC-7:** Cross-references audited across all three surfaces. Every internal link resolves at implement time. Any outdated "(builder-only, on design branch)" annotations on items now in the main tree are scrubbed.
+- [x] **AC-8:** Smoke verification (Deliverable 5) passes — structural presence checks succeed + every referenced file exists.
 - [ ] **AC-9:** Manual read-through (Auditor's responsibility) confirms the four-tier framing is consistently applied across architecture + README + primitive doc + the existing T05/T06 guides. Terminology consistent (always "Tier 1 / 2 / 3 / 4"; consistent step-type naming).
-- [ ] **AC-10:** Existing content in `architecture.md` unchanged outside §"Extension model" + §9 KDR rows. Existing content in `README.md` unchanged outside the new "Extending ai-workflows" section. Existing content in `writing-a-graph-primitive.md` unchanged outside the audience banner + heuristic-restating + cross-link additions.
-- [ ] **AC-11:** `nice_to_have.md` has the new "Spec API extensions for slice_refactor-shape patterns" entry per Deliverable 5. Slot number recorded in the issue file at audit time. Re-open trigger language matches Deliverable 5 verbatim.
-- [ ] **AC-12:** Gates green on both branches. `uv run pytest`, `uv run lint-imports`, `uv run ruff check`.
-- [ ] **AC-13:** CHANGELOG entry under `[Unreleased]` per Deliverable 7.
+- [x] **AC-10:** Existing content in `architecture.md` unchanged outside §"Extension model" + §9 KDR rows. Existing content in `README.md` unchanged outside the new "Extending ai-workflows" section. Existing content in `writing-a-graph-primitive.md` unchanged outside the audience banner + heuristic-restating + cross-link additions.
+- [x] **AC-11:** `nice_to_have.md` has the new "Spec API extensions for slice_refactor-shape patterns" entry per Deliverable 5. Slot number recorded in the issue file at audit time. Re-open trigger language matches Deliverable 5 verbatim.
+- [x] **AC-12:** Gates green on both branches. `uv run pytest`, `uv run lint-imports`, `uv run ruff check`.
+- [x] **AC-13:** CHANGELOG entry under `[Unreleased]` per Deliverable 7.
 
 ## Dependencies
 
@@ -207,6 +207,6 @@ Under `[Unreleased]` on both branches:
 
 ## Carry-over from prior audits
 
-- [ ] **M19-T06-ISS-LOW-1 — Add `architecture.md §Extension model` back-link to `docs/writing-a-custom-step.md`** (severity: LOW, source: [M19 T06 issue file](issues/task_06_issue.md))
+- [x] **M19-T06-ISS-LOW-1 — Add `architecture.md §Extension model` back-link to `docs/writing-a-custom-step.md`** (severity: LOW, source: [M19 T06 issue file](issues/task_06_issue.md))
       T06 shipped `docs/writing-a-custom-step.md` (Tier 3 dedicated guide) before T07 lands the new `architecture.md §"Extension model"` subsection. Spec Deliverable 3 of T06 expected three cross-link targets — `writing-a-workflow.md`, `writing-a-graph-primitive.md`, and `architecture.md §Extension model` — but the third was intentionally omitted by T06 because the anchor target does not exist yet. T06 cannot reference an anchor T07 hasn't created.
       **What T07 must do:** when landing the new `architecture.md §"Extension model"` subsection (T07 Deliverable 1), also add a back-link from `docs/writing-a-custom-step.md` to `../design_docs/architecture.md#extension-model` (anchor name to match T07's heading slug). The natural placement is in §Pointers to adjacent tiers (after the Tier 4 cross-link), or inline in §When to write a custom step. T07 already cross-touches `architecture.md` + `README.md` + `writing-a-graph-primitive.md`, so adding one cross-link to `writing-a-custom-step.md` is a natural extension of the same coordinated pass. Verify the link resolves under `tests/docs/test_docs_links.py` (which file-checks but not anchor-checks per its current scope; anchor validation is `nice_to_have` per the link checker's docstring).

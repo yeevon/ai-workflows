@@ -73,6 +73,19 @@ aiw list-runs
 
 The planner workflow composes two LLM tiers (Qwen explorer via Ollama + Claude Code Opus synth). If you only want the Gemini path for a smoke, pass `--tier-override planner-synth=planner-explorer` or omit the Ollama + Claude Code prerequisites and stub the `gemini_flash` tier.
 
+## Extending ai-workflows
+
+ai-workflows is a declarative orchestration layer; extension is a first-class capability. Authors engage at four progressively-deeper tiers, each with a dedicated guide:
+
+| Tier | When | Guide |
+|---|---|---|
+| **1. Compose** | You're combining built-in step types (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`) into a workflow. The happy path. | [docs/writing-a-workflow.md](docs/writing-a-workflow.md) |
+| **2. Parameterise** | You're configuring built-in steps (retry policy, response format, gate behaviour, tier choice). | [docs/writing-a-workflow.md](docs/writing-a-workflow.md) (same doc) |
+| **3. Author a custom step type** | No built-in covers your need. Subclass `Step`; the framework wires your custom step into the graph like a built-in. | [docs/writing-a-custom-step.md](docs/writing-a-custom-step.md) |
+| **4. Escape to LangGraph directly** | Your topology is genuinely non-standard (dynamic edge conditions, novel control flow). Use the legacy `register(name, build_fn)` API. | [docs/writing-a-graph-primitive.md](docs/writing-a-graph-primitive.md) |
+
+The framework's promise: descending a tier never forces you to reverse-engineer framework source. If you're at the wrong tier, you'll find pointers to the right one in any guide.
+
 ## MCP server
 
 Register `aiw-mcp` with any MCP host — Claude Code, Cursor, Zed, or an HTTP client via the streamable-HTTP transport — to drive the same workflows inside-out:
@@ -81,7 +94,7 @@ Register `aiw-mcp` with any MCP host — Claude Code, Cursor, Zed, or an HTTP cl
 claude mcp add ai-workflows --scope user -- uvx --from jmdl-ai-workflows aiw-mcp
 ```
 
-The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport http --port 8080 --cors-origin http://localhost:3000`. Full skill-install walkthrough (builder-only, on design branch).
+The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport http --port 8080 --cors-origin http://localhost:3000`.
 
 Registering your own workflow modules from a downstream package? `AIW_EXTRA_WORKFLOW_MODULES=pkg.workflows.your_workflow` (or `--workflow-module pkg.workflows.your_workflow`, repeatable) imports them at startup. See [docs/writing-a-workflow.md §External workflows from a downstream consumer](docs/writing-a-workflow.md#external-workflows-from-a-downstream-consumer).
 
@@ -96,7 +109,7 @@ uv sync              # install runtime + dev dependencies
 uv run aiw version   # prints 0.1.0
 ```
 
-For the full builder/auditor workflow — task specs, audit issue files, Builder / Auditor mode conventions — switch to the `design` branch (builder-only, on design branch).
+For the full builder/auditor workflow — task specs, audit issue files, Builder / Auditor mode conventions — switch to the `design_branch`.
 
 ## Development
 
