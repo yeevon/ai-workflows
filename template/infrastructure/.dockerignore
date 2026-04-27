@@ -1,0 +1,53 @@
+# Claude Code autonomy sandbox — .dockerignore template.
+# ------------------------------------------------------
+# Image is bind-mount based — this file mostly hardens against
+# future COPY directives leaking host artefacts into the build
+# context.
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Build artefacts
+dist/
+build/
+
+# Runtime artefacts (project-specific; replace `runs/` with your
+# project's runtime artefact dir)
+runs/
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Secrets — never bake into an image. Runtime mount via env_file
+# in docker-compose instead.
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Git
+.git/
+
+# Node / npm — only relevant if your stack uses them
+node_modules/
+
+# Docker output
+*.log

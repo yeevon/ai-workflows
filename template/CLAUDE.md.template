@@ -1,0 +1,120 @@
+# CLAUDE.md — <PROJECT_NAME> conventions
+
+Loaded into every Claude Code conversation. Defines what's load-bearing across the project. Step-by-step procedures live in `.claude/agents/` (subagents) and `.claude/commands/` (slash commands):
+
+- `/clean-tasks <milestone>` — generate per-task spec files for a milestone (if missing) and loop the `task-analyzer` subagent + spec-fix application until the analysis returns no HIGH or MEDIUM findings. Pushes any LOWs to each spec's `## Carry-over from task analysis` section. Cap of 5 rounds.
+- `/clean-implement <task>` — full Builder → Auditor loop (up to 10 cycles) + security gate. Spawns subagents via `Task`. Auditor-agreement bypass on stop condition 2: when the auditor surfaces a single clear recommendation and the loop controller concurs against the spec + KDRs + locked decisions, the controller stamps it as a locked decision and feeds it to the next Builder cycle as a carry-over AC instead of halting.
+- `/auto-implement <task>` — autonomous-mode `/clean-implement` (run inside the Docker sandbox; see `Dockerfile` + `docker-compose.yml`). Extends `/clean-implement` with (a) a **team gate** after the security gate that runs `sr-dev` + `sr-sdet` and conditionally `architect` (alignment required), (b) auto-commit + auto-push to `<DESIGN_BRANCH>`, and (c) hard halt boundaries (no `<MAIN_BRANCH>`, no `<RELEASE_COMMAND>`, no KDR conflict).
+- `/queue-pick [<milestone-list>]` — one-shot orchestrator that spawns `roadmap-selector` to pick the next task. Three verdicts: `PROCEED` (recommends `/auto-implement`), `NEEDS-CLEAN-TASKS` (recommends `/clean-tasks` first), `HALT-AND-ASK` (user arbitrates). Does not chain — for fully-autonomous queue draining, use `/autopilot`.
+- `/autopilot [<milestone-list>]` — autonomous queue-drain meta-loop. Loops over (queue-pick → clean-tasks-if-needed → auto-implement) until the queue drains, the supplied scope is exhausted, or a halt fires. Reads `.claude/commands/auto-implement.md` and `.claude/commands/clean-tasks.md` and executes their procedures inline. Pre-flight requires `AIW_AUTONOMY_SANDBOX=1`; HARD HALT on the host.
+- `/implement <task>` — single Builder pass.
+- `/audit <task>` — single Auditor pass.
+
+Subagents:
+
+- `task-analyzer` — read-mostly; deep-analysis pass on freshly-generated or recently-edited task specs.
+- `builder` — implements strictly to spec; returns terse report; no self-grading.
+- `auditor` — read-only on source code; mandatory architecture + KDR drift check; writes the issue file.
+- `security-reviewer` — post-functional-clean threat-model check.
+- `dependency-auditor` — manifest changes + artefact-contents pre-publish.
+- `architect` — independent architectural judgment + targeted external research (web-search enabled). Used at mid-loop decision points (Trigger A: new-KDR; Trigger B: external-claim verification).
+- `roadmap-selector` — picks the next task using sequential default rule + narrow bug-blocker override.
+- `sr-dev` — senior code-quality review at autonomous-mode terminal gate.
+- `sr-sdet` — senior test-quality + coverage review at autonomous-mode terminal gate.
+
+---
+
+## Grounding (read before any task)
+
+- [<ARCHITECTURE_DOC>](<ARCHITECTURE_DOC>) — the architecture of record. Every task cites at least one KDR.
+- [<ROADMAP>](<ROADMAP>) — milestone index.
+- [<NICE_TO_HAVE>](<NICE_TO_HAVE>) — **deferred parking lot.** Items here are out of scope by default.
+
+### Load-bearing KDRs
+
+| KDR | Rule |
+| --- | --- |
+| **KDR-001** | <Locked-pattern rule that the Auditor uses as a drift-check anchor> |
+| **KDR-002** | <Another locked rule> |
+| ... | <Add as many as your project has — typically 3–7 load-bearing rules> |
+
+The Auditor uses these as drift-check anchors; main-context Claude uses them when the user asks ad-hoc questions about scope.
+
+---
+
+## Repo layout
+
+(Replace with your project's layout. Examples below; adapt freely.)
+
+- `<SOURCE_DIR>/` — package. <Layer rule if any.>
+- `tests/` — mirrors source structure. Hermetic by default; `<E2E_FLAG>=1` opts into provider-touching tests.
+- `<SPEC_DIR_ROOT>/` — source of truth for task specs and architectural decisions.
+- `runs/` — runtime artefacts (gitignored).
+- `CHANGELOG.md` — Keep-a-Changelog, milestone/task scoped.
+- `.claude/{agents,commands,settings.local.json}` — autonomy infrastructure.
+
+**Cross-cutting backlog:** items spanning milestones with no natural owner go in the audit issue file with `DEFERRED (owner: TBD)` and surface to the user.
+
+---
+
+## Builder mode (one-paragraph summary)
+
+The Builder implements a task strictly against its spec + issue file (authoritative amendment) + carry-over section (extra ACs from prior audits). No invented scope, no drive-by refactors, no `<NICE_TO_HAVE>` adoption. Tests for every AC. All gates green before handing off (<GATE_COMMANDS>). CHANGELOG entry citing the KDR(s). **No commits, PRs, or pushes unless the user asks.** Stop and ask if the spec is ambiguous, an AC is unsatisfiable, or implementing would break prior task behaviour.
+
+Full procedure: see [.claude/agents/builder.md](.claude/agents/builder.md).
+
+## Auditor mode (one-paragraph summary)
+
+The Auditor is read-only on source code (write access only to the issue file + target-task carry-over for propagation). Loads the full task scope — not the diff — including `<ARCHITECTURE_DOC>` + every cited KDR. **Mandatory** design-drift check before AC grading. Re-runs every gate from scratch. Grades each AC individually. Updates the issue file in place. Every finding carries an Action / Recommendation line.
+
+Full procedure: see [.claude/agents/auditor.md](.claude/agents/auditor.md).
+
+---
+
+## Threat model (loaded by `security-reviewer`)
+
+<PROJECT_NAME> is **<DEPLOYMENT_SHAPE>**. <Two-or-three-sentence summary of the actual attack surfaces in your deployment.>
+
+There is **no** auth, no multi-user surface, no untrusted network (or whatever the truth is). Generic web-app concerns (CSRF, sessions, account lockout, rate limiting) are noise unless your deployment shape says otherwise.
+
+Full threat model: see [.claude/agents/security-reviewer.md](.claude/agents/security-reviewer.md).
+
+---
+
+## Canonical file locations
+
+| Purpose | Path |
+| --- | --- |
+| Architecture | `<ARCHITECTURE_DOC>` |
+| Roadmap | `<ROADMAP>` |
+| Deferred parking lot | `<NICE_TO_HAVE>` |
+| ADRs | `<ADR_DIR>/*.md` |
+| Milestone overview | `<SPEC_DIR_ROOT>/milestone_<M>_<name>/README.md` |
+| Task spec | `<SPEC_DIR>` |
+| Task issue / audit log | `<ISSUE_FILE>` |
+| Task-analysis report | `<TASK_ANALYSIS>` |
+| Changelog | `CHANGELOG.md` |
+| Slash commands | `.claude/commands/` |
+| Subagents | `.claude/agents/` |
+
+---
+
+## Non-negotiables
+
+These cross-cut every task and apply to ad-hoc edits outside `/clean-implement` too:
+
+- **Layer discipline.** <LAYER_RULE>. Enforced by your project's import-rule gate.
+- **Project KDRs.** <KDR_LIST>. Violation of any KDR is HIGH at audit. Apply spirit, not just letter.
+- **Issue file is authoritative amendment to spec.** If they disagree, the spec wins; call out the conflict first.
+- **Carry-over section at the bottom of a spec = extra ACs.** Tick each as it lands.
+- **Scope discipline.** No invented scope, no drive-by refactors, no `<NICE_TO_HAVE>` adoption. Adoption requires a new KDR + ADR — not a task.
+- **Docstring discipline.** Every module/class/public function has one. Module docstrings cite the task and relationship to other modules. Inline comments only when *why* is non-obvious.
+- **Secrets discipline.** No API keys in committed files.
+- **Changelog discipline.** Every code- or content-touching task updates `CHANGELOG.md` in the same commit.
+- **Status-surface discipline.** All status surfaces flip together at task close. The Auditor catches drift across them as HIGH.
+- **Code-task verification is non-inferential.** For code, build-clean is necessary but not sufficient. Every code task spec MUST name an explicit smoke test the Auditor runs. Inferential claims about runtime behaviour from build success alone are HIGH.
+- **Real-install release smoke.** (If your project publishes artifacts.) Every release must run the artifact against a fresh install, not against the source tree. The pytest gate is `tests/release/`. The pre-publish bash gate is `scripts/release_smoke.sh`. Tests under `tests/release/` run by default.
+- **Dependency audit gate.** Any commit that touches `<MANIFEST_FILES>` triggers the `dependency-auditor` agent before the commit lands. The pre-publish artefact-contents check is non-skippable.
+- **Propagation discipline.** Forward-deferred items must appear as carry-over in the target task's spec before the audit closes.
+- **Ask before** force-push, `reset --hard`, deleting branches, or any other destructive git op.
+- **Autonomous-mode boundary.** Under `/auto-implement` and `/autopilot`, only the orchestrator runs `git commit` + `git push`, and only against `<DESIGN_BRANCH>`. **No subagent — including any of the 9 — runs `git commit`, `git push`, `git merge`, `git rebase`, `git tag`, or `<RELEASE_COMMAND>`.** A subagent report claiming to have done so is a HARD HALT (rogue behaviour pending user investigation). The orchestrator HARD HALTs on any merge to `<MAIN_BRANCH>`, any push to `<MAIN_BRANCH>`, any `<RELEASE_COMMAND>`, any manifest `version` bump beyond what the spec calls for, and on any sub-agent disagreement (sr-dev says BLOCK, sr-sdet says SHIP, etc.). KDR additions land on isolated commits so they can be reverted independently of task code.

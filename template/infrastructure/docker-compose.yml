@@ -1,0 +1,81 @@
+# Claude Code autonomy sandbox — docker-compose template.
+# --------------------------------------------------------
+# Single service. Source bind-mount, named volumes for venv/cache/
+# claude state, host SSH read-only mount for git push, host auto-
+# memory bind for context persistence.
+#
+# Replace placeholders before first run:
+#   <PROJECT_ROOT>      — absolute path the host owns
+#                         (e.g. /home/<you>/prj/<project>)
+#   <MEMORY_PATH_HASH>  — `echo "<PROJECT_ROOT>" | tr / -`
+#                         (e.g. -home-<you>-prj-<project>)
+#
+# Quickstart (preferred — via Makefile):
+#   make build / make sync / make test / make lint / make smoke / make shell
+#
+# Raw:
+#   docker compose build
+#   docker compose run --rm aiw bash
+
+services:
+  aiw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: "3.13"
+        UV_VERSION: "0.10"
+        NODE_MAJOR: "22"
+        AIW_UID: "1000"
+        AIW_GID: "1000"
+        PROJECT_ROOT: "<PROJECT_ROOT>"
+    image: claude-autonomy-sandbox:latest
+    container_name: claude-autonomy-sandbox
+    working_dir: <PROJECT_ROOT>
+    volumes:
+      # Live source — bind-mounted at the host path so cwd hashes
+      # (auto-memory, pytest cache) match host conversations.
+      - .:<PROJECT_ROOT>
+      # Persistent venv — overlay so host venv doesn't collide.
+      - aiw_venv:<PROJECT_ROOT>/.venv
+      # Persistent uv cache — first sync slow, subsequent fast.
+      - aiw_uv_cache:/home/aiw/.cache/uv
+      # Persistent Claude CLI state. Container-isolated; user
+      # re-auths inside on first run.
+      - aiw_claude_state:/home/aiw/.claude
+      # Auto-memory bind: host edits in memory/ propagate to the
+      # container session and back. The deeper-path bind overrides
+      # the volume mount above for this exact subtree, so memory
+      # persists between host and container while auth stays
+      # container-local.
+      - ${HOME}/.claude/projects/<MEMORY_PATH_HASH>/memory:/home/aiw/.claude/projects/<MEMORY_PATH_HASH>/memory
+      # Read-only bind of host SSH config so the autonomy loop can
+      # `git push` against an SSH remote (git@github.com:...) using
+      # the operator's existing host keys. Read-only — the sandbox
+      # cannot rotate or extract keys.
+      - ${HOME}/.ssh:/home/aiw/.ssh:ro
+    env_file:
+      # Optional. .env carries runtime API keys (GEMINI_API_KEY,
+      # PYPI_TOKEN, etc.). Compose tolerates a missing file.
+      - path: ./.env
+        required: false
+    environment:
+      # Autonomy-mode marker. Slash commands with destructive blast
+      # radius (/auto-implement, /autopilot) check for this var at
+      # pre-flight and HARD HALT if missing — running on the host
+      # by accident is a foot-gun the sandbox prevents.
+      AIW_AUTONOMY_SANDBOX: "1"
+      # Optional — point your local-LLM dispatcher at a host service
+      # if you have one. Generic; remove if not applicable.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      # Required for host-service references (Ollama, etc.) on Linux
+      # native + Docker Desktop.
+      - "host.docker.internal:host-gateway"
+    stdin_open: true
+    tty: true
+
+volumes:
+  aiw_venv:
+  aiw_uv_cache:
+  aiw_claude_state:
