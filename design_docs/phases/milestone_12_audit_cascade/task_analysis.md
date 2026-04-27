@@ -1,8 +1,8 @@
-# M12 Audit Cascade — Task Analysis
+# M12 — Task Analysis
 
 **Round:** 3
 **Analyzed on:** 2026-04-27
-**Specs analyzed:** `task_04_telemetry_role_tag.md` (T01-T03 + T08 already shipped)
+**Specs analyzed:** `task_05_run_audit_cascade_mcp_tool.md`
 **Analyst:** task-analyzer agent
 
 ## Summary
@@ -11,120 +11,68 @@
 | --- | --- |
 | 🔴 HIGH | 0 |
 | 🟡 MEDIUM | 0 |
-| 🟢 LOW | 7 |
-| Total | 7 |
+| 🟢 LOW | 2 (carried; new framing nit surfaced as L3) |
+| Total | 3 |
 
 **Stop verdict:** LOW-ONLY
 
-LOW-ONLY — six pre-existing LOWs (TA-LOW-01..06) remain in the spec's `## Carry-over from task analysis` section as `[ ]` checkboxes; one fresh LOW (TA-LOW-07) surfaces a residual stale Option-1/Option-2 reference in §Propagation status. Orchestrator should push TA-LOW-07 into carry-over (or fix inline if mechanical) and exit the loop.
-
-## Verification of round-2 fixes
-
-### M1 — CHANGELOG bullet (round 2 MEDIUM): RESOLVED
-
-The spec's `### CHANGELOG.md` block (lines 152-158) now correctly describes:
-
-- Option 4 mechanism: `tiered_node.py` bullet at line 156 reads "*`role: str = ""` factory kwarg + usage.role stamp before cost_callback.on_node_complete; mirror of existing tier kwarg pattern per Option 4 locked decision*."
-- 5 cost.py tests: `tests/primitives/test_cost_by_role.py` is described as "*new, 5 tests*."
-- 2 cascade tests: `tests/graph/test_audit_cascade.py` is described as "*extended, 2 new tests*."
-- No Option 1 references remain in the CHANGELOG-bullet block.
-
-The `audit_cascade.py` bullet correctly reflects Option 4: "*pass role="author" / role="auditor" at the primary + auditor tiered_node construction sites; the existing _stamp_role_on_success state-channel wrapper is left in place unchanged*." Confirmed against live `audit_cascade.py:282-287` (primary `tiered_node`) and `:317-322` (auditor `tiered_node`); both `_stamp_role_on_success` wrappers at `:288` / `:323` are present and untouched as the spec describes.
-
-### TA-LOW-05 — `tiered_node.py:264-274ish` line citation drift: PUSHED TO CARRY-OVER
-
-Lines 233-235 of the spec contain TA-LOW-05 as a `[ ]` checkbox in `## Carry-over from task analysis` with full Recommendation text matching the round-2 finding. Verified against live source: `tiered_node.py:264-268` is the existing `tier` stamp; `cost_callback.on_node_complete` is at line 274. The new role-stamp block will land between them, pushing the callback call to ~line 280 post-edit. The `:264-274ish` bound is approximate per the carry-over note and acceptable.
-
-### TA-LOW-06 — Out-of-scope ambiguity under Option 4: PUSHED TO CARRY-OVER
-
-Lines 237-239 of the spec contain TA-LOW-06 as a `[ ]` checkbox in `## Carry-over from task analysis` with full Recommendation text matching the round-2 finding. The recommended replacement bullet for §Out of scope line 196 is verbatim in the carry-over Recommendation field, ready for Builder to apply at implement-close time.
+All round-2 HIGH/MEDIUM fixes landed cleanly. Both round-2 LOWs are correctly parked in §Carry-over from task analysis as `[ ]` checkboxes with full Recommendation text. One small new LOW surfaced — a slightly inflated rationale sentence in the configurable-key block (R2 M2 fix area) where the spec claims `pricing={}` is "required" / would "crash with KeyError" but the underlying code paths show it actually defaults gracefully. Builder-absorbable; no implementation impact.
 
 ## Findings
 
+### 🔴 HIGH
+
+(none)
+
+### 🟡 MEDIUM
+
+(none)
+
 ### 🟢 LOW
 
-#### L1 — TA-LOW-01 (carried forward from round 1)
+#### L1 — TA-T05-LOW-01 (carried) — Validator error-message ordering / framing precision
 
-**Task:** `task_04_telemetry_role_tag.md`
-**Issue:** Spec line 218 describes `tiered_node.py:194` line citation drift from round 1; informational note since the round-1 fix application removed the load-bearing reference.
-**Recommendation:** No action — already in carry-over with Builder-action note. Builder verifies live source at implement time.
-**Push to spec:** Already present (lines 217-219).
+**Task:** `task_05_run_audit_cascade_mcp_tool.md`
+**Issue:** Carried from round 2. Confirmed parked in §Carry-over from task analysis (line 421-423) with full Recommendation text and `[ ]` checkbox. No movement; remains a cosmetic concern with no current caller affected. Standard pydantic instantiation always routes through the `@model_validator(mode="after")` in source order, so the question only matters if a future caller constructs via `model_construct()` to bypass validation.
+**Recommendation:** No action this round.
+**Push to spec:** already pushed (round 2). No further action needed.
 
-#### L2 — TA-LOW-02 (carried forward from round 1)
+#### L2 — TA-T05-LOW-02 (carried) — `architecture.md:105` secondary stale framing forward-deferred to T07
 
-**Task:** `task_04_telemetry_role_tag.md`
-**Issue:** CHANGELOG framing nuance — `### Added` vs `### Changed` for primitive-layer signature change.
-**Recommendation:** No action — already in carry-over. Builder picks framing at CHANGELOG-write time.
-**Push to spec:** Already present (lines 221-223).
+**Task:** `task_05_run_audit_cascade_mcp_tool.md`
+**Issue:** Carried from round 2. Confirmed parked in §Carry-over from task analysis (line 425-427) with full Recommendation text and `[ ]` checkbox. The deferral to T07 close-out (alongside the ADR-0004 §Decision item 7 amendment) is consistent with §Propagation status and the spec's own framing.
+**Recommendation:** No action this round.
+**Push to spec:** already pushed (round 2). No further action needed.
 
-#### L3 — TA-LOW-03 (carried forward from round 1)
+#### L3 — `pricing={}` rationale at line 285/292/362 slightly overstates the requirement
 
-**Task:** `task_04_telemetry_role_tag.md`
-**Issue:** Test #6 verdict-node assumption is now verified against live `_audit_verdict_node` source (no LLM dispatch); informational note for Builder awareness.
-**Recommendation:** No action — already in carry-over. Verified independently this round: `audit_cascade.py:714-810` `_audit_verdict_node` only calls `AuditVerdict.model_validate_json`; no LLM dispatch. Test count assertion would catch a future regression.
-**Push to spec:** Already present (lines 225-227).
+**Task:** `task_05_run_audit_cascade_mcp_tool.md`
+**Location:** spec §Standalone wiring lines 285, 292, and AC line 362.
+**Issue:** The R2 M2 fix added a clean enumeration of the configurable dict keys (good). The accompanying rationale text says `pricing={}` is "required for `ClaudeCodeRoute` dispatch — without it `ClaudeCodeSubprocess` raises KeyError" (line 362) and "Without `pricing={}` the AIW_E2E test ... would crash inside `ClaudeCodeSubprocess` looking up the model rate" (line 292). Verified against live source:
+- `tiered_node.py:218` reads `pricing: Mapping[str, ModelPricing] = configurable.get("pricing") or {}` — already defaults absent/None to `{}`.
+- `claude_code.py:349` reads `row = pricing.get(model_id)` and returns `0.0` cost when the row is absent — no KeyError, just returns zero cost (which is correct behaviour under Max flat-rate).
 
-#### L4 — TA-LOW-04 (carried forward from round 1)
-
-**Task:** `task_04_telemetry_role_tag.md`
-**Issue:** Forward-deferral note has no T05 spec to land on yet; tracked-but-pending in carry-over.
-**Recommendation:** No action — already in carry-over. T05 spec drafting (post-T04 close) picks this up via `/clean-tasks`.
-**Push to spec:** Already present (lines 229-231).
-
-#### L5 — TA-LOW-05 (carried forward from round 2)
-
-**Task:** `task_04_telemetry_role_tag.md`
-**Issue:** `tiered_node.py:264-274ish` line citation drift on the inserted role-stamp block.
-**Recommendation:** No action — already in carry-over with full Recommendation text. Builder confirms inserted block lands between `:264-268` and `:274` in live source.
-**Push to spec:** Already present (lines 233-235).
-
-#### L6 — TA-LOW-06 (carried forward from round 2)
-
-**Task:** `task_04_telemetry_role_tag.md`
-**Issue:** §"Out of scope" bullet wording is now ambiguous under Option 4 (the `tiered_node` factory signature DOES change, even though the cascade-primitive `audit_cascade_node` signature does not).
-**Recommendation:** No action — already in carry-over with verbatim replacement text for §Out of scope line 196. Builder applies at implement-close time.
-**Push to spec:** Already present (lines 237-239).
-
-#### L7 — Stale Option-1/Option-2 reference in §Propagation status (NEW this round)
-
-**Task:** `task_04_telemetry_role_tag.md`
-**Location:** Lines 200-205 (§Propagation status), specifically line 204.
-**Issue:** The first anticipated forward-deferral bullet at line 204 reads: *"If the role-stamp ordering issue (cascade primitive writes `cascade_role` AFTER the LLM call) requires Option 2 (`RunnableConfig.configurable` plumbing) instead of Option 1 (entry-side write), the cascade primitive's API surface grows a `cascade_role` configurable key — surface as a forward-deferral to T07 close-out for documentation in ADR-0004."* Under Option 4 (locked 2026-04-27 — see lines 122-128), the role tag is closure-bound at construction time on `tiered_node` and does NOT depend on `state['cascade_role']` ordering. The Option-1-vs-Option-2 forward-deferral scenario is logically moot. The bullet is dead text post-Option-4 lock.
-
-This is not a Builder-blocker — the Builder will simply not surface this forward-deferral at audit close because the scenario does not arise — but it is residual cruft from round-1 hypotheticals that the round-2 fix application missed (the M1 fix focused on the CHANGELOG bullet and §Out of scope, not on §Propagation status).
-
-**Recommendation:** Either (a) delete the line-204 bullet entirely (cleanest — Option 4 makes the scenario impossible) and leave the second bullet about T05's `by_role` aggregation in place, or (b) reword to reflect Option 4: *"Under Option 4 (factory-time role binding), no role-stamp ordering issue exists — the role is closure-bound at cascade construction time. Bullet retained as a record of the round-1 hypothetical that Option 4 obviated."* Option (a) is cleaner.
-
-**Apply this fix:**
-old_string:
-```
-- If the role-stamp ordering issue (cascade primitive writes `cascade_role` AFTER the LLM call) requires Option 2 (`RunnableConfig.configurable` plumbing) instead of Option 1 (entry-side write), the cascade primitive's API surface grows a `cascade_role` configurable key — surface as a forward-deferral to T07 close-out for documentation in ADR-0004.
-- If T05's standalone `run_audit_cascade` MCP tool needs to surface `by_role` aggregation in its output schema, that wiring lands at T05 — surface as a carry-over to T05's spec at draft time.
-```
-new_string:
-```
-- If T05's standalone `run_audit_cascade` MCP tool needs to surface `by_role` aggregation in its output schema, that wiring lands at T05 — surface as a carry-over to T05's spec at draft time.
-```
-**Push to spec:** Yes — append as TA-LOW-07 in `## Carry-over from task analysis` if orchestrator prefers carry-over over inline fix. Inline fix is also acceptable (mechanical text deletion).
+So the *behaviour* the spec wants (Max flat-rate $0 cost) lands whether `pricing={}` is supplied explicitly or omitted. The explicit `pricing={}` is still good practice (defensive against future refactors that might change the default), but the framing "would crash" is overstated. This does not change what the Builder writes — the literal `pricing={}` still belongs in the configurable dict per the AC. Only the rationale sentences are slightly stronger than reality.
+**Recommendation:** Builder at implement time can soften the inline comment from "required for ClaudeCodeRoute dispatch (Max flat-rate is $0; empty dict is fine — ClaudeCodeSubprocess accepts empty pricing and computes $0)" to "explicit per spec — Max flat-rate computes $0 with empty pricing; future per-tier-pricing change would surface non-zero values without code change." No spec edit needed; the Builder will see the live source and either keep the spec's framing or pick the lighter one. Either is fine.
+**Push to spec:** yes — append to T05 carry-over as **TA-T05-LOW-03**: "Spec §Standalone wiring lines 285, 292, and AC line 362 frame `pricing={}` as 'required' / would 'crash with KeyError' if absent. Live code paths (tiered_node.py:218 + claude_code.py:349) actually default gracefully to `{}` and return `0.0` cost when model is absent from pricing table. Builder may soften the rationale at implement time. Functional behaviour unchanged — `pricing={}` is still passed explicitly per the AC for forward-compatibility."
 
 ## What's structurally sound
 
-- M1 fix verified: CHANGELOG bullet correctly describes Option 4 mechanism, 5 cost.py tests, 2 cascade tests; no residual Option 1 references in the CHANGELOG block.
-- TA-LOW-05 + TA-LOW-06 verified: present as `[ ]` checkboxes in `## Carry-over from task analysis` with full Recommendation text from round-2 findings.
-- Live source citations all verified this round:
-  - `cost.py`: `class TokenUsage` at line 66, `class CostTracker` at line 93, `by_tier` at line 116, `by_model` at line 125, `_roll_cost` at line 156. Spec citations accurate.
-  - `tiered_node.py:264-268`: existing `tier` stamp confirmed; `cost_callback.on_node_complete` at line 274. Insertion point for the role stamp is unambiguous.
-  - `audit_cascade.py:282-287` (primary `tiered_node`) and `:317-322` (auditor `tiered_node`): construction sites confirmed; `_stamp_role_on_success` wrappers at `:288` (`role="author"`) and `:323` (`role="auditor"`) present and consistent with the spec's "leave in place unchanged" plan.
-  - `_audit_verdict_node` (`audit_cascade.py:714+`): pure parse step (`AuditVerdict.model_validate_json` at line 749); no LLM dispatch. Test #6's exact-2-records assertion is structurally sound.
-- KDR drift check: spec preserves KDR-002 (no MCP-substrate change), KDR-003 (no Anthropic SDK), KDR-004 (validator pairing untouched), KDR-006 (no bespoke retry), KDR-008 (no MCP schema change), KDR-009 (no checkpoint changes), KDR-013 (no external-workflow scope), KDR-011 (telemetry surface explicitly cited as the goal), KDR-014 (explicitly addressed at line 128 — `role` is primitive-layer factory kwarg, not a quality knob).
-- Layer rule respected: `primitives → graph` direction only (`TokenUsage` / `CostTracker` in `primitives/cost.py`; `tiered_node` + `audit_cascade` in `graph/`; cascade calls into `tiered_node` which is a `graph`-internal call). No upward imports.
-- SEMVER: backward-compatible additive change (new `role: str = ""` kwarg with default; new `by_role` method; new `TokenUsage.role` field with default). No breaking change. `### Added` framing under `## [Unreleased]` is correct.
-- Status surfaces: spec AC line 178 names all three surfaces (spec status line, milestone README task-table row 04 status column, milestone README §Exit-criteria bullet 6) — verified against milestone README line 67 (Kind = `code + test`, Status = `📝 Planned`). No status-surface mismatch.
-- Cross-task dependencies: T01 / T02 / T03 / T08 cited as shipped (ship hashes at lines 182-185); spec correctly identifies the cascade-construction sites that depend on T03's primary + auditor `tiered_node` calls.
-- Wire-level smoke test (`test_cascade_records_role_tagged_token_usage_per_step`) named in AC at line 177 and described in §Deliverables at line 144 — invokes compiled cascade end-to-end through real `tiered_node` + real `cost_callback`. Satisfies CLAUDE.md non-inferential code-task verification rule.
+Round-2 fixes verified line-by-line:
+
+- **H1 (parse step):** Lines 235-247 contain the explicit `raw_text = verdict_state.get("standalone_auditor_output", "") or ""` followed by `verdict = AuditVerdict.model_validate_json(raw_text)` wrapped in `try/except` raising `ToolError("auditor produced unparseable output — expected AuditVerdict JSON, got: ...")`. Mirrors `_audit_verdict_node`'s pattern at `audit_cascade.py:751`. AC line 361 captures the requirement explicitly. Round-2 H1 fully closed.
+- **H2 (payload decode):** Line 260 explicitly states `_resolve_audit_artefact` returns `json.loads(row["payload_json"])` after the `read_artifact` row dict, with `ToolError` on `None`. Cites `storage.py:181-186` as the storage signature reference (verified — actual signature `write_artifact(run_id, kind, payload_json: str)` confirmed at storage.py:579-591; `read_artifact` returns full SQL row at storage.py:612-633). AC line 360 captures the json.loads + ToolError obligations. Round-2 H2 fully closed.
+- **M1 (write_artifact signature in test #6):** Test #6 at line 331 uses `await storage.write_artifact(run_id, kind="plan", payload_json=json.dumps({"sample": "known dict"}))` — matches the actual signature. The assertion shape correctly checks for the inner-payload string `"sample"` AND absence of wrapper keys (`"payload_json"`, `"created_at"`, `"run_id"`). Pairs cleanly with H2's json.loads decode. Round-2 M1 fully closed.
+- **M2 (configurable enumeration):** Lines 278-290 enumerate the dict shape explicitly: `tier_registry`, `cost_callback`, `run_id`, `pricing={}`, `workflow="standalone-audit"`, with explicit `# NOT supplied` comments for `semaphores` and `ollama_circuit_breakers`. AC line 362 reflects the same shape. Round-2 M2 fully closed (with one rationale-overstatement noted in L3 above).
+- **M3 (stub-pattern citation):** Line 324 names `_StubClaudeCodeAdapter` from `tests/graph/test_audit_cascade.py:151` as the canonical pattern, with sibling variants `_FakeClaudeCodeAdapter` at `tests/graph/test_tiered_node.py:172` and `_E2EStubClaudeCodeAdapter` at `tests/workflows/test_slice_refactor_cascade_enable.py:509`. Builder can grep by class name to find any of them. (Two of the three line-numbers drifted slightly — actual `_StubClaudeCodeAdapter` is at line 103 not 151, and actual `_E2EStubClaudeCodeAdapter` is at line 388 not 509 — but the file paths and class names are correct, so the Builder grep will find them. Not surfacing as a finding; line-number drift inside test files between specs and code is normal turnover.) Round-2 M3 fully closed.
+- **TA-T05-LOW-01 + TA-T05-LOW-02 carry-over:** Both lines 421-427 contain `[ ]` checkboxes with the LOW summary line + full Recommendation text. Format matches the established TA-Tnn-LOW-mm pattern (e.g. T01's TA-T01-LOW-* in the same milestone). Round-2 carry-over fully landed.
+- **KDR re-grade (no movement):** All seven load-bearing KDRs still pass under the post-R2 spec. KDR-002, -003, -004, -006, -008, -009, -011, -013, -014 unchanged from round 2's grade.
+- **Layer rule:** `_resolve_audit_artefact` correctly placed in `mcp/server.py` (NOT `workflows/_dispatch.py`); spec explicitly notes the layer-rule reason. No `workflows/` or `graph/` or `primitives/` diff in deliverables.
+- **Status-surface enumeration (AC final):** Line 376 enumerates all 5 status surfaces (spec status; milestone README task-table row; milestone README §Exit-criteria bullets; architecture.md:105 task-number; adr/0004 lines 56 + 73). Builder has a complete checklist for close-out flip.
 
 ## Cross-cutting context
 
-- Per project memory `project_m13_shipped_cs300_next.md`: post-0.2.0 + CS300 pivot active. M12 is being hardened ahead of CS300's return trigger; the current `/clean-tasks` cycle is preparing T04 for autonomous-mode `/auto-implement` consumption.
-- Per memory `feedback_autonomous_mode_boundaries.md`: T04 implement will run under `/auto-implement` in the Docker sandbox; the orchestrator will commit + push to `design_branch` only. T04's primitive-layer signature change (`tiered_node` gains `role: str = ""`) is backward-compatible and safe for unattended autonomy.
-- L7 is the kind of residual cruft typical after a multi-round /clean-tasks loop with a user-arbitrated decision (Option 4 locked) — fix-application focused on the headline issue (M1 — CHANGELOG bullet) and on the explicitly-flagged round-2 LOWs (L1 → §Out of scope; L2 → carry-over note), but missed the secondary §Propagation status bullet that was also Option-1/Option-2-framed. This is the kind of finding a third verification pass naturally surfaces.
+- **CS300 pivot:** Project memory marks M12 as part of the post-pivot continuation track. T05 work is unblocked.
+- **Round 2 → 3 trajectory:** Round 2 surfaced 2 HIGH (parse step + payload decode — both architectural seams the cascade primitive normally hides) plus 3 MEDIUM (test signature, configurable enumeration, stub citation). All five fixed mechanically by the orchestrator between rounds. The spec is now LOW-ONLY at round 3 — exactly the predicted shape from round 2's "Round 3 should reach LOW-ONLY" cross-cutting note.
+- **Loop-cap:** /clean-tasks cap is 5 rounds; T05 reached LOW-ONLY at round 3, well inside the cap. Orchestrator should push L3 to carry-over and exit the loop.
+- **Pre-implementation handoff:** When `/clean-implement m12 t05` runs, the Builder will read the three carry-over LOWs (TA-T05-LOW-01..03) and the satisfied TA-T04-LOW-04. None of the three LOWs require a spec edit at implement time; all three are doc-sentence framings or future-defensive notes that the Builder can either honor verbatim or lightly soften without breaking any AC.
