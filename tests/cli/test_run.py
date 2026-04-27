@@ -259,9 +259,23 @@ def test_run_unknown_workflow_exits_two_with_registered_list() -> None:
 
 
 def test_run_missing_goal_exits_two() -> None:
-    """AC: ``aiw run planner`` without ``--goal`` exits 2 (Typer convention)."""
+    """AC: ``aiw run planner`` without ``--goal`` exits 2.
+
+    M19 T04 migration (AC-9): ``--goal`` became optional (so spec-API
+    workflows like ``summarize`` don't need it).  ``aiw run planner``
+    with no ``--goal`` and no ``--input goal=...`` no longer fails at
+    typer-parse time — it fails at dispatch-layer pydantic validation
+    when ``PlannerInput(goal=None)`` raises (planner declares ``goal:
+    str`` as required).  The exit code is still 2 (``BadParameter``
+    wraps the ValidationError per refinement #3) and the error message
+    still contains ``goal`` and ``required``.
+    """
     result = _RUNNER.invoke(app, ["run", "planner"])
     assert result.exit_code == 2
+    # Pydantic error message includes the field name and "required"
+    combined = result.output + (result.stderr if hasattr(result, "stderr") else "")
+    assert "goal" in combined.lower()
+    assert "required" in combined.lower()
 
 
 def test_run_budget_cap_breach_exits_nonzero_with_budget_message() -> None:

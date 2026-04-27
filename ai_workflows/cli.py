@@ -47,6 +47,7 @@ release-smoke scripts that export vars explicitly.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import json
 from pathlib import Path
@@ -182,28 +183,85 @@ def _parse_tier_overrides(entries: list[str]) -> dict[str, str]:
     return mapping
 
 
+def _parse_inputs(input_kvs: list[str]) -> dict[str, str]:
+    """Parse ``KEY=VALUE`` strings from ``--input`` into a string dict.
+
+    Each entry must be in the form ``KEY=VALUE`` with a non-empty key.
+    The value may be empty (``--input foo=``).  Values are kept as
+    strings — pydantic v2 handles type coercion when the workflow's
+    ``input_schema`` validates the merged dict (``"50"`` → ``int 50``
+    for ``int``-typed fields, ``"true"`` → ``bool True``, etc.).
+
+    Raises ``typer.BadParameter`` (exit code 2) on malformed entries.
+    This mirrors the ``_parse_tier_overrides`` pattern already in this
+    module (M19 T04 — locked H1 refinement #3).
+
+    Parameters
+    ----------
+    input_kvs:
+        Raw list of ``KEY=VALUE`` strings from Typer's repeatable
+        ``--input`` option.
+
+    Returns
+    -------
+    dict[str, str]
+        Parsed ``{key: value}`` mapping with string values only.
+    """
+    parsed: dict[str, str] = {}
+    for kv in input_kvs:
+        if "=" not in kv:
+            raise typer.BadParameter(
+                f"--input must be KEY=VALUE, got: {kv!r}"
+            )
+        key, value = kv.split("=", 1)
+        if not key:
+            raise typer.BadParameter(
+                f"--input KEY cannot be empty, got: {kv!r}"
+            )
+        parsed[key] = value
+    return parsed
+
+
 @app.command()
 def run(
     workflow: str = typer.Argument(
         ...,
         help="Workflow name registered in ai_workflows.workflows.",
     ),
-    goal: str = typer.Option(
-        ...,
+    goal: str | None = typer.Option(
+        None,
         "--goal",
         "-g",
-        help="Planning goal to hand the workflow.",
+        help=(
+            "Planning goal to hand the workflow (planner-shape shorthand). "
+            "Use --input goal=VALUE for spec-API workflows."
+        ),
     ),
     context: str | None = typer.Option(
         None,
         "--context",
         "-c",
-        help="Optional context hint for the workflow.",
+        help="Optional context hint for the workflow (planner-shape shorthand).",
     ),
-    max_steps: int = typer.Option(
-        10,
+    max_steps: int | None = typer.Option(
+        None,
         "--max-steps",
-        help="Maximum plan length the workflow may emit.",
+        help=(
+            "Maximum plan length the workflow may emit (planner-shape shorthand). "
+            "Defaults to 10 when provided via this flag and not overridden by --input."
+        ),
+    ),
+    input_kvs: list[str] = typer.Option(
+        [],
+        "--input",
+        help=(
+            "Generic input as KEY=VALUE (repeatable). The workflow's input_schema "
+            "receives the merged dict; pydantic v2 coerces string values to "
+            "int/bool/enum types as declared. Use for spec-API workflows whose "
+            "inputs don't fit the planner-shape --goal/--context/--max-steps flags. "
+            "Complex inputs (lists, nested dicts) go via MCP. "
+            "Conflicts with a planner flag naming the same key raise BadParameter."
+        ),
     ),
     budget_cap_usd: float | None = typer.Option(
         None,
@@ -234,17 +292,51 @@ def run(
     :func:`build_async_checkpointer` so ``HumanGate`` interrupts + the
     eventual ``aiw resume`` ride LangGraph's durable checkpointer
     (KDR-009).
+
+    M19 T04 (locked H1 — α-1): ``--input KEY=VALUE`` (repeatable) is the
+    generic input path for spec-API workflows.  The planner-shape flags
+    (``--goal``, ``--context``, ``--max-steps``) coexist byte-identically;
+    conflict between a planner flag and an ``--input`` entry naming the
+    same key raises ``BadParameter``.  Pydantic v2 coerces string values
+    from ``--input`` to declared types automatically.
     """
     # Route structured logs to stderr so the CLI's stdout stays the
     # machine-parseable surface (gate hint / plan JSON / cost total).
     configure_logging(level="INFO")
     tier_overrides = _parse_tier_overrides(tier_override)
+
+    # --- Merge planner flags + --input KVs into a single inputs dict ---------
+    # (M19 T04 locked H1 — α-1 + refinements #1 / #2 / #3)
+    inputs: dict[str, Any] = {}
+
+    # Planner-shape flags: only include when explicitly set (non-None).
+    # max_steps defaults to 10 when the flag is absent but goal is set,
+    # preserving the pre-T04 default for planner callers.
+    if goal is not None:
+        inputs["goal"] = goal
+    if context is not None:
+        inputs["context"] = context
+    if max_steps is not None:
+        inputs["max_steps"] = max_steps
+    elif goal is not None:
+        # Preserve the pre-T04 default of 10 for planner-shape invocations
+        # that supply --goal but not --max-steps.
+        inputs["max_steps"] = 10
+
+    # Parse and merge --input KEY=VALUE entries; raise on key conflict.
+    extra_inputs = _parse_inputs(input_kvs)
+    for key, value in extra_inputs.items():
+        if key in inputs:
+            raise typer.BadParameter(
+                f"conflicting input {key!r}: set via both "
+                f"--{key.replace('_', '-')} flag and --input {key}=...; choose one"
+            )
+        inputs[key] = value
+
     asyncio.run(
         _run_async(
             workflow=workflow,
-            goal=goal,
-            context=context,
-            max_steps=max_steps,
+            inputs=inputs,
             budget_cap_usd=budget_cap_usd,
             run_id=run_id,
             tier_overrides=tier_overrides,
@@ -255,9 +347,7 @@ def run(
 async def _run_async(
     *,
     workflow: str,
-    goal: str,
-    context: str | None,
-    max_steps: int,
+    inputs: dict[str, Any],
     budget_cap_usd: float | None,
     run_id: str | None,
     tier_overrides: dict[str, str] | None = None,
@@ -267,12 +357,21 @@ async def _run_async(
     Routes through :func:`ai_workflows.workflows._dispatch.run_workflow`
     (shared by the MCP ``run_workflow`` tool) and reformats the returned
     dict into the stdout contract M3 T04 pins: run id + gate handle on
-    pause, plan JSON + total cost on completion, ``error: …`` on failure.
+    pause, artefact JSON + total cost on completion, ``error: …`` on failure.
+
+    M19 T04 (locked H1): ``inputs`` is the merged dict from planner flags +
+    ``--input`` KVs. Pydantic v2 coerces string values (``"50"`` → ``int 50``
+    for ``int``-typed fields) inside ``initial_state`` at dispatch time.
+    When the workflow's ``input_schema`` raises ``ValidationError`` on the
+    merged dict, the error is wrapped as ``typer.BadParameter`` so the user
+    sees a readable message rather than a stack trace (refinement #3).
     """
+    from pydantic import ValidationError
+
     try:
         result = await _dispatch_run_workflow(
             workflow=workflow,
-            inputs={"goal": goal, "context": context, "max_steps": max_steps},
+            inputs=inputs,
             budget_cap_usd=budget_cap_usd,
             run_id=run_id,
             tier_overrides=tier_overrides,
@@ -286,6 +385,19 @@ async def _run_async(
     except UnknownTierError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from None
+    except ValidationError as exc:
+        # Wrap pydantic validation errors as BadParameter so the user sees
+        # a readable message instead of a stack trace (refinement #3).
+        # Extract first error's field + message for the surface message.
+        errors = exc.errors()
+        if errors:
+            first = errors[0]
+            loc = ".".join(str(p) for p in first.get("loc", []))
+            msg = first.get("msg", str(exc))
+            raise typer.BadParameter(
+                f"input {loc!r}: {msg}"
+            ) from None
+        raise typer.BadParameter(str(exc)) from None
 
     _emit_cli_run_result(result)
 
@@ -293,9 +405,14 @@ async def _run_async(
 def _emit_cli_run_result(result: dict[str, Any]) -> None:
     """Print the CLI run-result lines matching the M3 T04 stdout contract.
 
-    Must remain byte-identical to the pre-T02 ``_emit_final_state``
-    output — AC-5 of M4 T02 pins this via
-    :mod:`tests/cli/test_run.py` regression.
+    For completed runs, emits the workflow's terminal artefact via the
+    canonical ``artifact`` field (M19 T03 — ``plan`` alias preserved on
+    the wire; this helper reads ``artifact`` first, falls back to ``plan``
+    for backward compatibility with pre-T03 result dicts).
+
+    For non-planner workflows (e.g. ``summarize``) the artefact is the
+    workflow's ``FINAL_STATE_KEY`` value, not a planner plan; the JSON
+    rendering is the same regardless of shape.
     """
     status = result["status"]
     run_id = result["run_id"]
@@ -308,8 +425,10 @@ def _emit_cli_run_result(result: dict[str, Any]) -> None:
         return
 
     if status == "completed":
-        plan = result["plan"]
-        typer.echo(json.dumps(plan, indent=2))
+        # M19 T03: read canonical ``artifact``; fall back to ``plan`` alias
+        # for result dicts built before the rename (defensive).
+        artefact = result.get("artifact") or result.get("plan")
+        typer.echo(json.dumps(artefact, indent=2))
         total_cost = result["total_cost_usd"] or 0.0
         typer.echo(f"total cost: ${total_cost:.4f}")
         return
@@ -317,6 +436,79 @@ def _emit_cli_run_result(result: dict[str, Any]) -> None:
     # errored
     typer.echo(f"error: {result['error']}", err=True)
     raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# `aiw show-inputs` (M19 T04 — locked H1, refinement #4)
+# ---------------------------------------------------------------------------
+
+
+@app.command("show-inputs")
+def show_inputs(
+    workflow: str = typer.Argument(
+        ...,
+        help="Workflow name registered in ai_workflows.workflows.",
+    ),
+) -> None:
+    """List input fields accepted by WORKFLOW via --input KEY=VALUE.
+
+    Imports the workflow module (side effect: ``register_workflow`` fires),
+    resolves the ``input_schema``, and prints one line per field:
+
+        - <field_name> (<type>[, required|optional, default <value>])
+
+    Spec-API workflows (``WorkflowSpec``-authored) expose their fields
+    here.  Planner-shape workflows expose ``goal``, ``context``,
+    ``max_steps`` via the dedicated CLI flags; their pydantic schema
+    is also listed for completeness.
+
+    Use this command to discover which ``--input KEY=VALUE`` pairs a
+    workflow accepts before running it.  Complex inputs (lists, nested
+    dicts) must go via MCP (``aiw-mcp run_workflow``).
+
+    M19 T04 (locked H1, refinement #4).
+    """
+    # Lazy-import the workflow so register() fires as a side effect.
+    with contextlib.suppress(ModuleNotFoundError):
+        importlib.import_module(f"ai_workflows.workflows.{workflow}")
+
+    # Resolve the input_schema via the registered builder's module.
+    import sys as _sys
+
+    try:
+        builder = workflows.get(workflow)
+    except KeyError:
+        typer.echo(
+            f"unknown workflow {workflow!r}; registered: {workflows.list_workflows()}",
+            err=True,
+        )
+        raise typer.Exit(code=2) from None
+
+    module_name = getattr(builder, "__module__", None)
+    input_schema = None
+    if module_name and module_name in _sys.modules:
+        mod = _sys.modules[module_name]
+        input_schema = getattr(mod, "input_schema", None)
+
+    if input_schema is None:
+        typer.echo(
+            f"Inputs (pass via --input KEY=VALUE):\n"
+            f"  (workflow {workflow!r} does not expose an input_schema; "
+            f"use the planner-shape flags or MCP for complex inputs)",
+            err=True,
+        )
+        raise typer.Exit(code=0)
+
+    typer.echo(f"Inputs for workflow {workflow!r} (pass via --input KEY=VALUE):")
+    for field_name, field_info in input_schema.model_fields.items():
+        annotation = field_info.annotation
+        type_name = getattr(annotation, "__name__", str(annotation))
+        required = field_info.is_required()
+        default = field_info.default
+        if required:
+            typer.echo(f"  - {field_name} ({type_name}, required)")
+        else:
+            typer.echo(f"  - {field_name} ({type_name}, optional, default {default!r})")
 
 
 # ---------------------------------------------------------------------------

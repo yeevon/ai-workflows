@@ -122,6 +122,7 @@ class GraphEdge:
     target: str | Literal["END"]
     condition: Callable | None = None
     fanout_targets: list[str] = field(default_factory=list)
+    path_map_override: dict[str, str] | None = None
 
 
 @dataclass
@@ -205,6 +206,23 @@ def compile_spec(spec: WorkflowSpec) -> Callable[[], StateGraph]:
     # --- Synthesise state class ----------------------------------------------
     state_class = _derive_state_class(spec)
 
+    # --- Pre-compute LLMStep intermediate output keys for initial_state ---------
+    # LangGraph + AsyncSqliteSaver + durability='sync' writes a checkpoint
+    # after each node.  If an LLMStep call node fails on the first attempt, its
+    # output key (f"{step_id}_call_output") was never written to state.  On the
+    # next checkpoint restore (before the validate node runs) the key is absent,
+    # causing a KeyError inside validator_node.  Initialising these keys to
+    # None in initial_state ensures they are present in the very first
+    # checkpoint and survive round-trips through the SQLite serialiser.
+    _llm_intermediate_keys: list[str] = []
+    for _idx, _step in enumerate(spec.steps):
+        from ai_workflows.workflows.spec import LLMStep as _LLMStep_early
+        if isinstance(_step, _LLMStep_early):
+            _step_id = f"step_{_idx}_{type(_step).__name__.lower()}"
+            _call_id = f"{_step_id}_call"
+            _llm_intermediate_keys.append(f"{_call_id}_output")
+            _llm_intermediate_keys.append(f"{_call_id}_output_revision_hint")
+
     # --- Synthesise initial_state hook ---------------------------------------
     def initial_state(run_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
         """Satisfy the _dispatch._build_initial_state resolution order (M6 T01).
@@ -213,12 +231,26 @@ def compile_spec(spec: WorkflowSpec) -> Callable[[], StateGraph]:
         output-schema fields with ``None`` so
         ``_dispatch._build_result_from_final`` can distinguish "not yet
         set" from "set to a non-None value".
+
+        Also initialises LLMStep intermediate output keys (e.g.
+        ``step_0_llmstep_call_output``) to ``None`` so they are present in
+        the initial checkpoint.  Without this, ``AsyncSqliteSaver`` +
+        ``durability='sync'`` drops them after the first failed-call
+        checkpoint write, causing ``KeyError`` in the validate node.
         """
         parsed = spec.input_schema(**inputs)
         state: dict[str, Any] = {"run_id": run_id}
         state.update(parsed.model_dump())
         for fname in spec.output_schema.model_fields:
             state.setdefault(fname, None)
+        # Initialise LLMStep intermediate keys + framework-internal keys so
+        # they appear in the very first checkpoint and survive SQLite round-trips.
+        for key in _llm_intermediate_keys:
+            state.setdefault(key, None)
+        state.setdefault("last_exception", None)
+        state.setdefault("_retry_counts", {})
+        state.setdefault("_non_retryable_failures", 0)
+        state.setdefault("_mid_run_tier_overrides", None)
         return state
 
     # --- Synthesise tier_registry helper (per _resolve_tier_registry) --------
@@ -235,6 +267,7 @@ def compile_spec(spec: WorkflowSpec) -> Callable[[], StateGraph]:
     _synth_module = types.ModuleType(_module_name)
     _synth_module.initial_state = initial_state  # type: ignore[attr-defined]
     _synth_module.FINAL_STATE_KEY = final_state_key  # type: ignore[attr-defined]
+    _synth_module.input_schema = spec.input_schema  # type: ignore[attr-defined]
     _synth_module.__name__ = _module_name
     _synth_module.__package__ = "ai_workflows.workflows"
 
@@ -263,12 +296,67 @@ def compile_spec(spec: WorkflowSpec) -> Callable[[], StateGraph]:
         Returns a fresh ``StateGraph`` on every call so each run gets its
         own compiled graph instance (important for per-run checkpointers).
         """
+        from ai_workflows.workflows.spec import LLMStep as _LLMStep
+
         graph = StateGraph(state_class)
+
+        # First pass: compile all steps to determine step IDs / entry nodes.
+        # This lets non-last LLMSteps use the next step's entry as on_terminal
+        # (success path of retrying_edge) so the success path flows to the
+        # next step instead of END.
+        step_ids: list[str] = []
+        for idx, step in enumerate(spec.steps):
+            step_ids.append(f"step_{idx}_{type(step).__name__.lower()}")
+
+        # Precompute next-step entry node IDs for LLMStep on_terminal routing.
+        # For each LLMStep, the success path should go to the next step's
+        # entry node (or END if it's the last step).
+        def _next_entry_for_step(idx: int) -> str:
+            """Return the next step's entry node id, or END if last step."""
+            if idx + 1 >= len(spec.steps):
+                return END
+            # The next step's entry is: step_{idx+1}_{type.__name__.lower()}_<suffix>
+            # We need to compile it to know its entry_node_id, but we can
+            # derive it from the step type without compiling:
+            next_step = spec.steps[idx + 1]
+            next_step_id = step_ids[idx + 1]
+            if isinstance(next_step, _LLMStep):
+                return f"{next_step_id}_call"
+            # ValidateStep, GateStep, TransformStep, FanOutStep, custom step
+            # all use predictable suffixes based on their compile functions.
+            from ai_workflows.workflows.spec import (
+                FanOutStep as _FanOutStep,
+            )
+            from ai_workflows.workflows.spec import (
+                GateStep as _GateStep,
+            )
+            from ai_workflows.workflows.spec import (
+                TransformStep as _TransformStep,  # noqa: F401 — used below
+            )
+            from ai_workflows.workflows.spec import (
+                ValidateStep as _ValidateStep,
+            )
+            if isinstance(next_step, _ValidateStep):
+                return f"{next_step_id}_validate"
+            if isinstance(next_step, _GateStep):
+                return f"{next_step_id}_gate"
+            if isinstance(next_step, _TransformStep):
+                return f"{next_step_id}_{next_step.name}"
+            if isinstance(next_step, _FanOutStep):
+                return f"{next_step_id}_dispatch"
+            # Custom step (Tier 3)
+            return f"{next_step_id}_execute"
 
         compiled_steps: list[CompiledStep] = []
         for idx, step in enumerate(spec.steps):
-            step_id = f"step_{idx}_{type(step).__name__.lower()}"
-            cs = _compile_step(step, state_class, step_id, spec)
+            step_id = step_ids[idx]
+            # For LLMStep, pass the next step's entry as on_terminal so the
+            # success path (exc is None) routes forward rather than to END.
+            if isinstance(step, _LLMStep):
+                on_terminal = _next_entry_for_step(idx)
+                cs = _compile_llm_step(step, state_class, step_id, spec, on_terminal=on_terminal)
+            else:
+                cs = _compile_step(step, state_class, step_id, spec)
             _assert_kdr004_invariant(step, cs)
             compiled_steps.append(cs)
 
@@ -284,9 +372,21 @@ def compile_spec(spec: WorkflowSpec) -> Callable[[], StateGraph]:
         graph.add_edge(START, compiled_steps[0].entry_node_id)
 
         # Consecutive step stitching: step_n.exit → step_{n+1}.entry
+        # Skip steps whose exit_node already has a conditional edge wired
+        # (i.e. LLMStep's validate node — it routes forward via retrying_edge).
         for i in range(len(compiled_steps) - 1):
+            cs = compiled_steps[i]
+            exit_has_conditional = any(
+                e.condition is not None and e.source == cs.exit_node_id
+                for e in cs.edges
+            )
+            if exit_has_conditional:
+                # retrying_edge already handles routing from this exit node;
+                # the on_terminal= was set to the next step's entry during
+                # _compile_llm_step — no unconditional edge needed.
+                continue
             graph.add_edge(
-                compiled_steps[i].exit_node_id,
+                cs.exit_node_id,
                 compiled_steps[i + 1].entry_node_id,
             )
 
@@ -329,11 +429,16 @@ def _add_edge_to_graph(graph: StateGraph, edge: GraphEdge) -> None:
         graph.add_conditional_edges(edge.source, edge.condition, edge.fanout_targets)
     else:
         # Regular conditional edge with explicit target mapping.
-        path_map: dict[str, str] = {
-            edge.source: edge.source,
-            edge.target: edge.target,
-            END: END,
-        }
+        # path_map_override takes precedence when set (e.g. retrying_edge with
+        # on_terminal pointing to the next step's entry rather than END).
+        if edge.path_map_override is not None:
+            path_map: dict[str, str] = edge.path_map_override
+        else:
+            path_map = {
+                edge.source: edge.source,
+                edge.target: edge.target,
+                END: END,
+            }
         graph.add_conditional_edges(edge.source, edge.condition, path_map)
 
 
@@ -386,6 +491,8 @@ def _compile_llm_step(
     state_class: type,
     step_id: str,
     spec: WorkflowSpec,
+    *,
+    on_terminal: str = END,
 ) -> CompiledStep:
     """Compile an ``LLMStep`` to ``TieredNode`` + paired ``ValidatorNode``.
 
@@ -399,6 +506,12 @@ def _compile_llm_step(
     ``validator_node``'s ``max_attempts`` is derived from
     ``policy.max_semantic_attempts`` so the two budgets always agree
     (uses ``max_semantic_attempts`` field naming per locked Q1 / TA-LOW-07).
+
+    ``on_terminal`` is the node name the retrying_edge routes to on success
+    (``exc is None`` bucket).  Defaults to ``END``; the top-level
+    :func:`_builder` passes the next step's entry node id for non-last
+    LLMSteps so the success path flows through to the next step instead of
+    terminating the graph (M19 T04 multi-step composition fix).
 
     KDR-004 enforced by construction: the returned ``CompiledStep`` always
     has exactly two nodes.  :func:`_assert_kdr004_invariant` verifies the
@@ -472,18 +585,30 @@ def _compile_llm_step(
     # KDR-006: three-bucket retry via retrying_edge — always wired (default-on).
     # max_semantic_attempts field naming per locked Q1 + TA-LOW-07.
     # After validate either routes back to call (semantic/transient retry)
-    # or to END (hard-stop / terminal).
+    # or to on_terminal (success, budget-exhausted, or NonRetryable hard-stop).
+    # The dispatch layer reads last_exception from state to determine status.
     edge_fn = retrying_edge(
         on_transient=call_node_id,
         on_semantic=call_node_id,
-        on_terminal=END,
+        on_terminal=on_terminal,
         policy=policy,
     )
+    # Build explicit path_map so _add_edge_to_graph registers all possible
+    # routing targets: retry → call_node_id, terminal → on_terminal.
+    # END is included for safety when on_terminal == END (last step).
+    # retrying_edge returns only {on_transient, on_semantic, on_terminal}
+    # so the path_map only needs those three, with dedup when they overlap.
+    retry_path_map = {
+        call_node_id: call_node_id,
+        on_terminal: on_terminal,
+        END: END,
+    }
     intra_edges.append(
         GraphEdge(
             source=validate_node_id,
             target=call_node_id,
             condition=edge_fn,
+            path_map_override=retry_path_map,
         )
     )
 

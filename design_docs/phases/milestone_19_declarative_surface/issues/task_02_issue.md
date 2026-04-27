@@ -349,6 +349,21 @@ File: `pyproject.toml` (no `[tool.hatch.build.targets.sdist]` exclude block). T0
 
 T02's compiler is in-memory synthesis with no subprocess, network, or filesystem side-effects. KDR-003 is clean (zero Anthropic API hits). The synthetic-module injection pattern is safe (namespaced dict key, no filesystem touch, no import-system shadowing of real modules). The `prompt_template` format-string path is within the workflow-author trust boundary (same as `prompt_fn`). The `_mid_run_*` reserved-key ordering correctly ensures framework keys always win. The `_reset_for_tests()` prefix is conservative and test-only. Wheel contents are clean. The two advisories (ADV-1: silent reserved-key overwrite with no warning; ADV-2: sdist leakage) are pre-existing or low-impact and do not block shipment.
 
+## Post-close T02 latent fixes — surfaced + applied during M19 T04 (2026-04-26)
+
+The T04 cycle-1 Builder discovered four T02 latent issues only when running `summarize` end-to-end through `AsyncSqliteSaver` with `durability='sync'` via `aiw run` and `aiw-mcp run_workflow`. T02's hermetic tests use simpler graph shapes that don't trigger these paths. The fixes were applied in T04 cycle 1 (file: `ai_workflows/workflows/_compiler.py`):
+
+1. **`on_terminal` parameter on `_compile_llm_step`** — needed when LLMStep is the workflow's last step; the validator's success edge must route to `END` rather than the next step.
+2. **`path_map_override` on `GraphEdge`** — needed when a step's compiled exit node uses LangGraph's path-map routing (e.g. retry-edge fan-out); the compiler's stitching layer otherwise wires a default `add_edge` that overrides the step's intended routing.
+3. **Inter-step stitching skip for LLMStep exit nodes** — needed because LLMStep's compile contribution already wires its validator → next-step edge internally; the compiler's outer stitching loop would otherwise add a duplicate edge.
+4. **`initial_state` pre-init of LLMStep intermediate keys + framework-internal keys** — needed because LangGraph's `Send` + reducer-merge semantics require declared keys to be present in the initial state; missing keys raise `KeyError` at the first reducer-merge.
+
+These are post-T02-close findings that don't reopen T02's audit — the issue file remains ✅ PASS. Documenting here for traceability + so the T07 documentation pass can reference them if relevant. None of the four fixes affect the user-facing spec API; all are compile-path internals.
+
+Issue log entry:
+
+| M19-T02-ISS-07 | LOW (latent at T02; surfaced + fixed at T04) | T04 cycle 1 — `_compile_llm_step` now takes `on_terminal=` for multi-step routing; `GraphEdge` gained `path_map_override`; inter-step stitching skips LLMStep exit nodes; `initial_state` pre-initialises LLMStep intermediate keys + framework-internal keys for AsyncSqliteSaver `durability='sync'` round-trip correctness. T02 cycle-3-by-proxy. | RESOLVED 2026-04-26 (at T04 cycle 1) — `_compiler.py:436-459 + 296-348 + 372-391 + 217-253`; regression tests at `test_summarize.py::test_summarize_compiles_to_runnable_state_graph` + `test_summarize_retry_policy_on_transient_failure`. |
+
 ## Dependency audit (2026-04-26)
 
 **Skipped — no manifest changes.** T02 cycles 1+2 modified `ai_workflows/workflows/_compiler.py` (new), `ai_workflows/workflows/spec.py`, `ai_workflows/workflows/__init__.py`, `tests/workflows/test_compiler.py` (new), `tests/workflows/test_spec.py`, and `CHANGELOG.md` only. Neither `pyproject.toml` nor `uv.lock` was touched, so the dependency-auditor pass is not triggered per /clean-implement S2.

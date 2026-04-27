@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M19 Task 04 (cycle 2): summarize ValidateStep reframe + cross-surface identity test fix (2026-04-26)
+
+Files touched (cycle 2 only):
+- `ai_workflows/workflows/summarize.py` — module docstring updated to reframe the ``ValidateStep`` as illustrative (runtime no-op when ``schema`` matches upstream ``LLMStep.response_format``); field-level comment on ``ValidateStep`` updated to match (MEDIUM-1, locked Path i).
+- `tests/workflows/test_summarize.py` — ``test_summarize_validator_step_runs`` tightened: asserts ``status == "errored"`` + ``error is not None``; docstring updated to reflect the actual contract (LLMStep paired-validator semantic-retry exhaustion, not standalone ValidateStep) (MEDIUM-1 / LOW-5).
+- `tests/integration/test_spec_api_e2e.py` — ``test_summarize_artefact_identical_across_surfaces`` rewritten as sync test using ``CliRunner.invoke`` for the CLI side + ``asyncio.run(_mcp_call())`` for the MCP side; genuinely drives both entry-points; fixes cycle-1 tautological identity (MEDIUM-2). ``test_aiw_run_summarize_help_lists_input_fields`` renamed to ``test_aiw_show_inputs_summarize_lists_input_fields`` to match the actual UX exercised (LOW-4).
+- `tests/cli/test_run.py` — ``test_run_missing_goal_exits_two`` adds ``assert "required" in combined.lower()`` to match both assertions in the test docstring (LOW-2).
+- `CHANGELOG.md` — AC count corrected from "AC-1 through AC-11" to "AC-1 through AC-13" (LOW-3).
+- `design_docs/phases/milestone_19_declarative_surface/task_04_summarize_proof_point.md` — AC-1 through AC-13 + TA-LOW-02 + TA-LOW-10 checkboxes flipped from ``[ ]`` to ``[x]``; Deliverable 1 line 102 bullet rewritten to match locked Path (i) framing (LOW-1).
+- `design_docs/phases/milestone_19_declarative_surface/issues/task_02_issue.md` — "Post-close T02 latent fixes" section appended documenting the four ``_compiler.py`` changes made at T04 cycle 1 (LOW-6).
+
+ACs cycle-2 scope: MEDIUM-1 (ValidateStep no-op accept + reframe), MEDIUM-2 (cross-surface identity test drives actual CLI entry-point), LOW-1 (AC checkboxes), LOW-2 (under-assertion), LOW-3 (AC count), LOW-4 (test name), LOW-5 (test tightened), LOW-6 (T02 doc trail).
+
+**KDRs:** KDR-004 (ValidatorNode paired by construction; reframing clarifies what the test actually proves).
+
+### Added — M19 Task 04: summarize workflow as in-tree spec-API proof point + aiw run --input extension (2026-04-26)
+
+Files touched:
+- `ai_workflows/workflows/summarize.py` — new in-tree workflow authored against the M19 declarative spec API. `WorkflowSpec` composing `LLMStep` (with `prompt_template` Tier 1 sugar) + `ValidateStep` against `SummarizeOutput`. Exposes `SummarizeInput`, `SummarizeOutput`, `_SPEC`; calls `register_workflow(_SPEC)` at module top level. No `import langgraph` anywhere in the module.
+- `ai_workflows/workflows/summarize_tiers.py` — `summarize_tier_registry()` helper returning the `TierRegistry` for the summarize workflow. Encapsulates model selection for the proof-point workflow.
+- `ai_workflows/cli.py` — `aiw run` extended with `--input KEY=VALUE` (repeatable, `Optional[list[str]]`) for arbitrary spec-API workflow inputs. Existing `--goal` flag made optional (spec-API workflows don't always need it). `--goal` + `--input goal=` conflict detected at dispatch layer (Pydantic validation). `show-inputs` command added for introspecting workflow input schemas.
+- `ai_workflows/workflows/_compiler.py` — multi-step composition fixes: `on_terminal` parameter on `_compile_llm_step` for non-last LLMSteps so retrying_edge routes to the next step on success/terminal; `path_map_override` field on `GraphEdge` for non-END terminal routing; inter-step stitching loop skips LLMStep exit nodes (conditional retrying_edge already handles them); `initial_state` pre-initializes all LLMStep intermediate keys + framework-internal keys so `AsyncSqliteSaver` with `durability='sync'` round-trips cleanly on transient failure recovery.
+- `tests/workflows/test_summarize.py` — 5 hermetic tests (stub LLM adapter at adapter boundary, `tmp_path` SQLite redirect): AC-1 (registers via spec API), AC-2 (compiles to runnable StateGraph), AC-3/AC-7 (round-trips through dispatch with `FINAL_STATE_KEY = "summary"`), AC-4 (ValidateStep runs and catches malformed output), AC-5 (retry policy on transient failure — 2 LLM calls: 1 transient + 1 success).
+- `tests/integration/test_spec_api_e2e.py` — 5 wire-level integration tests: AC-6 (`aiw run summarize --input KEY=VALUE` round-trip), AC-8 (`aiw run summarize --help` contains `--input`), AC-9 (`aiw run planner` without `--goal` / `--input goal=` exits 2 with field+required in output), AC-10 (MCP `run_workflow` tool dispatches summarize end-to-end via `fastmcp.Client`), AC-11 (artefact identity across dispatch surface — `artifact["summary"]` matches expected value).
+
+ACs satisfied: AC-1 through AC-13 (all task ACs; AC-12 = this entry; AC-13 = no new step types — only LLMStep + ValidateStep used). Carry-over ACs from spec analysis (TA-LOW-02 module-restructuring fallback, TA-LOW-10 `_run_workflow` reference) satisfied inline.
+
+Deviations from spec:
+- Test 5 in `test_spec_api_e2e.py` uses direct `run_workflow` dispatch (not `CliRunner.invoke`) because `CliRunner` calls `asyncio.run()` internally — cannot be used inside a `@pytest.mark.asyncio` test without nested event-loop conflict. The wire-level artefact identity assertion is preserved; only the invocation surface differs.
+- `CliRunner(mix_stderr=False)` replaced with `CliRunner()` — Typer 0.24.1 does not support `mix_stderr` parameter.
+- `ValidateStep` in `summarize.py` runs after the LLMStep; Pydantic's `model_validate_json` on a `SummarizeOutput` instance (not a JSON string) falls back to string coercion, which does not raise. The LLMStep's paired validator (KDR-004 by construction) provides the effective schema gate; the explicit `ValidateStep` exercises the step type as a composition primitive.
+
+**KDRs:** KDR-004 (ValidatorNode after every TieredNode — by construction in the compiler), KDR-006 (RetryingEdge on LLMStep; transient failure recovery tested), KDR-009 (SqliteSaver checkpoints; `initial_state` initialized for durability='sync' round-trips), KDR-013 (in-tree workflow cannot be shadowed by external registration).
+
 ### Deprecated — M19 Task 03: RunWorkflowOutput.plan / ResumeRunOutput.plan (2026-04-26)
 
 - `ai_workflows/mcp/schemas.py` — `RunWorkflowOutput.plan` and `ResumeRunOutput.plan`
