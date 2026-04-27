@@ -7,15 +7,23 @@ Pins the two-branch model:
   ``scripts/spikes/``. These are builder-only surfaces that live on
   ``design_branch`` exclusively.
 * ``design_branch`` (builder branch): must contain ``design_docs/``.
-  The test environment signals the current branch via the
-  ``AIW_BRANCH=design`` env var so a single test file covers both
-  branches without duplication.
+
+The current branch is auto-detected via ``git rev-parse --abbrev-ref
+HEAD`` so the test self-skips on ``design_branch`` without operator-side
+``AIW_BRANCH`` env-var ceremony. The ``AIW_BRANCH`` env var is preserved
+as an explicit override for CI environments that prefer an explicit
+contract over git-detection (or for environments without git
+available — e.g. published-wheel test runs from ``/tmp``). Resolution
+order: ``AIW_BRANCH`` env var > git-detected branch (``design_branch``
+→ ``design``; any other → use as-is) > ``main`` fallback when git
+isn't available.
 
 ``.github/CONTRIBUTING.md`` is asserted unconditionally — it ships on
 both branches as the one-paragraph pointer PyPI users follow to reach
 the builder workflow.
 
-The inversion mechanism (env-var-gated) mirrors the pattern used by
+The inversion mechanism (env-var-gated, with git auto-detection added
+post-M19 T01 audit DEFERRED-1) mirrors the pattern used by
 ``tests/e2e_mcp/test_cli_smoke.py``'s ``AIW_E2E=1`` gating — a single
 test suite, branch-conditional assertions, no per-branch file forks.
 """
@@ -23,12 +31,46 @@ test suite, branch-conditional assertions, no per-branch file forks.
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-_BRANCH = os.environ.get("AIW_BRANCH", "main").lower()
+
+
+def _detect_branch() -> str:
+    """Resolve the current branch.
+
+    Resolution order (DEFERRED-1 fix from M19 T01 audit, 2026-04-26):
+    1. ``AIW_BRANCH`` env var (explicit override; CI-friendly).
+    2. ``git rev-parse --abbrev-ref HEAD`` (auto-detection; local-dev-friendly).
+       The git branch name ``design_branch`` is mapped to ``design`` so
+       the env-var contract holds either way.
+    3. ``main`` fallback when git isn't available (e.g. published-wheel
+       test runs from ``/tmp`` with no ``.git`` directory).
+    """
+    env_override = os.environ.get("AIW_BRANCH")
+    if env_override:
+        return env_override.lower()
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return "main"
+    branch = result.stdout.strip().lower()
+    if branch == "design_branch":
+        return "design"
+    return branch or "main"
+
+
+_BRANCH = _detect_branch()
 _ON_DESIGN = _BRANCH == "design"
 
 _BUILDER_ONLY_PATHS: tuple[str, ...] = (

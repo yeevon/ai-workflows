@@ -17,10 +17,15 @@ A LangGraph-native workflow framework for solo developers. Orchestrates multi-st
 | **M7 — Eval harness** | Complete (2026-04-21) |
 | **M8 — Ollama infrastructure** | Complete (2026-04-21) |
 | **M9 — Claude Code skill packaging** | Complete (2026-04-21) |
+| M10 — Ollama fault-tolerance hardening | Planned |
 | **M11 — MCP gate-review surface** | Complete (2026-04-22) |
+| M12 — Tiered audit cascade | Planned |
 | **M13 — v0.1.0 release + PyPI packaging** | Complete (2026-04-22) |
 | **M14 — MCP HTTP transport** | Complete (2026-04-22) |
-| **M16 — External workflow module discovery** | Complete (2026-04-24) |
+| M15 — Tier overlay + fallback chains | Planned |
+| **M16 — External workflows + primitives load path** | Complete (2026-04-24) |
+| M17 — `scaffold_workflow` meta-workflow | Planned |
+| **M19 — Declarative authoring surface** | Complete (2026-04-26) |
 
 ## What it is
 
@@ -59,51 +64,42 @@ uv tool install jmdl-ai-workflows
 aiw run planner --goal 'Write a release checklist' --run-id demo
 ```
 
-## Setup
-
-`aiw` and `aiw-mcp` read configuration from environment variables. As of 0.1.1 both binaries auto-load a `.env` file from your current working directory at startup (shell-exported values always win over `.env` values).
-
-**Required for most workflows**
-
-- `GEMINI_API_KEY` — Google Gemini key, used by the LiteLLM adapter. Get one at <https://aistudio.google.com/apikey>. Required for any workflow that routes through a Gemini tier (the default `planner-explorer` / `planner-synth` paths cover this).
-
-**Optional**
-
-- `OLLAMA_BASE_URL` — default `http://localhost:11434`. Set this if your Ollama daemon listens elsewhere. Needed only when a workflow routes to the local Qwen tier.
-- `AIW_STORAGE_DB` — path override for the run registry database. Defaults to `~/.ai-workflows/storage.sqlite3`.
-- `AIW_CHECKPOINT_DB` — path override for the LangGraph checkpoint database. Defaults to `~/.ai-workflows/checkpoint.sqlite3`.
-
-**Claude Code tier (no API key needed)**
-
-Some workflows route to the `claude` CLI via OAuth — install and authenticate it separately per [Anthropic's setup docs](https://docs.claude.com/en/docs/claude-code/setup). `aiw` never reads `ANTHROPIC_API_KEY` and never imports the `anthropic` SDK; Claude access is OAuth-only through the CLI subprocess.
-
-**`.env` auto-load**
-
-Create a `.env` in the directory you run `aiw` / `aiw-mcp` from:
-
-```bash
-# .env
-GEMINI_API_KEY=your-key-here
-# OLLAMA_BASE_URL=http://localhost:11434  # uncomment if non-default
-```
-
-A shell-exported value wins over the `.env` value — right precedence for CI pipelines, `direnv` setups, and one-off inline overrides (`GEMINI_API_KEY=x aiw run ...`).
-
-**Troubleshooting**
-
-Seeing a `401 Unauthorized` from LiteLLM? Your `GEMINI_API_KEY` is missing, invalid, or out-of-quota. Confirm `echo $GEMINI_API_KEY` in the shell you're running `aiw` from, or verify the value in your `.env`.
-
 ## Getting started
 
-After Setup, drive a planner run end-to-end:
+After installing (either path above), set your Gemini API key and drive a planner run end-to-end:
 
 ```bash
+export GEMINI_API_KEY=...
 aiw run planner --goal 'Write a release checklist' --run-id demo
 aiw resume demo --approve
 aiw list-runs
 ```
 
-The planner workflow composes two LLM tiers (Qwen explorer via Ollama + Claude Code Opus synth). If you want to swap either tier, pass `--tier-override planner-synth=planner-explorer` (route both steps through Qwen for a fully-local smoke) or edit the workflow's tier registry in `ai_workflows/workflows/planner.py` on a clone.
+The planner workflow composes two LLM tiers (Qwen explorer via Ollama + Claude Code Opus synth). If you only want the Gemini path for a smoke, pass `--tier-override planner-synth=planner-explorer` or omit the Ollama + Claude Code prerequisites and stub the `gemini_flash` tier.
+
+### Setup
+
+Both `aiw` and `aiw-mcp` auto-load a `.env` from the current working directory at startup (shell-exported values win over `.env`).
+
+**Key env vars:**
+- `GEMINI_API_KEY` — required for any workflow using a Gemini tier (most defaults).
+- `OLLAMA_BASE_URL` — default `http://localhost:11434`; override if your Ollama daemon listens elsewhere.
+- `AIW_STORAGE_DB` / `AIW_CHECKPOINT_DB` — path overrides for the run registry and checkpoint databases (defaults: `~/.ai-workflows/storage.sqlite3` / `~/.ai-workflows/checkpoint.sqlite3`).
+
+**Claude Code tier:** some workflows route to the `claude` CLI via OAuth. Install and authenticate it separately per [Anthropic's setup docs](https://docs.claude.com/en/docs/claude-code/setup). `aiw` never reads `ANTHROPIC_API_KEY` and never imports the `anthropic` SDK — Claude access is OAuth-only through the CLI subprocess.
+
+## Extending ai-workflows
+
+ai-workflows is a declarative orchestration layer; extension is a first-class capability. Authors engage at four progressively-deeper tiers, each with a dedicated guide:
+
+| Tier | When | Guide |
+|---|---|---|
+| 1 — Compose | You're combining built-in step types (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`) into a workflow. The happy path. | [docs/writing-a-workflow.md](docs/writing-a-workflow.md) |
+| 2 — Parameterise | You're configuring built-in steps (retry policy, response format, gate behaviour, tier choice). | [docs/writing-a-workflow.md](docs/writing-a-workflow.md) (same doc) |
+| 3 — Author a custom step type | No built-in covers your need. Subclass `Step`; the framework wires your custom step into the graph like a built-in. | [docs/writing-a-custom-step.md](docs/writing-a-custom-step.md) |
+| 4 — Escape to LangGraph directly | Your topology is genuinely non-standard (dynamic edge conditions, novel control flow). Use the legacy `register(name, build_fn)` API. | [docs/writing-a-graph-primitive.md](docs/writing-a-graph-primitive.md) |
+
+The framework's promise: descending a tier never forces you to reverse-engineer framework source. If you're at the wrong tier, you'll find pointers to the right one in any guide.
 
 ## MCP server
 
@@ -113,14 +109,14 @@ Register `aiw-mcp` with any MCP host — Claude Code, Cursor, Zed, or an HTTP cl
 claude mcp add ai-workflows --scope user -- uvx --from jmdl-ai-workflows aiw-mcp
 ```
 
-The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport http --port 8080 --cors-origin http://localhost:3000`. Full skill-install walkthrough (builder-only, on design branch).
+The HTTP transport is opt-in for browser-origin consumers: `aiw-mcp --transport http --port 8080 --cors-origin http://localhost:3000`.
 
 Registering your own workflow modules from a downstream package? `AIW_EXTRA_WORKFLOW_MODULES=pkg.workflows.your_workflow` (or `--workflow-module pkg.workflows.your_workflow`, repeatable) imports them at startup. See [docs/writing-a-workflow.md §External workflows from a downstream consumer](docs/writing-a-workflow.md#external-workflows-from-a-downstream-consumer).
 
 ### Security notes
 
-- **Loopback default** — `aiw-mcp --transport http` binds to `127.0.0.1`; unreachable from other machines. `--host 0.0.0.0` exposes the server to every process on the host and to the LAN. `aiw-mcp` has no built-in auth; the bind address is the only access boundary. Only pass `0.0.0.0` on a machine you own every process on, and put a reverse proxy in front if you need TLS.
-- **CORS is opt-in, exact-match** — `--cors-origin <url>` adds one origin; without any flags the server emits no `Access-Control-Allow-Origin` header (same-origin only).
+- **Loopback default** — `aiw-mcp --transport http` binds to `127.0.0.1`; unreachable from other machines. `--host 0.0.0.0` exposes the server to every process on the host and to the LAN. `aiw-mcp` has no built-in auth; the bind address is the only access boundary. Only pass `--host 0.0.0.0` on a machine you own every process on, and put a reverse proxy in front if you need TLS.
+- **CORS is opt-in, exact-match** — `--cors-origin <url>` adds one origin; without any flags the server emits no `Access-Control-Allow-Origin` header (same-origin only). Not required for stdio or loopback HTTP.
 
 ## Contributing / from source
 
@@ -130,10 +126,10 @@ Clone the repo for development or to modify the framework itself:
 git clone https://github.com/yeevon/ai-workflows.git
 cd ai-workflows
 uv sync              # install runtime + dev dependencies
-uv run aiw version   # prints the installed package version
+uv run aiw version   # prints the current __version__ (0.3.0 at M19 close)
 ```
 
-For the full builder/auditor workflow — task specs, audit issue files, Builder / Auditor mode conventions — switch to the [`design_branch`](https://github.com/yeevon/ai-workflows/tree/design_branch) (builder-only, on design branch).
+For the full builder/auditor workflow — task specs, audit issue files, Builder / Auditor mode conventions — switch to the `design_branch`.
 
 ## Development
 

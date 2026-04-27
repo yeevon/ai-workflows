@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-26
+
+Declarative authoring surface (ADR-0008). Downstream consumers — and the
+in-tree workflows themselves — can now describe an `ai-workflows` workflow
+declaratively as a `WorkflowSpec` (data) rather than imperatively as a
+LangGraph `StateGraph` (code), and register it via `register_workflow(spec)`.
+The legacy imperative path (`register(name, build_fn)`) is preserved as the
+documented escape hatch (Tier 4 of the four-tier extension model).
+
+This is the canonical surface for new workflows going forward. The compiler
+(`ai_workflows.workflows._compiler.compile_spec`) synthesises a StateGraph
+from the spec — same runtime semantics, same MCP wire shape, same
+checkpointer behaviour. Existing in-package workflows (`planner`,
+`slice_refactor`, `ollama_fallback`) are unaffected; both registration paths
+coexist.
+
+The release also lands a long-standing artefact-field bug fix in
+`_dispatch.py`. Workflows whose `FINAL_STATE_KEY` is not literally `"plan"`
+now correctly round-trip their final artefact through `RunWorkflowOutput`.
+The user-observable field is now `RunWorkflowOutput.artifact` /
+`ResumeRunOutput.artifact`; the old `plan` aliases are deprecated and will
+be removed at 1.0.
+
+### Added
+
+- `ai_workflows.workflows.WorkflowSpec` — pydantic model describing a
+  workflow as data (steps, edges, gates, validators, retry policies, tier
+  bindings, schemas).
+- Step taxonomy — `LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`,
+  `FanOutStep`, plus the `Step` base class for custom step types.
+- `register_workflow(spec)` — register a `WorkflowSpec`-backed workflow
+  alongside the existing `register(name, build_fn)` imperative path.
+- `summarize` workflow — first in-tree spec-API workflow; ships as the
+  end-to-end proof point. Two-step pipeline (LLM summary → validator),
+  invokable through both surfaces (`aiw run summarize --text "..."`,
+  `mcp__ai-workflows__run_workflow workflow="summarize"`).
+- `aiw run --input KEY=VALUE` — typed-input surface for the spec API
+  (pairs with `--text` / `--file` shorthand for free-text workflows).
+- Custom-step extension hook — Tier 3 of the four-tier extension model
+  (downstream consumers subclass `Step` for capabilities not covered by
+  the shipped step types).
+- `ai_workflows.workflows.testing.compile_step_in_isolation` — pytest
+  fixture for testing custom step types without standing up a full
+  `WorkflowSpec`.
+- `docs/writing-a-workflow.md` — declarative-first rewrite (Tier 1 +
+  Tier 2 walkthrough using the `summarize` workflow as the worked
+  example).
+- `docs/writing-a-custom-step.md` — Tier 3 guide (when to subclass
+  `Step`, how to compile in isolation, graduation path to a graph-layer
+  primitive).
+- `docs/writing-a-graph-primitive.md` — audience-clarification banner +
+  Tier 3 → graph-layer graduation framing.
+- `README.md §Extending ai-workflows` — four-tier pointer table.
+- `docs/architecture.md §Extension model` — normative four-tier framing
+  + graduation path + ADR-0008 reference.
+
+### Changed
+
+- `RunWorkflowOutput.artifact` / `ResumeRunOutput.artifact` are the
+  canonical artefact fields. The previous `plan` field names are
+  preserved as deprecated aliases for the 0.2.x → 0.3.x migration
+  window.
+- `docs/writing-a-workflow.md` rewritten declarative-first; the
+  imperative `register(name, build_fn)` path is now the documented
+  escape hatch (Tier 4).
+- Tier-table label format harmonised across `architecture.md`,
+  `README.md`, and `docs/writing-a-custom-step.md`.
+
+### Fixed
+
+- `_dispatch.py` artefact-field bug: workflows whose `FINAL_STATE_KEY`
+  was not literally `"plan"` previously dropped their final artefact on
+  the dispatch return path. The artefact is now read from the channel
+  named by the workflow's `FINAL_STATE_KEY` and surfaced via
+  `RunWorkflowOutput.artifact`.
+
+### Deprecated
+
+- `RunWorkflowOutput.plan` / `ResumeRunOutput.plan` field aliases.
+  Removal target: 1.0. Update consumers to read `.artifact` instead.
+
 ## [0.2.0] — 2026-04-24
 
 First CS-300-forced minor release. Downstream consumers can now
