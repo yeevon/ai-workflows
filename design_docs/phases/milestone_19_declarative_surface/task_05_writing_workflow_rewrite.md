@@ -1,6 +1,6 @@
 # Task 05 — Rewrite `docs/writing-a-workflow.md` declarative-first (Tier 1 + Tier 2)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done (implemented 2026-04-26).
 **Grounding:** [milestone README](README.md) · [ADR-0008 §Documentation surface (the tier-by-tier doc disposition table)](../../adr/0008_declarative_authoring_surface.md) · [KDR-013 (the existing discovery surface preserved)](../../architecture.md) · [Task 01](task_01_workflow_spec.md) (the spec API the doc teaches) · [Task 02](task_02_compiler.md) (the compiler the doc references) · [Task 03](task_03_result_shape.md) (the renamed `artifact` field referenced in the doc's "what to read from the response" sub-section) · [`docs/writing-a-workflow.md`](../../../docs/writing-a-workflow.md) (the existing doc — 181 lines as of M16; rewrites under this task).
 
 ## What to Build
@@ -166,19 +166,19 @@ Under `[Unreleased]` on both branches:
 
 ## Acceptance Criteria
 
-- [ ] **AC-1:** `docs/writing-a-workflow.md` rewritten declarative-first. Tier 1 (compose built-in steps) + Tier 2 (parameterise) coverage with worked examples. No `import langgraph` in any Tier-1 or Tier-2 code block.
-- [ ] **AC-2:** Section structure matches Deliverable 1 (intro / Prerequisites / WorkflowSpec shape / Built-in step types / Worked example / Running / Pointers to deeper tiers / External workflows / Escape hatch / Testing).
-- [ ] **AC-3:** Worked `summarize` example present (or equivalent generic Tier 1+2 example) with full pydantic models + `register_workflow` call. Doctest-compilable.
-- [ ] **AC-4:** §"Running your workflow" documents the MCP `{"payload": {...}}` wire wrapping convention with a worked client snippet (resolves M18 DOC-DG4).
-- [ ] **AC-5:** §"Running your workflow" documents `result.artifact` as the canonical artefact field; `result.plan` mentioned as deprecated alias (composes with T03).
-- [ ] **AC-6:** §"When you need more" cross-links to `writing-a-custom-step.md` (T06) for Tier 3 and `writing-a-graph-primitive.md` (T07-aligned) for Tier 4. Tier 3 framing includes the `execute()` typical path AND the `compile()` upgrade path for fan-out / sub-graph / conditional cases (per locked Q4 refinement). Every cross-reference link verified resolvable at implement time.
-- [ ] **AC-7:** §"External workflows from a downstream consumer" updated — minimum module shape uses `WorkflowSpec`, references to non-existent `get_run_status` tool removed, tier-registry naming convention stated explicitly. Resolves M18 DOC-CONTRADICTION-1 + DOC-CONTRADICTION-2.
-- [ ] **AC-8:** §"Escape hatch" sub-section exists; honest framing that most workflows don't need it; cross-link to `writing-a-graph-primitive.md`.
-- [ ] **AC-9:** Cross-reference rot cleared. No outdated "(builder-only, on design branch)" annotations on items now in the main tree (e.g. ADR-0007, ADR-0008).
-- [ ] **AC-10:** Doctest verification (Deliverable 4) passes. Every code block in the doc compiles cleanly.
-- [ ] **AC-11:** No regression in the doc's existing pedagogical strength — the Auditor's read-through confirms the doc opens with the simplest case and progresses to more complex.
-- [ ] **AC-12:** CHANGELOG entry under `[Unreleased]` per Deliverable 5.
-- [ ] **AC-13:** Gates green on both branches. `uv run pytest`, `uv run lint-imports`, `uv run ruff check` (the doc rewrite shouldn't affect these but the audit reruns them).
+- [x] **AC-1:** `docs/writing-a-workflow.md` rewritten declarative-first. Tier 1 (compose built-in steps) + Tier 2 (parameterise) coverage with worked examples. No `import langgraph` in any Tier-1 or Tier-2 code block.
+- [x] **AC-2:** Section structure matches Deliverable 1 (intro / Prerequisites / WorkflowSpec shape / Built-in step types / Worked example / Running / Pointers to deeper tiers / External workflows / Escape hatch / Testing).
+- [x] **AC-3:** Worked `summarize` example present (or equivalent generic Tier 1+2 example) with full pydantic models + `register_workflow` call. Doctest-compilable.
+- [x] **AC-4:** §"Running your workflow" documents the MCP `{"payload": {...}}` wire wrapping convention with a worked client snippet (resolves M18 DOC-DG4).
+- [x] **AC-5:** §"Running your workflow" documents `result.artifact` as the canonical artefact field; `result.plan` mentioned as deprecated alias (composes with T03).
+- [x] **AC-6:** §"When you need more" cross-links to `writing-a-custom-step.md` (T06) for Tier 3 and `writing-a-graph-primitive.md` (T07-aligned) for Tier 4. Tier 3 framing includes the `execute()` typical path AND the `compile()` upgrade path for fan-out / sub-graph / conditional cases (per locked Q4 refinement). Every cross-reference link verified resolvable at implement time.
+- [x] **AC-7:** §"External workflows from a downstream consumer" updated — minimum module shape uses `WorkflowSpec`, references to non-existent `get_run_status` tool removed, tier-registry naming convention stated explicitly. Resolves M18 DOC-CONTRADICTION-1 + DOC-CONTRADICTION-2.
+- [x] **AC-8:** §"Escape hatch" sub-section exists; honest framing that most workflows don't need it; cross-link to `writing-a-graph-primitive.md`.
+- [x] **AC-9:** Cross-reference rot cleared. No outdated "(builder-only, on design branch)" annotations on items now in the main tree (e.g. ADR-0007, ADR-0008).
+- [x] **AC-10:** Doctest verification (Deliverable 4) passes. Every code block in the doc compiles cleanly.
+- [x] **AC-11:** No regression in the doc's existing pedagogical strength — the Auditor's read-through confirms the doc opens with the simplest case and progresses to more complex.
+- [x] **AC-12:** CHANGELOG entry under `[Unreleased]` per Deliverable 5.
+- [x] **AC-13:** Gates green on both branches. `uv run pytest`, `uv run lint-imports`, `uv run ruff check` (the doc rewrite shouldn't affect these but the audit reruns them).
 
 ## Dependencies
 
@@ -203,8 +203,8 @@ Under `[Unreleased]` on both branches:
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Deprecation-timeline framing consistency** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-01 — Deprecation-timeline framing consistency** (severity: LOW, source: task_analysis.md round 1)
       Use one phrasing across all M19 specs and the actual CHANGELOG entry: *"deprecated alias preserved for backward compatibility through the 0.2.x line; removal target 1.0."* Verify `result.plan` framing in §"Running your workflow" matches T03's CHANGELOG entry.
 
-- [ ] **TA-LOW-06 — Cross-spec consistency on `compile_step_in_isolation` reference** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-06 — Cross-spec consistency on `compile_step_in_isolation` reference** (severity: LOW, source: task_analysis.md round 1)
       §"Testing your workflow" references "framework provides spec-compilation fixtures (T06's territory)." Verify T06 ships `compile_step_in_isolation` (per locked M4) and that this doc's pointer matches the actual fixture name.

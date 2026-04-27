@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — M19 Task 05 (cycle 2): writing-a-workflow.md doc-hygiene + bug fixes (2026-04-26)
+
+Files touched:
+- `docs/writing-a-workflow.md` — 5 targeted fixes:
+  - LOW-1: "four fields" → "five fields" in §WorkflowSpec shape intro (line 26).
+  - HIGH-1: `aiw resume <run_id> --approve` → `aiw resume <run_id>` / `--gate-response approved`
+    (the `--approve` flag does not exist; `--gate-response approved` is the correct explicit form).
+    `aiw cancel <run_id>` removed; replaced with a note that CLI cancellation is not implemented
+    at 0.2.x and the MCP `cancel_run` tool is the available surface.
+  - MEDIUM-1 (user-locked Path a): §Worked example code block updated to byte-match
+    `ai_workflows/workflows/summarize.py` — added `from __future__ import annotations`, restored
+    the inline `RetryPolicy` import comment, appended the trailing `_SPEC` module-level docstring.
+  - HIGH-2: §Testing your workflow fixture pattern replaced — the broken
+    `ai_workflows.primitives.providers.litellm_adapter.LiteLLMAdapter` patch target and bare
+    `StubLLMAdapter()` constructor replaced with the working pattern lifted from
+    `tests/workflows/test_summarize.py`: correct patch site (`tiered_node_module.LiteLLMAdapter`),
+    `StubLLMAdapter.arm(expected_output=...)` call, and `yield` / `disarm()` teardown.
+  - LOW-2: one-line comment added to the worked example explaining the sibling-module
+    tier-registry pattern vs. inline.
+- `tests/docs/test_writing_workflow_snippets.py` — 5 new tests (23 total):
+  - `test_worked_example_matches_summarize_py` rewritten for byte-equality (after normalisation
+    of doctest markers and the LOW-2 comment block); replaces the prior key-phrase-presence check.
+  - `test_doc_cli_no_approve_flag` — asserts `--approve` not in the doc (HIGH-1 pin).
+  - `test_doc_cli_no_aiw_cancel_command` — asserts `aiw cancel` not taught as a valid command
+    (HIGH-1 pin).
+  - `test_doc_cli_resume_registered_commands` — asserts `resume` is a registered Typer command
+    and `cancel` is not (HIGH-1 live-CLI pin; resolves effective name from callback when
+    `name=None`).
+  - `test_doc_testing_fixture_no_broken_import_path` — asserts the broken
+    `ai_workflows.primitives.providers.litellm_adapter` path is absent (HIGH-2 pin).
+  - `test_doc_testing_fixture_uses_correct_patch_target` — asserts `tiered_node` appears in the
+    Testing section (HIGH-2 patch-site pin).
+
+ACs re-satisfied: AC-3 (byte-equality tightened), AC-10 (fixture now runtime-correct),
+AC-13 (gates green). HIGH-1 + HIGH-2 + MEDIUM-1 + LOW-1 + LOW-2 from cycle-1 issue file closed.
+
+Deviations from spec: none. All 5 cycle-2 fixes implemented per the cycle-2 scope.
+
+**KDRs:** KDR-013 (external workflow authoring surface unchanged), KDR-003 (no Anthropic API ref).
+
+### Changed — M19 Task 05: docs/writing-a-workflow.md rewritten declarative-first (2026-04-26)
+
+Files touched:
+- `docs/writing-a-workflow.md` — full rewrite, declarative-first. Doc now teaches the M19 spec
+  API (Tier 1 — compose built-in steps + Tier 2 — parameterise them) as the happy path.
+  Existing LangGraph-builder content moved under §"Escape hatch — when the spec API isn't
+  enough" with cross-link to `docs/writing-a-graph-primitive.md`. §"Running your workflow"
+  documents `aiw run --input KEY=VALUE` and the MCP `{"payload": {...}}` wire-shape wrapper.
+  §"External workflows from a downstream consumer" updated: minimum module shape uses
+  `WorkflowSpec`; references to non-existent `get_run_status` tool removed; tier-registry
+  naming convention clarified. Cross-references audited; outdated "(builder-only, on design
+  branch)" annotations cleared where items are now in the main tree.
+- `docs/writing-a-custom-step.md` — new placeholder stub. Forward-anchor for T06's Tier 3
+  dedicated guide; resolves the broken cross-link from `writing-a-workflow.md` until T06 lands.
+- `tests/docs/test_writing_workflow_snippets.py` — new test module. 18 tests covering: all
+  Python code blocks compile cleanly (AC-10), worked-example consistency with `summarize.py`
+  (AC-3), no `import langgraph` in Tier-1/Tier-2 blocks (AC-1), MCP payload wrapper documented
+  (AC-4), `result.artifact` canonical + `result.plan` deprecated 0.2.x / removal 1.0 (AC-5,
+  TA-LOW-01), Tier-3/Tier-4 cross-links + `execute()` + `compile()` framing (AC-6),
+  `compile_step_in_isolation` reference (TA-LOW-06), external-workflow section correctness
+  (AC-7: no `get_run_status`, `WorkflowSpec` used, naming convention stated), escape-hatch
+  section (AC-8), no cross-reference rot on shipped items (AC-9), reserved field names (ADV-1),
+  `prompt_template` brace-escaping caveat (ADV-2), section order (AC-2).
+
+ACs satisfied: AC-1 through AC-13, TA-LOW-01, TA-LOW-06, ADV-1, ADV-2.
+
+Deviations from spec:
+- §Worked example code block in the doc uses the parenthesized multi-line string literal form
+  identical to `summarize.py`'s source representation (which concatenates to the same runtime
+  string). The AC-3 doctest test checks key phrase presence and tier-name identity rather than
+  byte-for-byte verbatim match, because the Python source layout (parenthesized string concat)
+  is what appears in the file, and that is the canonical representation.
+- `docs/writing-a-custom-step.md` is a stub placeholder. The spec states T05 forward-anchors
+  the link; a stub is necessary so the existing link-checker test (`tests/docs/test_docs_links.py`)
+  does not fail on the broken cross-link before T06 lands.
+
+**KDRs:** KDR-013 (external workflow authoring surface; `WorkflowSpec` as the primary path;
+`register(name, build_fn)` escape hatch documented and preserved), KDR-008 (MCP FastMCP
+`payload` wire convention documented; wire shape unchanged), KDR-004 (validator pairing by
+construction in `LLMStep`; doc teaches the contract), KDR-006 (three-bucket retry via
+`RetryPolicy`; doc parameterisation path shown), KDR-003 (no Anthropic API; no LLM tier names
+reference the Claude Code path in the doc's default examples).
+
 ### Added — M19 Task 04 (cycle 2): summarize ValidateStep reframe + cross-surface identity test fix (2026-04-26)
 
 Files touched (cycle 2 only):
