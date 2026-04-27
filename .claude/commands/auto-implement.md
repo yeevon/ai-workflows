@@ -33,6 +33,16 @@ If at any point the loop attempts to invoke a halted operation, abort the cycle 
 
 ---
 
+## Pre-flight (before any agent spawn)
+
+1. **Sandbox check.** Verify `AIW_AUTONOMY_SANDBOX=1` is set in the environment (`echo "${AIW_AUTONOMY_SANDBOX:-}"` returns `1`). This var is set in `docker-compose.yml` for the sandbox container only. **HARD HALT** if missing or empty — autonomous mode does not run on the host. The fix is `make shell` (or `docker compose run --rm aiw bash`) and re-invoke from inside the container after `claude /login`.
+2. **Branch check.** `git rev-parse --abbrev-ref HEAD` must return `design_branch`. HARD HALT otherwise — autonomous mode does not switch branches.
+3. **Working tree check.** `git status --short` must be empty. HARD HALT on a dirty tree — the loop would conflate prior changes with this task's diff at commit time.
+
+If any pre-flight check fails, surface the failure verbatim and halt before spawning the first subagent.
+
+---
+
 ## Project setup (run once at the start of cycle 1)
 
 Resolve `$ARGUMENTS` to concrete paths:
@@ -41,9 +51,7 @@ Resolve `$ARGUMENTS` to concrete paths:
 - **Issue file path:** `design_docs/phases/milestone_<M>_<name>/issues/task_<NN>_issue.md`. May not exist on cycle 1.
 - **Parent milestone README:** `design_docs/phases/milestone_<M>_<name>/README.md`.
 
-Verify the working tree is clean (`git status --short` returns empty) before starting. A dirty tree means the loop would conflate prior in-flight changes with this task's diff at commit time. If dirty, halt and surface the diff for user review.
-
-Confirm current branch is `design_branch`. If not, halt — autonomous mode does not switch branches.
+(Branch + clean-tree checks already ran in the pre-flight section above.)
 
 Build the **project context brief** — pass verbatim to every subsequent `Task` spawn:
 

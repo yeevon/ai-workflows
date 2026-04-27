@@ -69,6 +69,13 @@ services:
       # gitignored under `runs/` and can be inspected on the host.
       AIW_STORAGE_DB: /home/papa-jochy/prj/ai-workflows/runs/storage.sqlite3
       AIW_CHECKPOINT_DB: /home/papa-jochy/prj/ai-workflows/runs/checkpoint.sqlite3
+      # Autonomy-mode marker — every container started via this
+      # compose service has this set. Slash commands that have
+      # destructive blast radius (`/auto-implement`, `/autopilot`)
+      # check for this var at pre-flight and HARD HALT if it is
+      # missing — that means the command is running on the host
+      # by accident, outside the sandbox boundary.
+      AIW_AUTONOMY_SANDBOX: "1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Interactive flags so `make shell` lands in a proper TTY.
