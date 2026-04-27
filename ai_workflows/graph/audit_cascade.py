@@ -284,6 +284,7 @@ def audit_cascade_node(
         prompt_fn=primary_prompt_fn,
         output_schema=primary_output_schema,
         node_name=f"{name}_primary",
+        role="author",  # M12 T04: factory-time role binding (Option 4, locked 2026-04-27)
     )
     _primary_with_role = _stamp_role_on_success(_primary_inner, role="author")
     primary_node = wrap_with_error_handler(
@@ -319,6 +320,7 @@ def audit_cascade_node(
         prompt_fn=resolved_auditor_prompt_fn,
         output_schema=AuditVerdict,
         node_name=f"{name}_auditor",
+        role="auditor",  # M12 T04: factory-time role binding (Option 4, locked 2026-04-27)
     )
     _auditor_with_role = _stamp_role_on_success(_auditor_inner, role="auditor")
     auditor_node = wrap_with_error_handler(

@@ -119,6 +119,7 @@ def tiered_node(
     prompt_fn: Callable[[GraphState], tuple[str | None, list[dict]]],
     output_schema: type[BaseModel] | None = None,
     node_name: str,
+    role: str = "",
 ) -> Callable[[GraphState, Any], Awaitable[dict[str, Any]]]:
     """Build an async LangGraph node bound to a logical tier.
 
@@ -145,6 +146,15 @@ def tiered_node(
         the retry-counter key that :class:`RetryingEdge` will read
         (``state['_retry_counts'][node_name]``). Keep it unique within
         a graph.
+    role:
+        Cascade role tag (``"author"`` / ``"auditor"``); stamped onto each
+        recorded :class:`TokenUsage` immediately after the existing ``tier``
+        stamp (M12 T04 — KDR-011).  Defaults to ``""`` — preserves all
+        existing callers byte-for-byte (none of T01-T03 + T08's ~25 sites
+        pass this kwarg).  Cascade callers (``audit_cascade.py``) pass
+        ``role="author"`` for the primary node and ``role="auditor"`` for
+        the auditor node at construction time (factory-time role binding,
+        Option 4 locked 2026-04-27).
 
     Returns
     -------
@@ -266,12 +276,24 @@ def tiered_node(
                 if usage.tier
                 else usage.model_copy(update={"tier": resolved_tier})
             )
+            # NEW (M12 T04 — KDR-011 telemetry, factory-time role binding):
+            # Stamp usage.role from the closure-captured ``role`` factory
+            # parameter.  Respects any role the adapter may have set (none
+            # today); non-cascade callers get role="" by default so by_role()
+            # shows them under the empty-string bucket.  The role is bound at
+            # cascade construction time (Option 4, locked 2026-04-27) — NOT
+            # read from state['cascade_role'], which would be stale on retry.
+            usage_with_role = (
+                usage_with_tier
+                if usage_with_tier.role
+                else usage_with_tier.model_copy(update={"role": role})
+            )
             # Cost callback lives inside the try block so a budget-breach
             # NonRetryable raised by ``CostTracker.check_budget`` (§8.5)
             # goes through the same single-log failure path as a provider
             # exception — preserves the "exactly one structured log per
             # invocation" invariant on the budget-cap path.
-            cost_callback.on_node_complete(run_id, node_name, usage_with_tier)
+            cost_callback.on_node_complete(run_id, node_name, usage_with_role)
             if breaker is not None:
                 await breaker.record_success()
                 # Re-read the state after record_success so the log line
@@ -363,9 +385,9 @@ def tiered_node(
             provider=provider,
             model=model_id,
             duration_ms=duration_ms,
-            input_tokens=usage_with_tier.input_tokens,
-            output_tokens=usage_with_tier.output_tokens,
-            cost_usd=usage_with_tier.cost_usd,
+            input_tokens=usage_with_role.input_tokens,
+            output_tokens=usage_with_role.output_tokens,
+            cost_usd=usage_with_role.cost_usd,
             level="info",
             **log_extras,
         )

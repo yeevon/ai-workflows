@@ -1,6 +1,6 @@
 # Task 04 — Telemetry: `TokenUsage.role` tag + `CostTracker.by_role` + cascade-step records
 
-**Status:** 📝 Planned (drafted 2026-04-27).
+**Status:** Complete (2026-04-27).
 **Grounding:** [milestone README](README.md) · [ADR-0004 §Decision item 6 — telemetry is load-bearing](../../adr/0004_tiered_audit_cascade.md) · [architecture.md §4.1 / §4.2 / §8.5 / §9 KDR-009 / KDR-011](../../architecture.md) · [task_03 close-out (cascade workflow integration shipped — `state['cascade_role']` already written)](task_03_workflow_wiring.md) · [primitives/cost.py:66-90 (`TokenUsage`) + `:93-140` (`CostTracker.by_tier`/`by_model`)](../../../ai_workflows/primitives/cost.py) · [graph/tiered_node.py:264-274 (existing `usage.tier` stamp + `cost_callback.on_node_complete` site)](../../../ai_workflows/graph/tiered_node.py).
 
 ## What to Build
@@ -193,7 +193,7 @@ Under `## [Unreleased]`, add `### Added — M12 Task 04: Telemetry — TokenUsag
 - **No default-on cascade flip.** ADR-0004 §Decision item 5 + ADR-0009 — flipping `_AUDIT_CASCADE_ENABLED_DEFAULT = True` requires the post-T04 telemetry analysis, not a T04 deliverable.
 - **No persistence-layer schema change.** `TokenUsage.role` rides the existing in-memory `CostTracker._entries` dict (lines 105-110 of `cost.py`). If a future task persists the ledger to SQLite per KDR-009, the `role` column lands then; T04 keeps the in-memory shape.
 - **No `Literal["author", "auditor", "verdict"]` typing.** Free-form `str` per the existing `tier` field convention. Cascade primitive owns the value-set discipline at the write site.
-- **No cascade-primitive signature change.** T08's `skip_terminal_gate` was the most recent factory-signature amendment; T04 is internal-only to the cascade's role-stamp wrapper.
+- **No cascade-primitive (`audit_cascade_node`) signature change.** The `tiered_node` factory signature gains a backward-compatible `role: str = ""` kwarg per Option 4 (default preserves all 25+ existing callers byte-for-byte). T08's `skip_terminal_gate` was the cascade-primitive amendment; T04's primitive-layer change is the symmetric role-kwarg extension on `tiered_node`, not on `audit_cascade_node`.
 - **No telemetry export to external systems.** Langfuse / OpenTelemetry / etc. are `nice_to_have.md` items; T04 lands the in-process aggregation surface only.
 - **No Anthropic API.** KDR-003 preserved.
 
@@ -215,26 +215,26 @@ Filled in at audit time. Anticipated forward-deferrals from T04:
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — `tiered_node.py:194` line citation drift** (severity: LOW, source: task_analysis.md round 1 L1)
+- [x] **TA-LOW-01 — `tiered_node.py:194` line citation drift** (severity: LOW, source: task_analysis.md round 1 L1)
       Spec line 92 cites `tiered_node.py:194` for the typed `GraphState` parameter on the inner `_node` function; live source has it at line 193 (one-off drift). Note: this section was rewritten in the round-1 fix application (Option 4); the new "Cascade primitive — pass `role=` at construction time" section no longer references that line, but the underlying `tiered_node` block at lines 264-274 (where the new role stamp lands) is the load-bearing citation.
       **Recommendation:** Builder verifies the modified `tiered_node.py:264-274` block against live source at implement time; tighten any one-off line citations in the issue file at audit close.
 
-- [ ] **TA-LOW-02 — CHANGELOG framing nuance for primitive-layer signature change** (severity: LOW, source: task_analysis.md round 1 L2)
+- [x] **TA-LOW-02 — CHANGELOG framing nuance for primitive-layer signature change** (severity: LOW, source: task_analysis.md round 1 L2)
       Per Keep-a-Changelog convention, adding a backward-compatible parameter to an existing public-ish factory could be classified as either `### Added` (new feature: role tagging) or `### Changed` (factory signature gained a kwarg). The spec uses `### Added` per the natural reading (T04 adds the role-tagging behaviour to the cost ledger; the kwarg is an implementation detail of that feature). T08's CHANGELOG entry used `### Changed` because the cascade primitive's signature was the headline (`skip_terminal_gate=True` was a behaviour-shape change at the cascade boundary). T04 is closer to "added telemetry" than "changed factory shape" — `### Added` is appropriate.
       **Recommendation:** Confirm `### Added` framing at CHANGELOG-write time. If the Builder feels the primitive-layer signature change overshadows the telemetry addition, `### Changed` is also acceptable; cite KDR-011 either way.
 
-- [ ] **TA-LOW-03 — Test #6 verdict-node assumption is now verified, leave no hand-wave in spec** (severity: LOW, source: task_analysis.md round 1 L3)
+- [x] **TA-LOW-03 — Test #6 verdict-node assumption is now verified, leave no hand-wave in spec** (severity: LOW, source: task_analysis.md round 1 L3)
       The spec's test #6 description (`test_cascade_records_role_tagged_token_usage_per_step`) initially hand-waved "If the verdict node also records a `TokenUsage` (it shouldn't — the verdict node is a pure parse, no LLM call), assert `role='verdict'` for that record." The hand-wave was resolved during round-1 analysis: `_audit_verdict_node` (`audit_cascade.py:714-810`) only calls `AuditVerdict.model_validate_json` — no LLM dispatch, no `TokenUsage`. The round-1 spec update tightened test #6 to assert `exactly 2 records` (count is the protective assertion). No further spec edit needed; this LOW is informational — flagged for Builder awareness that the verdict-node assumption is verified at spec time, not at implement time.
       **Recommendation:** No action; informational. If a future cascade extension grows a verdict-side LLM dispatch (e.g. an LLM-based verdict explainer at T07), the test count assertion would catch the regression.
 
-- [ ] **TA-LOW-04 — Forward-deferral note has no T05 spec to land on yet** (severity: LOW, source: task_analysis.md round 1 L4)
+- [x] **TA-LOW-04 — Forward-deferral note has no T05 spec to land on yet** (severity: LOW, source: task_analysis.md round 1 L4)
       Spec §Propagation status says "If T05's standalone `run_audit_cascade` MCP tool needs to surface `by_role` aggregation in its output schema, that wiring lands at T05 — surface as a carry-over to T05's spec at draft time." T05 spec doesn't exist yet (per M12 README convention). The note is a forward-deferral that has no spec to carry-over INTO until T05 is drafted (after T04 closes). Tracking lives in this carry-over section until T05 spec lands.
       **Recommendation:** When T05 spec is drafted (post-T04 close-out), the orchestrator's `/clean-tasks` cycle for T05 picks up this carry-over and adds it to T05's `## Carry-over from prior audits` section. Until then, the note stays here as a tracked-but-pending forward-deferral.
 
-- [ ] **TA-LOW-05 — `tiered_node.py:264-274ish` line citation drift on the inserted role-stamp block** (severity: LOW, source: task_analysis.md round 2 L1)
+- [x] **TA-LOW-05 — `tiered_node.py:264-274ish` line citation drift on the inserted role-stamp block** (severity: LOW, source: task_analysis.md round 2 L1)
       Spec cites `tier`-stamp at `tiered_node.py:264-268`; the new `role` stamp slots between line 268 and the `cost_callback.on_node_complete(...)` call at line 274, pushing that call to ~line 280 post-edit. Spec already says "264-274ish" so Builder isn't blocked, but the once-cited "lines 264-268" describes the pre-edit tier-stamp range, not where the role stamp lives post-edit.
       **Recommendation:** Builder confirms the inserted role-stamp block lands between the existing `tier`-stamp at lines 264-268 and the `cost_callback.on_node_complete` call at line 274 in live source; the spec's `:264-274ish` bound is approximate and acceptable to drift by one or two lines as the new block lands. Tighten any one-off line citations in the issue file at audit close.
 
-- [ ] **TA-LOW-06 — §"Out of scope" bullet "no cascade-primitive signature change" is now ambiguous under Option 4** (severity: LOW, source: task_analysis.md round 2 L2)
+- [x] **TA-LOW-06 — §"Out of scope" bullet "no cascade-primitive signature change" is now ambiguous under Option 4** (severity: LOW, source: task_analysis.md round 2 L2)
       Spec §"Out of scope" line 196 still reads `**No cascade-primitive signature change.** T08's skip_terminal_gate was the most recent factory-signature amendment; T04 is internal-only to the cascade's role-stamp wrapper.` Under Option 4, T04 *does* extend a primitive-layer factory signature — `tiered_node()` gains a backward-compat `role: str = ""` kwarg. The cascade primitive (`audit_cascade_node`) signature itself stays unchanged, but the `tiered_node` primitive signature does change.
       **Recommendation:** At spec-edit time (or implement-close time), reword the §`Out of scope` bullet from `**No cascade-primitive signature change.** T08's skip_terminal_gate was the most recent factory-signature amendment; T04 is internal-only to the cascade's role-stamp wrapper.` to: `**No cascade-primitive (audit_cascade_node) signature change.** The tiered_node factory signature gains a backward-compatible role: str = "" kwarg per Option 4 (default preserves all 25+ existing callers byte-for-byte). T08's skip_terminal_gate was the cascade-primitive amendment; T04's primitive-layer change is the symmetric role-kwarg extension on tiered_node, not on audit_cascade_node.`

@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M12 Task 04: Telemetry — TokenUsage.role tag + CostTracker.by_role + cascade-step records (2026-04-27)
+
+Adds `role` attribution to the cost ledger so cascade-enabled runs can surface the
+author-vs-auditor cost split per run via `CostTracker.by_role(run_id)` (KDR-011 telemetry
+surface for ADR-0004 §Decision item 6 empirical-tuning loop).
+
+**Files touched:**
+- `ai_workflows/primitives/cost.py` — `TokenUsage.role: str = ""` field (with docstring
+  citing M12 T04 / KDR-011); `CostTracker.by_role(run_id) -> dict[str, float]` method added
+  after `by_model`, mirroring `by_tier`'s shape. Sub-model costs roll into the parent
+  entry's role (via the unchanged `_roll_cost` helper). Existing `by_tier` / `by_model`
+  aggregations unchanged.
+- `ai_workflows/graph/tiered_node.py` — `role: str = ""` keyword-only kwarg added to
+  `tiered_node()` factory signature (mirrors the existing `tier` kwarg pattern exactly).
+  `usage_with_role` stamp inserted immediately after the existing `tier` stamp: respects
+  any role the adapter may have set; non-cascade callers get `role=""` by default.
+  Factory-time role binding (Option 4, locked 2026-04-27 by user arbitration on round-1 H1)
+  — NOT read from `state['cascade_role']`. Default `""` preserves all 25+ existing
+  T01-T03 + T08 callers byte-for-byte.
+- `ai_workflows/graph/audit_cascade.py` — primary `tiered_node()` construction now passes
+  `role="author"`; auditor `tiered_node()` construction now passes `role="auditor"`. Verdict
+  node is a pure parse (no LLM call, no `tiered_node` involvement) — no `role="verdict"`
+  passed. The existing `_stamp_role_on_success` state-channel wrapper is left in place
+  unchanged (serves `test_cascade_role_tags_stamped_on_state` which reads final state,
+  independent of the ledger role stamp).
+- `tests/primitives/test_cost_by_role.py` — NEW: 5 hermetic tests for `by_role`:
+  `test_by_role_empty_run`, `test_by_role_single_role`, `test_by_role_multiple_roles`,
+  `test_by_role_sub_models_inherit_parent_role`, `test_by_role_includes_empty_string_bucket_for_non_cascade_calls`.
+- `tests/graph/test_audit_cascade.py` — EXTENDED: 2 new T04 tests:
+  `test_cascade_records_role_tagged_token_usage_per_step` (wire-level smoke, asserts
+  exactly 2 records with correct roles); `test_cascade_role_attribution_survives_audit_retry_cycle`
+  (pins H2 mitigation: factory-time binding immune to state-channel stale reads across retry).
+- `design_docs/phases/milestone_12_audit_cascade/task_04_telemetry_role_tag.md` — TA-LOW-06
+  §Out-of-scope bullet reworded to clarify `tiered_node` (not `audit_cascade_node`) gained
+  the `role` kwarg.
+
+**KDR cited:** KDR-011 (cascade telemetry is the empirical surface for post-M12 tuning decisions).
+
+**Backward-compatibility:**
+- `TokenUsage()` construction without `role` arg still works (defaults to `""`).
+- Existing `by_tier` / `by_model` aggregations return identical values.
+- All existing `tiered_node()` callers across T01-T03 + T08 work without passing `role`.
+
+**Locked decision applied:** Option 4 (factory-time role binding). Options 1 and 3 rejected
+per spec §Locked decisions (state-channel timing infeasible / excess plumbing).
+
+**ACs satisfied:** all 15 ACs from task spec + all 6 TA-LOW carry-overs satisfied
+(TA-LOW-01: verified live source; TA-LOW-02: `### Added` framing; TA-LOW-03: verdict-node
+no-dispatch confirmed; TA-LOW-04: T05 carry-over pending T05 draft; TA-LOW-05: role stamp
+lands between tier stamp and cost_callback call as specified; TA-LOW-06: §Out-of-scope
+reworded at implement time).
+
 ### Added — M12 Task 03: Workflow wiring — cascade opt-in via module constant + env-var (2026-04-27)
 
 Wires `audit_cascade_node()` (M12 T02) into the `planner` and `slice_refactor` workflows

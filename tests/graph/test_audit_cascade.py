@@ -1,7 +1,7 @@
 """Tests for ``ai_workflows.graph.audit_cascade`` (M12 Task 02 / amended M12 Task 08
-— KDR-004, KDR-006, KDR-011).
+/ M12 Task 04 — KDR-004, KDR-006, KDR-011).
 
-Eleven hermetic tests exercising the compiled cascade sub-graph with stub provider
+Thirteen hermetic tests exercising the compiled cascade sub-graph with stub provider
 adapters.  No real LLM call, no subprocess.  The stub pattern mirrors
 ``tests/graph/test_tiered_node.py:104,172`` — ``monkeypatch.setattr`` on the
 module-level adapter names inside ``ai_workflows.graph.tiered_node``.
@@ -23,6 +23,13 @@ T08 tests (cascade tests 8-11 in this file):
     in state['last_exception'] (wire-level smoke for T08 per CLAUDE.md rule).
 11. skip_terminal_gate=True routes validator-exhaustion (NonRetryable) to END
     with NonRetryable in state['last_exception']; auditor never invoked.
+
+T04 tests (cascade tests 12-13 in this file):
+12. Wire-level smoke: primary records role="author" + auditor records role="auditor"
+    via the production CostTrackingCallback path; exactly 2 records total (verdict
+    node does NOT dispatch — protective assertion).
+13. Role attribution survives audit retry cycle: no author record carries
+    role="auditor" and vice versa across retry cycles.
 """
 
 from __future__ import annotations
@@ -866,3 +873,174 @@ async def test_skip_terminal_gate_true_routes_validator_exhaustion_to_END_with_n
         f"Auditor should not be invoked under pure shape-failure with "
         f"skip_terminal_gate=True, but was called {len(_StubClaudeCodeAdapter.calls)} time(s)."
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 12 (T04): wire-level smoke — primary records role="author", auditor role="auditor"
+# CLAUDE.md non-inferential rule: wire-level smoke (same code path as downstream consumer)
+# ---------------------------------------------------------------------------
+
+
+async def test_cascade_records_role_tagged_token_usage_per_step(
+    tmp_path: Path,
+) -> None:
+    """Test 12 / T04 wire-level smoke: primary records role="author", auditor role="auditor".
+
+    Drives a happy-path cascade (auditor passes on first try) with a real
+    ``CostTracker`` + ``CostTrackingCallback`` in the config.  Asserts:
+
+    * Exactly 2 ``TokenUsage`` records are written for the run (primary +
+      auditor).  The count is the protective assertion: pins that the verdict
+      node correctly does NOT dispatch an LLM call (no third record), and that
+      the primary + auditor each record exactly once.
+    * ``records[0].role == "author"`` — primary's factory-time role binding
+      (Option 4, locked 2026-04-27) stamped via ``tiered_node(role="author")``.
+    * ``records[1].role == "auditor"`` — auditor's factory-time role binding.
+
+    This test exercises the production cost-callback path (``CostTracker.record``
+    called by ``CostTrackingCallback.on_node_complete`` called by ``tiered_node``
+    after the role stamp), NOT a mock.  Wire-level per CLAUDE.md non-inferential
+    rule: same code path a downstream consumer hits.
+    """
+    _StubLiteLLMAdapter.script = [(_PRIMARY_JSON, 0.001)]
+    _StubClaudeCodeAdapter.script = [(_AUDIT_PASS_JSON, 0.0)]
+
+    checkpointer = await build_async_checkpointer(tmp_path / "cp_t04a.sqlite")
+    storage = await SQLiteStorage.open(tmp_path / "storage_t04a.sqlite")
+    await storage.create_run("r_t04a", "cascade_role_smoke", None)
+
+    # Build the tracker separately so we can inspect it after the run.
+    tracker = CostTracker()
+    callback = CostTrackingCallback(cost_tracker=tracker, budget_cap_usd=None)
+
+    cascade = _cascade(name="ac")
+    outer = _build_outer_graph(cascade, name="ac")
+
+    cfg = {
+        "configurable": {
+            "thread_id": "r_t04a",
+            "run_id": "r_t04a",
+            "tier_registry": _tier_registry(),
+            "cost_callback": callback,
+            "storage": storage,
+            "pricing": {},
+        }
+    }
+
+    try:
+        final = await outer.ainvoke({"run_id": "r_t04a"}, cfg)
+    finally:
+        await checkpointer.conn.close()
+
+    assert "__interrupt__" not in final
+
+    # Inspect the ledger: exactly 2 records for this run.
+    records = tracker._entries.get("r_t04a", [])
+    assert len(records) == 2, (
+        f"Expected exactly 2 TokenUsage records (primary + auditor); "
+        f"got {len(records)}: {[(r.role, r.cost_usd) for r in records]}"
+    )
+
+    # First record: primary call — role="author".
+    assert records[0].role == "author", (
+        f"Expected records[0].role='author' (primary tiered_node with role='author'), "
+        f"got {records[0].role!r}"
+    )
+
+    # Second record: auditor call — role="auditor".
+    assert records[1].role == "auditor", (
+        f"Expected records[1].role='auditor' (auditor tiered_node with role='auditor'), "
+        f"got {records[1].role!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 13 (T04): role attribution survives audit retry cycle
+# Pins H2 mitigation: factory-time binding is immune to state-channel stale reads
+# ---------------------------------------------------------------------------
+
+
+async def test_cascade_role_attribution_survives_audit_retry_cycle(
+    tmp_path: Path,
+) -> None:
+    """Test 13 / T04: role attribution is correct across an auditor-fail-then-pass cycle.
+
+    Drives a cascade where the auditor fails once then succeeds.  Captures every
+    ``TokenUsage`` the cost tracker receives across the retry cycle.  Asserts:
+
+    * 2 author records (cycle 1 primary + cycle 2 primary re-fire) all carry
+      ``role="author"``.
+    * 2 auditor records (cycle 1 auditor failure + cycle 2 auditor success) all
+      carry ``role="auditor"``.
+    * No author record carries ``role="auditor"`` and no auditor record carries
+      ``role="author"``.
+
+    Pins H2's mitigation: Option 4's factory-time role binding eliminates the
+    stale-role-on-retry concern (under Options 1/3 the role would be read from
+    ``state['cascade_role']`` and could inherit a stale value from the prior
+    node's success-side write; under Option 4 the role is closure-captured at
+    cascade construction time and immune to state-channel ordering).
+    """
+    # primary fires twice (cycle 1 + retry after audit failure); both return valid JSON.
+    _StubLiteLLMAdapter.script = [(_PRIMARY_JSON, 0.001), (_PRIMARY_JSON, 0.001)]
+    # auditor fires twice: first fails, second passes.
+    _StubClaudeCodeAdapter.script = [(_AUDIT_FAIL_JSON, 0.0), (_AUDIT_PASS_JSON, 0.0)]
+
+    checkpointer = await build_async_checkpointer(tmp_path / "cp_t04b.sqlite")
+    storage = await SQLiteStorage.open(tmp_path / "storage_t04b.sqlite")
+    await storage.create_run("r_t04b", "cascade_role_retry", None)
+
+    tracker = CostTracker()
+    callback = CostTrackingCallback(cost_tracker=tracker, budget_cap_usd=None)
+
+    cascade = _cascade(name="ac", policy=_POLICY_3)
+    outer = _build_outer_graph(cascade, name="ac")
+
+    cfg = {
+        "configurable": {
+            "thread_id": "r_t04b",
+            "run_id": "r_t04b",
+            "tier_registry": _tier_registry(),
+            "cost_callback": callback,
+            "storage": storage,
+            "pricing": {},
+        }
+    }
+
+    try:
+        final = await outer.ainvoke({"run_id": "r_t04b"}, cfg)
+    finally:
+        await checkpointer.conn.close()
+
+    assert "__interrupt__" not in final
+
+    records = tracker._entries.get("r_t04b", [])
+    # Expected: primary (author), auditor (auditor), primary (author), auditor (auditor) — 4 total.
+    assert len(records) == 4, (
+        f"Expected 4 TokenUsage records (2 primary + 2 auditor across retry cycle); "
+        f"got {len(records)}: {[(r.role, r.cost_usd) for r in records]}"
+    )
+
+    # Separate into author and auditor records.
+    author_records = [r for r in records if r.role == "author"]
+    auditor_records = [r for r in records if r.role == "auditor"]
+
+    # 2 author records (both from the primary tiered_node).
+    assert len(author_records) == 2, (
+        f"Expected 2 records with role='author', got {len(author_records)}: "
+        f"{[r.role for r in records]}"
+    )
+
+    # 2 auditor records (both from the auditor tiered_node).
+    assert len(auditor_records) == 2, (
+        f"Expected 2 records with role='auditor', got {len(auditor_records)}: "
+        f"{[r.role for r in records]}"
+    )
+
+    # No cross-contamination: no author record carries role="auditor" and vice versa.
+    # (This is trivially guaranteed by the above counts if total == 4 and all roles
+    # are "author" or "auditor", but pin it explicitly for clarity.)
+    for r in author_records:
+        assert r.role == "author", f"Author record carries unexpected role: {r.role!r}"
+    for r in auditor_records:
+        assert r.role == "auditor", f"Auditor record carries unexpected role: {r.role!r}"
