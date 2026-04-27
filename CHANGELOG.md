@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M12 Task 02: AuditCascadeNode primitive + AuditFailure exception (2026-04-27)
+
+Implements the foundational cascade sub-graph primitive (KDR-004, KDR-006, KDR-011) that
+composes `TieredNode(primary) → ValidatorNode → TieredNode(auditor) → AuditVerdictNode` inside
+a compiled `StateGraph`. When the auditor reports `passed=False`, the verdict node raises
+`AuditFailure` (a `RetryableSemantic` subclass) carrying the rendered audit-feedback template
+as `revision_hint`; `RetryingEdge` routes it back to the primary without any new taxonomy bucket.
+On budget exhaustion the cascade routes to a `strict_review=True` `HumanGate`.
+
+**Files touched:**
+- `ai_workflows/primitives/retry.py` — added `AuditFailure` + `_render_audit_feedback` helper;
+  `classify()` extended to pass through pre-classified bucket instances (AuditFailure subclass chain);
+  `AuditFailure` added to `__all__`.
+- `ai_workflows/graph/audit_cascade.py` — new module; `AuditVerdict` pydantic model,
+  `audit_cascade_node()` factory returning a compiled `StateGraph`; dynamic TypedDict for cascade
+  state schema; `_wrap_verdict_with_transcript` custom error wrapper; `_decide_after_validator`
+  and `_decide_after_verdict` edge routing functions.
+- `ai_workflows/graph/retrying_edge.py` — docstring-only: added `audit_cascade.py` cross-reference
+  bullet in "Relationship to sibling modules".
+- `pyproject.toml` — 5th import-linter contract: "audit_cascade composes only graph + primitives".
+- `tests/primitives/test_audit_feedback_template.py` — 5 new tests pinning the template shape,
+  empty-reasons fallback, no-suggested-approach fallback, AuditFailure revision_hint byte-equality,
+  and RetryableSemantic subclass / classify() routing.
+- `tests/graph/test_audit_cascade.py` — 6 new wire-level tests: pass-through smoke, re-fire with
+  audit-feedback, exhaustion → strict HumanGate, validator short-circuit, composability in outer
+  graph, role-tag stamping.
+- `tests/test_scaffolding.py` — updated contract count assertion from 4 to 5; added audit_cascade
+  contract name assertion.
+
+**ACs satisfied:**
+- AC-1: `AuditFailure` exception subclasses `RetryableSemantic`; `classify(AuditFailure(...)) is RetryableSemantic`.
+- AC-2: `_render_audit_feedback` helper produces spec-pinned template (5 template tests).
+- AC-3: `audit_cascade_node()` returns a `CompiledStateGraph` composable as a node in an outer graph.
+- AC-4: Validator failure routes back to primary without firing the auditor.
+- AC-5: Audit failure routes back to primary with `revision_hint` containing the rendered template.
+- AC-6: Budget exhaustion routes to `strict_review=True` `HumanGate`.
+- AC-7: 5th import-linter contract ("audit_cascade composes only graph + primitives") passes.
+- Carry-over TA-LOW-01: spec `**Status:**` line flipped.
+- Carry-over TA-LOW-02: `classify()` extended to handle pre-classified bucket instances.
+- Carry-over TA-LOW-03/04: module docstring cites task + relationships; public classes/functions documented.
+
+**Deviations from spec:**
+- Spec stated "no `classify()` edit needed" — `classify()` required a two-line extension to pass
+  `AuditFailure` instances through as `RetryableSemantic` (the AC `classify(AuditFailure(...)) is RetryableSemantic`
+  was unsatisfiable otherwise). Called out explicitly per Builder rules.
+
 ### Added — M12 Task 01: Auditor TierConfigs (2026-04-27)
 
 Registers `auditor-sonnet` (`ClaudeCodeRoute(cli_model_flag="sonnet")`) and

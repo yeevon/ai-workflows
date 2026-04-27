@@ -190,3 +190,13 @@ forbidden_modules = [
     "ai_workflows.cli",
     "ai_workflows.mcp",
 ]
+
+[[tool.importlinter.contracts]]
+name = "audit_cascade composes only graph + primitives"
+type = "forbidden"
+source_modules = ["ai_workflows.graph.audit_cascade"]
+forbidden_modules = [
+    "ai_workflows.workflows",
+    "ai_workflows.cli",
+    "ai_workflows.mcp",
+]

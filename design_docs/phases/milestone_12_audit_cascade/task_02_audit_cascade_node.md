@@ -1,6 +1,6 @@
 # Task 02 — `AuditCascadeNode` graph primitive + `AuditFailure` exception + RetryingEdge re-prompt template
 
-**Status:** 📝 Planned (drafted 2026-04-27).
+**Status:** ✅ Complete (2026-04-27).
 **Grounding:** [milestone README](README.md) · [ADR-0004 §Decision item 4](../../adr/0004_tiered_audit_cascade.md) · [architecture.md §4.2 (graph adapters) / §4.4 (MCP) / §8.2 (retry taxonomy) / §9 KDR-004 / KDR-006 / KDR-009 / KDR-011](../../architecture.md) · [primitives/retry.py:79-92 (`RetryableSemantic`)](../../../ai_workflows/primitives/retry.py#L79-L92) · [graph/tiered_node.py](../../../ai_workflows/graph/tiered_node.py) · [graph/validator_node.py](../../../ai_workflows/graph/validator_node.py) · [graph/retrying_edge.py](../../../ai_workflows/graph/retrying_edge.py) · [graph/human_gate.py](../../../ai_workflows/graph/human_gate.py) · [task_01 close-out (auditor TierConfigs landed)](task_01_auditor_tier_configs.md).
 
 ## What to Build
@@ -381,7 +381,7 @@ The tree-wide `tests/workflows/test_slice_refactor_e2e.py:test_kdr_003_no_anthro
 - **No new tier.** T01 already shipped `auditor-sonnet` + `auditor-opus`; T02 consumes them. Haiku-as-primary is `nice_to_have.md` material (see milestone README §Propagation status).
 - **No `classify()` taxonomy edit.** `AuditFailure` rides the existing `RetryableSemantic` bucket via subclassing.
 - **No `RetryingEdge` behavioural edit.** The edge already routes `RetryableSemantic` to `on_semantic`. T02's only edit to `retrying_edge.py` is a docstring cross-reference (no code change).
-- **No HumanGate edit.** T02 reuses `HumanGate(strict_review=True)` verbatim. The cascade-transcript shape is rendered by the audit-verdict node into the gate's prompt at compose time.
+- **No HumanGate edit.** T02 reuses `HumanGate(strict_review=True)` without source-code edit (the cascade-transcript prompt_fn is HumanGate's documented extension point, not a fork). The cascade-transcript shape is rendered by the audit-verdict node into the gate's prompt at compose time.
 - **No Anthropic API.** KDR-003 preserved across all T02 deliverables. Hermetic grep enforces.
 - **No Opus-repair tier.** ADR-0004 §Alternatives explicitly rejected the third-tier fixer; T02 honours that.
 
@@ -400,18 +400,18 @@ Filled in at audit time. Anticipated forward-deferrals from T02:
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Drop `(drafted 2026-04-27)` parenthetical from `**Status:**` line** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-01 — Drop `(drafted 2026-04-27)` parenthetical from `**Status:**` line** (severity: LOW, source: task_analysis.md round 3)
       Spec line 3 reads `**Status:** 📝 Planned (drafted 2026-04-27).` while the M12 README task-table row 02 uses `📝 Planned` only. Cosmetic only — does not affect close-out flip.
       **Recommendation:** Optional drop of the `(drafted 2026-04-27)` parenthetical for uniformity with the README task-table row format.
 
-- [ ] **TA-LOW-02 — Replace `HumanGate verbatim` phrasing in §Out of scope** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-02 — Replace `HumanGate verbatim` phrasing in §Out of scope** (severity: LOW, source: task_analysis.md round 3)
       §Out of scope says `T02 reuses HumanGate(strict_review=True) verbatim`. "Verbatim" is technically true (no source-code edit) but a pedant could read it as "no behavioural customization at all"; the cascade *does* supply a custom `prompt_fn` for the cascade-transcript renderer, which is `human_gate.py:52`'s documented extension point.
       **Recommendation:** Replace `reuses HumanGate(strict_review=True) verbatim` with `reuses HumanGate(strict_review=True) without source-code edit (the cascade-transcript prompt_fn is HumanGate's documented extension point, not a fork)`.
 
-- [ ] **TA-LOW-03 — Sketch test #5's outer-graph state schema** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-03 — Sketch test #5's outer-graph state schema** (severity: LOW, source: task_analysis.md round 3)
       Test #5 (`test_cascade_returns_compiled_state_graph_composable_in_outer`) says "instantiate `audit_cascade_node(...)`; add it as a single node to a minimal outer `StateGraph(state_schema=...)`; compile; invoke" — the outer state schema is unspecified. The four `<name>_*` channels are pinned in §State channels added by the cascade, but the test still needs `run_id`, `last_exception`, `_retry_counts`, `_non_retryable_failures`, `cascade_role`, `cascade_transcript` plus the four cascade-internal keys.
       **Recommendation:** Name the minimum outer-graph state schema fields the Builder needs: `run_id`, `last_exception`, `_retry_counts`, `_non_retryable_failures`, `cascade_role`, `cascade_transcript`, plus the four cascade-internal keys (`<name>_primary_output`, `<name>_primary_parsed`, `<name>_auditor_output`, `<name>_audit_verdict`). Or reference `tests/graph/test_tiered_node.py:_build_config` shape as the template.
 
-- [ ] **TA-LOW-04 — Sketch `_default_primary_original` helper body in §Internal node block** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-04 — Sketch `_default_primary_original` helper body in §Internal node block** (severity: LOW, source: task_analysis.md round 3)
       §Internal node block references `_default_primary_original(state, primary_prompt_fn)` as the fallback when `cascade_context_fn` is None, with body described in prose only. Builder needs to know the exact join shape so test #2's byte-equal assertion against `exc.revision_hint` can construct the expected literal.
       **Recommendation:** Pin the body shape. Suggested: `system, messages = primary_prompt_fn(state); return (system or "") + "\n\n" + "\n".join(m.get("content", "") for m in messages)`. Or pin a less-opinionated shape (e.g. `repr((system, messages))`) and let test #2's byte-equal assertion drive whatever shape the Builder picks. Either way, the spec should not leave the join shape unwritten.

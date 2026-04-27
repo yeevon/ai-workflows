@@ -221,12 +221,14 @@ def test_pyproject_declares_expected_importlinter_contracts() -> None:
     extended the set with the evals-layer contract (M7 Task 03
     amendment relaxed its wording from "depends on graph +
     primitives only" to "cannot import surfaces" — see M7-T01-ISS-03
-    / the pyproject.toml inline comment):
+    / the pyproject.toml inline comment); M12 Task 02 adds a fifth
+    contract scoped to the ``audit_cascade`` graph primitive:
 
     1. primitives cannot import graph, workflows, or surfaces
     2. graph cannot import workflows or surfaces
     3. workflows cannot import surfaces
     4. evals cannot import surfaces
+    5. audit_cascade composes only graph + primitives
 
     Substring matching keeps the test resilient to wording tweaks
     while pinning the layer vocabulary.
@@ -237,11 +239,12 @@ def test_pyproject_declares_expected_importlinter_contracts() -> None:
         pyproject = tomllib.load(fh)
     contracts = pyproject["tool"]["importlinter"]["contracts"]
     names = {c["name"] for c in contracts}
-    assert len(contracts) == 4, f"expected exactly 4 contracts, got {len(contracts)}: {names}"
+    assert len(contracts) == 5, f"expected exactly 5 contracts, got {len(contracts)}: {names}"
     assert any("primitives cannot import" in n for n in names)
     assert any("graph cannot import" in n for n in names)
     assert any("workflows cannot import surfaces" in n for n in names)
     assert any("evals cannot import surfaces" in n for n in names)
+    assert any("audit_cascade" in n for n in names)
 
 
 # ---------------------------------------------------------------------------
