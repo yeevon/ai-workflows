@@ -1,11 +1,15 @@
-"""Orchestrator test helpers — spawn-prompt sizing, KDR extraction, and cycle summaries.
+"""Orchestrator test helpers — spawn-prompt sizing, KDR extraction, cycle summaries, iter-shipped.
 
 Task: M20 Task 02 — Sub-agent input prune (orchestrator-side scope discipline).
 Task: M20 Task 03 — In-task cycle compaction (cycle_<N>/summary.md per Auditor).
+Task: M20 Task 04 — Cross-task iteration compaction (iter_<N>-shipped.md at autopilot
+  iteration boundaries).
 Relationship: Provides the Python implementations of the spawn-prompt scope rules
   described in `.claude/commands/_common/spawn_prompt_template.md`, and the cycle-summary
   emission + read-only-latest-summary rule described in
-  `.claude/commands/_common/cycle_summary_template.md`.  The production versions of these
+  `.claude/commands/_common/cycle_summary_template.md`, and the iter-shipped artifact
+  emission + read-only-latest-shipped rule described in
+  `.claude/commands/autopilot.md` §Path convention.  The production versions of these
   rules run as markdown-prose logic inside the slash-command orchestrators; this module
   provides equivalent Python implementations so the orchestrator tests can exercise every
   branch without live agent spawns.
@@ -584,3 +588,241 @@ def parse_cycle_summary(summary_text: str) -> dict[str, str]:
         value = (inline_value + ("\n" + extra if extra else "")).strip()
         result[key] = value
     return result
+
+
+# ---------------------------------------------------------------------------
+# Iter-shipped artifact helpers (M20 Task 04)
+# ---------------------------------------------------------------------------
+
+# Required keys that every autopilot-<run-ts>-iter<N>-shipped.md must contain.
+# These are the section headings defined in autopilot.md §Iteration-shipped artifact structure.
+ITER_SHIPPED_REQUIRED_KEYS: tuple[str, ...] = (
+    "**Run timestamp:**",
+    "**Iteration:**",
+    "**Date:**",
+    "**Verdict from queue-pick:**",
+)
+
+# Section headers that must appear in a PROCEED iter-shipped artifact.
+ITER_SHIPPED_PROCEED_SECTIONS: tuple[str, ...] = (
+    "## Task shipped (if PROCEED)",
+    "## Carry-over to next iteration",
+    "## Telemetry summary",
+)
+
+
+def make_iter_shipped(
+    run_timestamp: str,
+    iteration: int,
+    date: str,
+    verdict: str,
+    task_shipped: str | None = None,
+    cycles: int | None = None,
+    commit_sha: str | None = None,
+    files_touched: list[str] | None = None,
+    auditor_verdict: str | None = None,
+    reviewer_verdicts: dict[str, str] | None = None,
+    kdr_additions: str | None = None,
+    clean_tasks_milestone: str | None = None,
+    clean_tasks_rounds: int | None = None,
+    clean_tasks_stop: str | None = None,
+    specs_hardened: list[str] | None = None,
+    halt_reason: str | None = None,
+    state_preserved: list[str] | None = None,
+    user_questions: list[str] | None = None,
+    carry_over: str = "",
+) -> str:
+    """Render an autopilot-<run-ts>-iter<N>-shipped.md string per the canonical template.
+
+    Implements the template from ``.claude/commands/autopilot.md``
+    §Iteration-shipped artifact structure.  Used by test helpers to generate
+    synthetic iter-shipped content without live autopilot runs.
+
+    Args:
+        run_timestamp: The run timestamp string (e.g. "20260427T152243Z").
+        iteration: The 1-based iteration index (N).
+        date: ISO-8601 date string (e.g. "2026-04-28").
+        verdict: One of ``PROCEED``, ``NEEDS-CLEAN-TASKS``, ``HALT-AND-ASK``.
+        task_shipped: Task spec filename (for PROCEED verdict).
+        cycles: Number of Builder→Auditor cycles run (for PROCEED verdict).
+        commit_sha: Final commit SHA on design_branch (for PROCEED verdict).
+        files_touched: List of files touched (for PROCEED verdict).
+        auditor_verdict: Auditor's final verdict (for PROCEED verdict).
+        reviewer_verdicts: Dict of reviewer name → verdict (for PROCEED verdict).
+        kdr_additions: KDR additions string (for PROCEED verdict).
+        clean_tasks_milestone: Milestone hardened (for NEEDS-CLEAN-TASKS verdict).
+        clean_tasks_rounds: Number of clean-tasks rounds (for NEEDS-CLEAN-TASKS verdict).
+        clean_tasks_stop: Final stop verdict (for NEEDS-CLEAN-TASKS verdict).
+        specs_hardened: List of spec filenames hardened (for NEEDS-CLEAN-TASKS verdict).
+        halt_reason: Halt reason paragraph (for HALT-AND-ASK verdict).
+        state_preserved: Uncommitted files list (for HALT-AND-ASK verdict).
+        user_questions: Bullet list of user-arbitration questions (for HALT-AND-ASK verdict).
+        carry_over: Carry-over to next iteration (empty string = "none").
+
+    Returns:
+        A Markdown string conforming to the iter-shipped template in autopilot.md.
+    """
+    lines: list[str] = [
+        f"# Autopilot iter {iteration} — shipped",
+        "",
+        f"**Run timestamp:** {run_timestamp}",
+        f"**Iteration:** {iteration}",
+        f"**Date:** {date}",
+        f"**Verdict from queue-pick:** {verdict}",
+    ]
+
+    if verdict == "PROCEED":
+        lines.append("")
+        lines.append("## Task shipped (if PROCEED)")
+        lines.append(f"- **Task:** {task_shipped or 'unknown'}")
+        lines.append(f"- **Cycles:** {cycles if cycles is not None else 1}")
+        lines.append(f"- **Final commit:** {commit_sha or 'unknown'} on `design_branch`")
+        files_str = ", ".join(files_touched) if files_touched else "none"
+        lines.append(f"- **Files touched:** {files_str}")
+        lines.append(f"- **Auditor verdict:** {auditor_verdict or 'PASS'}")
+        rv = reviewer_verdicts or {}
+        sr_dev = rv.get("sr-dev", "SHIP")
+        sr_sdet = rv.get("sr-sdet", "SHIP")
+        security = rv.get("security", "SHIP")
+        dependency = rv.get("dependency", "SHIP")
+        lines.append(
+            f"- **Reviewer verdicts:** sr-dev={sr_dev}, sr-sdet={sr_sdet}, "
+            f"security={security}, dependency={dependency}"
+        )
+        lines.append(f"- **KDR additions (if any):** {kdr_additions or 'none'}")
+
+    elif verdict == "NEEDS-CLEAN-TASKS":
+        lines.append("")
+        lines.append("## Milestone work (if NEEDS-CLEAN-TASKS)")
+        lines.append(f"- **Milestone:** {clean_tasks_milestone or 'unknown'}")
+        rounds_val = clean_tasks_rounds if clean_tasks_rounds is not None else 1
+        lines.append(f"- **/clean-tasks rounds:** {rounds_val}")
+        lines.append(f"- **Final stop verdict:** {clean_tasks_stop or 'LOW-ONLY'}")
+        specs_str = ", ".join(specs_hardened) if specs_hardened else "none"
+        lines.append(f"- **Specs hardened:** {specs_str}")
+
+    elif verdict == "HALT-AND-ASK":
+        lines.append("")
+        lines.append("## Halt (if HALT-AND-ASK)")
+        lines.append(f"- **Halt reason:** {halt_reason or 'unspecified'}")
+        state_str = ", ".join(state_preserved) if state_preserved else "none"
+        lines.append(f"- **State preserved:** {state_str}")
+        if user_questions:
+            q_str = "\n".join(f"  - {q}" for q in user_questions)
+            lines.append(f"- **User-arbitration question(s):**\n{q_str}")
+        else:
+            lines.append("- **User-arbitration question(s):** none")
+
+    lines.append("")
+    lines.append("## Carry-over to next iteration")
+    lines.append(carry_over if carry_over else "*(none)*")
+
+    lines.append("")
+    lines.append("## Telemetry summary")
+    lines.append("*(retrofitted by T22 when it lands; empty at T04 land time)*")
+
+    return "\n".join(lines) + "\n"
+
+
+def parse_iter_shipped(artifact_text: str) -> dict[str, str]:
+    """Parse an iter-shipped artifact Markdown string into a key→value mapping.
+
+    Extracts each ``**Key:**`` field from the artifact text.  Values are captured
+    up to the next ``**Key:**`` marker or the next ``##`` section header, whichever
+    comes first.  This is test-infrastructure parsing; it is not designed to be
+    exhaustive against adversarial input.
+
+    Args:
+        artifact_text: Full text of an iter-shipped artifact Markdown file.
+
+    Returns:
+        A dict mapping each ``**Key:**`` label (without ``**`` delimiters or
+        trailing ``:``) to its value string (stripped).  Section headers
+        (``##`` lines) and ``-`` bullet prefixes under each key are NOT included
+        as separate keys — only ``**Key:**`` pairs.
+    """
+    result: dict[str, str] = {}
+    # Match **Key:** lines only at the top level (not inside bullet lists that start with -)
+    key_re = re.compile(r"^\*\*(.+?):\*\*\s*(.*)", re.MULTILINE)
+    # Section headers act as value boundaries (stop value capture at ## lines)
+    section_re = re.compile(r"^##\s", re.MULTILINE)
+
+    matches = list(key_re.finditer(artifact_text))
+    section_starts = [m.start() for m in section_re.finditer(artifact_text)]
+
+    def _next_boundary(after_pos: int, next_key_start: int | None) -> int:
+        """Return the position of the earliest boundary after ``after_pos``."""
+        candidates = [s for s in section_starts if s > after_pos]
+        candidates_key = [next_key_start] if next_key_start is not None else []
+        all_candidates = candidates + candidates_key
+        if not all_candidates:
+            return len(artifact_text)
+        return min(all_candidates)
+
+    for i, match in enumerate(matches):
+        key = match.group(1).strip()
+        inline_value = match.group(2).strip()
+        next_key_start = matches[i + 1].start() if i + 1 < len(matches) else None
+        boundary = _next_boundary(match.end(), next_key_start)
+        between = artifact_text[match.end():boundary]
+        extra = between.strip()
+        value = (inline_value + ("\n" + extra if extra else "")).strip()
+        result[key] = value
+    return result
+
+
+def build_queue_pick_spawn_prompt(
+    recommendation_file_path: str,
+    project_context_brief: str,
+    latest_iter_shipped: str,
+    latest_iter_shipped_path: str,
+) -> str:
+    """Construct an iter-N (N ≥ 2) queue-pick spawn prompt with the latest iter-shipped artifact.
+
+    Implements the read-only-latest-shipped rule from ``.claude/commands/autopilot.md``
+    §Step A: iteration N+1's queue-pick spawn reads the most recent
+    ``iter_<M>-shipped.md`` for context on what the prior iteration delivered.
+    No prior iteration's chat history is carried.
+
+    This is the cross-task analogue of :func:`build_builder_spawn_prompt_cycle_n`
+    (T03's in-task rule).  The production rule runs as markdown-prose logic inside
+    autopilot.md; this Python implementation lets tests exercise it without live
+    agent spawns.
+
+    Args:
+        recommendation_file_path: Path where the queue-pick agent should write
+            its recommendation.
+        project_context_brief: Verbatim project context brief.
+        latest_iter_shipped: Full content of the most recent iter-shipped artifact.
+        latest_iter_shipped_path: Repo-relative path of the most recent iter-shipped
+            artifact (e.g. ``"runs/autopilot-20260427T152243Z-iter1-shipped.md"``).
+
+    Returns:
+        A spawn-prompt string for the roadmap-selector on iteration N ≥ 2.
+        Its token count should be bounded (O(1) with respect to iteration count)
+        because the iter-shipped artifact is a structured projection of the prior
+        iteration's work — not a verbatim replay of the orchestrator's chat history.
+    """
+    budget_directive = (
+        "Output budget: 1-2K tokens. Durable findings live in the recommendation "
+        "file you write;\n"
+        "the return is the 3-line schema only — "
+        "see .claude/commands/_common/agent_return_schema.md"
+    )
+    schema_reminder = (
+        "Return per .claude/commands/_common/agent_return_schema.md — exactly 3 lines:\n"
+        "verdict: <token>\n"
+        "file: <path or —>\n"
+        "section: <## header or —>\n"
+        "No prose, no preamble, no chat body outside those three lines."
+    )
+    return (
+        f"Recommendation file path: {recommendation_file_path}\n\n"
+        f"## Project context brief\n\n{project_context_brief}\n\n"
+        f"## Prior iteration summary ({latest_iter_shipped_path})\n\n"
+        f"(Read-only-latest-shipped rule: only the most recent iter-shipped artifact is "
+        f"provided; prior iterations' chat history is NOT carried forward.)\n\n"
+        f"{latest_iter_shipped}\n\n"
+        f"## Output budget\n\n{budget_directive}\n\n"
+        f"## Return schema\n\n{schema_reminder}\n"
+    )

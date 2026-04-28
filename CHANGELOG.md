@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M20 Task 04: Cross-task iteration compaction (iter_<N>-shipped.md per autopilot iteration; constant cross-task orchestrator context; research brief §Lens 2.1) (2026-04-28)
+
+Eliminates quadratic context growth across autopilot outer-loop iterations.  The autopilot
+outer loop's Step D now emits `runs/autopilot-<run-ts>-iter<N>-shipped.md` at each iteration
+boundary as a structured projection of what the iteration delivered (task shipped + commit SHA
++ reviewer verdicts + carry-over).  Step A on iteration N ≥ 2 reads ONLY the most recent
+`iter_<M>-shipped.md` for prior-iteration context — prior iterations' chat history is dropped.
+The iter-shipped artifact is bounded in size by the template regardless of how many iterations
+have run, making the per-iteration context O(1) instead of O(N).  T04 is the cross-task
+analogue of T03's in-task compaction.
+
+**Files touched:**
+- `.claude/commands/autopilot.md` — Step A updated with read-only-latest-shipped rule
+  (iteration N ≥ 2 carries only the most recent iter-shipped artifact; prior chat dropped);
+  Step D extended to write `runs/autopilot-<run-ts>-iter<N>-shipped.md` with the canonical
+  template; §Path convention section added documenting the flat hyphenated filename form.
+- `tests/orchestrator/_helpers.py` — extended with `make_iter_shipped`, `parse_iter_shipped`,
+  `build_queue_pick_spawn_prompt`, `ITER_SHIPPED_REQUIRED_KEYS`, `ITER_SHIPPED_PROCEED_SECTIONS`;
+  module docstring updated to cite T04.
+- `tests/orchestrator/test_iter_shipped_emission.py` — NEW; 3-iteration simulation (13 tests):
+  flat hyphenated path form, required keys, verdict/commit/reviewer recorded, PROCEED sections,
+  iter-2 unchanged after iter-3, all three artifacts coexist independently, cycles independent.
+- `tests/orchestrator/test_cross_task_context_constant.py` — NEW; cross-task context
+  constancy tests + M12 4-iteration validation re-run (4 tests): iter-2 ≈ iter-5 within 10%,
+  iter-5 does NOT include iter-1 chat history (discriminating 2-part assertion), post-T04
+  iter-4 matches iter-1 (permissive 50% bound; structural difference: iter-1 has no artifact).
+- `tests/orchestrator/fixtures/m12_iter4_pre_t04_queue_pick_spawn_prompt.txt` — NEW; frozen
+  pre-T04 iter-4 queue-pick spawn-prompt fixture (carries 3 full iteration chat transcripts)
+  for the M12 4-iteration validation re-run (AC-6).
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: autopilot.md Step D writes `runs/autopilot-<run-ts>-iter<N>-shipped.md` per the
+  canonical template (Run timestamp, Iteration, Date, Verdict from queue-pick, Task shipped,
+  Cycles, Final commit, Files touched, Auditor verdict, Reviewer verdicts, KDR additions,
+  Carry-over, Telemetry summary placeholder).
+- AC-2: autopilot.md Step A reads only the latest `iter_<M>_shipped.md` plus project memory;
+  does not carry prior-iteration chat history. Documented in §Step A — read-only-latest-shipped
+  rule section.
+- AC-3: Path naming convention `runs/autopilot-<run-ts>-iter<N>(-shipped)?.md` documented in
+  autopilot.md §Path convention; flat hyphenated form; no per-run subdirectory.
+- AC-4: `tests/orchestrator/test_iter_shipped_emission.py` passes (13 tests: 3-iteration
+  simulation, structure validation, cycles independent).
+- AC-5: `tests/orchestrator/test_cross_task_context_constant.py` passes (4 tests: iter-5
+  input size within 10% of iter-2 — structurally equivalent; iter-5 does NOT include iter-1
+  chat history — discriminating 2-part assertion).
+- AC-6: Validation re-run using frozen `m12_iter4_pre_t04_queue_pick_spawn_prompt.txt`
+  fixture; post-T04 iter-4 context is within 50% of iter-1 (permissive; structural difference);
+  pre-T04 fixture is >1.5× larger than post-T04 iter-4 prompt.
+- AC-7: CHANGELOG updated with `### Changed — M20 Task 04: ...` entry.
+- AC-8: Status surfaces flipped (spec **Status:** line, milestone README T04 row, Done-when
+  checkbox G1 T04).
+
+**Carry-over (from spec) satisfied:**
+- L3 (round 1): 10% threshold documented as heuristic in `test_cross_task_context_constant.py`
+  module docstring; T22 baseline data may revise it.
+- L2 (round 3): AC-3 reworded to flat-hyphenated path form (no per-run subdirectory) per
+  round-2 user arbitration; §Path convention section in autopilot.md documents this.
+- L2 (round 4): Test descriptions in `test_iter_shipped_emission.py` and
+  `test_cross_task_context_constant.py` use the flat hyphenated path form
+  `runs/autopilot-<run-ts>-iter<N>-shipped.md` (not underscored shorthand `iter_<N>_shipped.md`).
+
+**Deviations from spec:**
+- The `within 10%` comparison between iter-1 and iter-2/4/5 uses a permissive 50% bound in
+  `test_m12_iter4_post_t04_constant_vs_iter1` because iter-1 carries NO prior artifact (just
+  project brief + recommendation file path) while iterations N ≥ 2 carry one iter-shipped
+  artifact (content vs. no-content). The structurally meaningful 10% assertion is applied to
+  iter-2 vs iter-5 (both carry exactly one artifact) in `test_iter_2_within_10pct_of_iter_5`.
+  The discrepancy is documented in the module docstring and test docstrings per L3.
+
+**Cycle-2 addition (FIX-SDET-01, 2026-04-28):**
+- `tests/orchestrator/test_iter_shipped_emission.py` — +2 tests covering the previously
+  unexercised `NEEDS-CLEAN-TASKS` and `HALT-AND-ASK` verdict branches of `make_iter_shipped`:
+  `test_iter_shipped_needs_clean_tasks_structure` (asserts section header +
+  `clean_tasks_milestone` value in body) and `test_iter_shipped_halt_and_ask_structure`
+  (asserts section header + `halt_reason` value in body). Total: 15 tests.
+
 ### Changed — M20 Task 03: In-task cycle compaction (cycle_<N>/summary.md per Auditor; constant per-cycle orchestrator context; research brief §Lens 2.1) (2026-04-28)
 
 Implements the Anthropic note-taking memory primitive (research brief Lens 2.1) at

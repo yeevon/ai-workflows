@@ -1,6 +1,6 @@
 # Task 04 — Cross-task iteration compaction (`iter_<N>_shipped.md` at autopilot iteration boundaries)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done (2026-04-28).
 **Kind:** Compaction / doc + code.
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #13 · [`.claude/commands/autopilot.md`](../../../.claude/commands/autopilot.md) · sibling [task_03](task_03_in_task_cycle_compaction.md) (in-task version of the same pattern).
 

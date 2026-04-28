@@ -101,6 +101,22 @@ For iteration `N` from 1 upward (no hard cap; halt on the boundaries above or qu
 
 ### Step A — Roadmap selection (queue-pick logic, inlined)
 
+#### Read-only-latest-shipped rule (iteration N ≥ 2)
+
+On iteration 1, spawn the `roadmap-selector` with only the project context brief and the
+recommendation-file path (no prior iteration artifact exists yet).
+
+On iteration N ≥ 2, spawn the `roadmap-selector` with:
+- The project context brief.
+- The recommendation-file path.
+- The content of the most recent iter-shipped artifact
+  (`runs/autopilot-<run-timestamp>-iter<N-1>-shipped.md`) for context on what the prior
+  iteration delivered.
+- **Do NOT** carry prior iteration chat history into this spawn. Prior iterations'
+  dialogue is compacted into the iter-shipped artifact at Step D; chat replay is dropped.
+
+This is the cross-task analogue of the in-task read-only-latest-summary rule (T03).
+
 1. Build the **project context brief** for `roadmap-selector`:
    ```text
    Project: ai-workflows (Python, MIT, published as jmdl-ai-workflows on PyPI)
@@ -111,7 +127,9 @@ For iteration `N` from 1 upward (no hard cap; halt on the boundaries above or qu
    Milestone scope: <from $ARGUMENTS, or "all open">
    ```
 2. Recommendation file path: `runs/autopilot-<run-timestamp>-iter<N>.md` (under the gitignored `runs/` directory).
-3. Spawn the `roadmap-selector` subagent via `Task` with: the recommendation-file path, the project context brief, the milestone list. Wait for completion.
+3. Spawn the `roadmap-selector` subagent via `Task` with: the recommendation-file path,
+   the project context brief, the milestone list, and (on N ≥ 2) the most recent
+   iter-shipped artifact content per the read-only-latest-shipped rule above. Wait for completion.
 4. **Read the recommendation file on disk.** Verdict line is the source of truth. Empty / missing / no-`Verdict:`-line → treat as `HALT-AND-ASK` with the surface "agent halted before producing output" (per `/queue-pick` Step 2's pre-condition rule).
 
 Branch on verdict:
@@ -155,7 +173,68 @@ After Step B's `AUTO-CLEAN` or Step C's `CLEAN`/`LOW-ONLY`:
 
 1. Re-verify the working tree is clean (`git status --short` empty). If dirty, that's a HARD HALT — Step B's commit ceremony or Step C's phase-3 push left state behind.
 2. Re-verify branch is still `design_branch`. HARD HALT otherwise.
-3. Increment `N`; return to Step A.
+3. **Write the iter-shipped artifact** at `runs/autopilot-<run-timestamp>-iter<N>-shipped.md`.
+   Populate from the iteration's outcome (recommendation file + commit log + per-cycle
+   summaries from T03's `cycle_<M>/summary.md` files):
+
+   ```markdown
+   # Autopilot iter <N> — shipped
+
+   **Run timestamp:** <YYYY-MM-DDTHHMMSSZ>
+   **Iteration:** N
+   **Date:** YYYY-MM-DD
+   **Verdict from queue-pick:** <PROCEED | NEEDS-CLEAN-TASKS | HALT-AND-ASK>
+
+   ## Task shipped (if PROCEED)
+   - **Task:** <milestone>/<task spec filename>
+   - **Cycles:** N
+   - **Final commit:** <sha> on `design_branch`
+   - **Files touched:** <list>
+   - **Auditor verdict:** PASS
+   - **Reviewer verdicts:** sr-dev=<verdict>, sr-sdet=<verdict>, security=<verdict>, dependency=<verdict>
+   - **KDR additions (if any):** <KDR-XXX + ADR-NNNN, isolated commit sha>
+
+   ## Milestone work (if NEEDS-CLEAN-TASKS)
+   - **Milestone:** <milestone>
+   - **/clean-tasks rounds:** N
+   - **Final stop verdict:** <CLEAN | LOW-ONLY>
+   - **Specs hardened:** <list of task spec filenames>
+
+   ## Halt (if HALT-AND-ASK)
+   - **Halt reason:** <one paragraph>
+   - **State preserved:** <list of uncommitted files>
+   - **User-arbitration question(s):** <bullet list>
+
+   ## Carry-over to next iteration
+   - *(empty for routine iterations; populated when a finding from this iteration affects the next task)*
+
+   ## Telemetry summary
+   - *(retrofitted by T22 when it lands; T04 ships before T22 in Phase A vs Phase C — leave this section empty at T04 land time, per audit M15)*
+   ```
+
+   The `-shipped.md` suffix distinguishes close-out from kick-off. Both files have
+   read-only semantics after iteration close.
+
+4. Increment `N`; return to Step A.
+
+#### §Path convention
+
+Each iteration produces two sibling files under the flat `runs/` directory:
+
+```
+runs/
+  autopilot-20260427T152243Z-iter1.md            (kick-off recommendation file, queue-pick output)
+  autopilot-20260427T152243Z-iter1-shipped.md    (close-out artifact, Step D)
+  autopilot-20260427T152243Z-iter2.md
+  autopilot-20260427T152243Z-iter2-shipped.md
+  ...
+```
+
+Path naming convention: `runs/autopilot-<run-ts>-iter<N>(-shipped)?.md`
+- `<run-ts>` is the pre-flight timestamp (e.g. `20260427T152243Z`).
+- `-shipped.md` suffix marks the close-out artifact (Step D).
+- No per-run subdirectory — flat layout matches today's autopilot.md convention.
+- No migration of existing recommendation-file paths needed.
 
 ### Queue-exhaust condition
 
