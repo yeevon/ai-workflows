@@ -102,6 +102,15 @@ Recommendation file path: `runs/queue-pick-<YYYYMMDD-HHMMSS>.md` (under the giti
 
 Spawn the `roadmap-selector` subagent via `Task` with: the recommendation-file path, the project context brief, the milestone list (if any). Wait for completion.
 
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn \
+  --task queue_pick --cycle 1 \
+  --agent roadmap-selector --model <model-slug> --effort medium
+```
+After the Task returns, run `complete` with the verdict (PROCEED/NEEDS-CLEAN-TASKS/HALT-AND-ASK).
+Record lands at `runs/queue_pick/cycle_1/roadmap-selector.usage.json`.
+
 ### Step 2 — Read recommendation file
 
 Read the file the agent wrote. The verdict line is the source of truth:

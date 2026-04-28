@@ -148,6 +148,15 @@ Spawn the `task-analyzer` subagent via `Task` with:
 - Round number (so the analyzer can stamp it into the report).
 - List of task specs to analyze (default: every `task_*.md` in the milestone dir).
 
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn \
+  --task <milestone-shorthand>_clean --cycle <round-number> \
+  --agent task-analyzer --model <model-slug> --effort <effort>
+```
+After the Task returns, run `complete` with the verdict (CLEAN/LOW-ONLY/OPEN).
+Record lands at `runs/<milestone-shorthand>_clean/cycle_<N>/task-analyzer.usage.json`.
+
 Wait for completion. Capture the agent's one-line return.
 
 ### Step 2 — Read the analysis report

@@ -1,6 +1,6 @@
 # Task 22 — Per-cycle token telemetry per agent
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done (2026-04-28).
 **Kind:** Model-tier / code.
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.4 (anthropics/claude-code #52502 — metering opacity)](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #22 · sibling [task_06](task_06_shadow_audit_study.md) (study consumes T22's measurements + owns the per-cell proxy aggregation) · [task_07](task_07_dynamic_model_dispatch.md) (defaults calibrated against T22's data) · [task_23](task_23_cache_breakpoint_discipline.md) (verification reads T22's `cache_read_input_tokens`) · [task_27](task_27_tool_result_clearing.md) (rotation trigger reads T22's `input_tokens`).
 
@@ -156,7 +156,7 @@ uv run pytest tests/orchestrator/test_telemetry_record.py tests/orchestrator/tes
 
 ## Out of scope
 
-- **Cost reconciliation against the upstream Anthropic dashboard** — out of scope by design. Per #52502, the dashboard is opaque about per-model breakdown in multi-agent stacks. T22's quota proxy is the local-best-estimate; reconciliation would require Anthropic API surface that doesn't exist.
+- **Cost reconciliation against the upstream Anthropic dashboard** — out of scope by design. Per #52502, the dashboard is opaque about per-model breakdown in multi-agent stacks. T22's raw-count records (input/output/cache-* tokens) plus T06's analysis-script proxy aggregation are the local-best-estimate; reconciliation would require Anthropic API surface that doesn't exist.
 - **Real-time alerting on quota thresholds** — out of scope for M20. A future task in M21 or beyond could add a "halt if projected quota for this autopilot run exceeds X" surface, but that's a productivity feature not load-bearing for the optimization work.
 - **Persistence beyond the run** — telemetry records live under `runs/` (gitignored). They survive across sessions on the same machine but aren't shipped or aggregated cross-machine. Acceptable for solo-use ai-workflows per KDR-013 and the deployment-shape memory.
 - **Cross-session aggregation surface** — out of scope. Future tasks could add a `/telemetry` command that summarises across recent runs, but that's productivity not optimization.

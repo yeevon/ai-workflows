@@ -133,6 +133,16 @@ This is the cross-task analogue of the in-task read-only-latest-summary rule (T0
 3. Spawn the `roadmap-selector` subagent via `Task` with: the recommendation-file path,
    the project context brief, the milestone list, and (on N ≥ 2) the most recent
    iter-shipped artifact content per the read-only-latest-shipped rule above. Wait for completion.
+
+   **Telemetry (T22):** before spawning, run:
+   ```bash
+   python scripts/orchestration/telemetry.py spawn \
+     --task autopilot_iter<N> --cycle 1 \
+     --agent roadmap-selector --model <model-slug> --effort medium
+   ```
+   After the Task returns, run `complete` with the verdict (PROCEED/NEEDS-CLEAN-TASKS/HALT-AND-ASK).
+   Record lands at `runs/autopilot_iter<N>/cycle_1/roadmap-selector.usage.json`.
+
 4. **Read the recommendation file on disk.** Verdict line is the source of truth. Empty / missing / no-`Verdict:`-line → treat as `HALT-AND-ASK` with the surface "agent halted before producing output" (per `/queue-pick` Step 2's pre-condition rule).
 
 Branch on verdict:

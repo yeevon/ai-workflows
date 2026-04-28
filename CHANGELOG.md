@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M20 Task 22: Per-cycle agent telemetry wrapper (raw token capture + model + effort + wall-clock + verdict; cache-* fields conditional on Task tool surface check; quota-proxy aggregation owned by T06; basis for T06 study + T07 dispatch defaults + T23 cache verification + T27 rotation trigger; mitigates anthropics/claude-code #52502 metering opacity) (2026-04-28) (cycle 2 follow-up: rewrote concurrency test for same-triple contention + added zero-cache divide-by-zero guard test)
+
+New orchestration-layer telemetry infrastructure. Wraps every sub-agent Task spawn
+to capture raw token counts + model + effort + wall-clock + verdict and persist to
+`runs/<task>/cycle_<N>/<agent>.usage.json`.
+
+**Files touched:**
+- `scripts/orchestration/telemetry.py` — NEW. CLI with `spawn` + `complete` subcommands.
+  Atomic write (temp-file + rename). Stdlib only. Path convention matches
+  `runs/<task>/cycle_<N>/<agent>.usage.json` per audit M11/M12 zero-padded shorthand.
+  Also exports `aggregate_cycle_records()` + `format_telemetry_table()` for T04 retrofit.
+- `scripts/orchestration/check_task_response_fields.py` — NEW. Surface-check helper per
+  audit M7. Probes T22 (token telemetry) and T27 (tool-result clearing via
+  `context_management.edits`) field availability per carry-over L1 round 2.
+  Writes `runs/m20_t22_surface_check.txt` as the audit trail.
+- `.claude/commands/auto-implement.md` — telemetry-record convention added to Builder,
+  Auditor, and parallel-reviewer spawn blocks.
+- `.claude/commands/clean-implement.md` — telemetry-record convention added to Builder,
+  Auditor, and security-reviewer spawn blocks.
+- `.claude/commands/clean-tasks.md` — telemetry-record convention added to task-analyzer spawn block.
+- `.claude/commands/queue-pick.md` — telemetry-record convention added to roadmap-selector spawn block.
+- `.claude/commands/autopilot.md` — telemetry-record convention added to roadmap-selector spawn block.
+- `tests/orchestrator/_helpers.py` — `make_iter_shipped()` already had `## Telemetry summary`
+  section + `ITER_SHIPPED_PROCEED_SECTIONS` already included it (landed at T04 time); verified.
+- `tests/orchestrator/test_telemetry_record.py` — NEW. 14 hermetic tests: spawn/complete
+  round-trips, atomic write under concurrency, bad-input error messages, spec smoke test.
+- `tests/orchestrator/test_telemetry_aggregation.py` — NEW. 14 hermetic tests:
+  3-cycle × 5-agent fixture → 15 rows; cache-hit % computed correctly; T04 iter-shipped
+  helper includes Telemetry summary section.
+- `runs/autopilot-20260428T024624Z-iter5-shipped.md` — Telemetry summary section
+  retrofitted with table header stub.
+- `runs/autopilot-20260428T024624Z-iter6-shipped.md` — same retrofit.
+- `runs/autopilot-20260428T024624Z-iter7-shipped.md` — same retrofit.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/task_22_per_cycle_telemetry.md` —
+  Status flipped to Done; Out-of-scope "Cost reconciliation" bullet reworded per carry-over L1 round 4.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/README.md` — Task 22 row +
+  G7 exit criterion flipped to Done.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `scripts/orchestration/telemetry.py` exists with `spawn` + `complete` subcommands.
+- AC-2: per-cycle JSON records land at `runs/<task>/cycle_<N>/<agent>.usage.json` with all captured fields.
+- AC-3: 5 spawning slash commands describe the telemetry-record convention.
+- AC-4: T04's aggregation hook (via `_helpers.make_iter_shipped()` + `ITER_SHIPPED_PROCEED_SECTIONS`)
+  includes `## Telemetry summary`; existing iter-shipped files retrofitted.
+- AC-5: `test_telemetry_record.py` passes (14 tests).
+- AC-6: `test_telemetry_aggregation.py` passes (14 tests).
+- AC-7: `runs/` is in `.gitignore` (verified: line 30 `runs/*`, line 31 `!runs/.gitkeep`).
+- AC-8: this CHANGELOG entry.
+- AC-9: status surfaces flipped (spec Status, milestone README task table, G7 exit criterion).
+
+**KDR note:** T22 is orchestration infrastructure under `scripts/orchestration/` (not `ai_workflows/`).
+Layer rule N/A. KDR-003 holds: zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY`.
+
 ### Changed — M20 Task 21: Adaptive-thinking migration (eliminate thinking: max; per-role effort settings; research brief §Lens 3.3; required for T06 + T07) (2026-04-28)
 
 Eliminates every deprecated `thinking: <literal>` shorthand directive (6 × `thinking: max` + 1

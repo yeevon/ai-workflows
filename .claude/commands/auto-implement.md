@@ -247,12 +247,43 @@ Spawn the `builder` subagent via `Task` with the inputs prescribed by the
 parent milestone README path; cycle N ≥ 2: replace it with the latest cycle
 summary content). Wait for completion. Capture the Builder's report.
 
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent builder --model <model-slug> --effort <effort>
+```
+After the Task returns, run:
+```bash
+python scripts/orchestration/telemetry.py complete --task <task-shorthand> --cycle <N> \
+  --agent builder --input-tokens <n> --output-tokens <n> \
+  [--cache-creation <n>] [--cache-read <n>] --verdict <BUILT|BLOCKED|STOP-AND-ASK> \
+  [--fragment-path <path>] [--section <section>]
+```
+Read the Task's response metadata fields for token counts; use the regex proxy
+(`len(re.findall(r"\S+", text)) * 1.3`) for input_tokens when metadata is unavailable.
+Cache-* fields are null if the Task tool surface check found them unavailable.
+Record lands at `runs/<task>/cycle_<N>/builder.usage.json`.
+
 ### Step 2 — Auditor
 
 Spawn the `auditor` subagent via `Task` with the inputs prescribed by the
 "Auditor spawn — read-only-latest-summary rule" section above (cycle 1: standard
 pre-load set; cycle N ≥ 2: add the latest cycle summary). Include cited KDR
 identifiers (compact pointer per scope-discipline section above). Wait for completion.
+
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent auditor --model <model-slug> --effort <effort>
+```
+After the Task returns, run:
+```bash
+python scripts/orchestration/telemetry.py complete --task <task-shorthand> --cycle <N> \
+  --agent auditor --input-tokens <n> --output-tokens <n> \
+  [--cache-creation <n>] [--cache-read <n>] --verdict <PASS|OPEN|BLOCKED> \
+  [--fragment-path <issue-file-path>] [--section <section>]
+```
+Record lands at `runs/<task>/cycle_<N>/auditor.usage.json`.
 
 ### Step 3 — Read issue file and evaluate stop conditions
 
@@ -295,6 +326,19 @@ Spawn inputs per scope discipline:
   test files touched across the whole task, the most recent Auditor verdict.
 - security-reviewer: task identifier, spec path, issue file path, project context brief,
   list of files touched across the whole task, cited KDR identifiers (compact pointer).
+
+**Telemetry (T22):** before spawning each reviewer, run a `spawn` record for each:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent sr-dev --model <model-slug> --effort <effort>
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent sr-sdet --model <model-slug> --effort <effort>
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent security-reviewer --model <model-slug> --effort <effort>
+```
+After all three Tasks return, run a `complete` record for each using their respective verdicts.
+Records land at `runs/<task>/cycle_<N>/sr-dev.usage.json`, `sr-sdet.usage.json`,
+`security-reviewer.usage.json`.
 
 Wait for all three Tasks to complete.
 
