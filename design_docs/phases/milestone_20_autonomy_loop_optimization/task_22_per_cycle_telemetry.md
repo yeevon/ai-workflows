@@ -173,6 +173,7 @@ uv run pytest tests/orchestrator/test_telemetry_record.py tests/orchestrator/tes
 ## Carry-over from task analysis
 
 - **L1 (round 2, 2026-04-27):** T22's `scripts/orchestration/check_task_response_fields.py` surface-check helper can be extended to also probe surface-feasibility for T27 (`context_management.edits` for `clear_tool_uses_20250919`) and T28 (broader `compact_20260112` surface). One helper script for all surface-check questions reduces duplication. Builder absorbs at implementation; not a structural constraint.
+- **L1 (round 4, 2026-04-27):** Reword the §Out-of-scope "Cost reconciliation against the upstream Anthropic dashboard" bullet to acknowledge T06's ownership of the proxy/aggregation layer (per round-2 H1). Suggested: *"T22's raw-count records (input/output/cache-* tokens) plus T06's analysis-script proxy aggregation are the local-best-estimate; reconciliation would require Anthropic API surface that doesn't exist."* (Replaces the legacy "T22's quota proxy is the local-best-estimate" wording — T22 has no quota proxy.)
 
 ## Carry-over from prior audits
 

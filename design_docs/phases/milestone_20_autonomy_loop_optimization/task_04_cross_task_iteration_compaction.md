@@ -107,11 +107,13 @@ Hermetic test that constructs iter-N queue-pick spawn prompts for iters 1, 2, 3,
 ## Smoke test (Auditor runs)
 
 ```bash
-# Verify autopilot describes iter_<N>_shipped emission
-grep -q "iter_<N>_shipped.md" .claude/commands/autopilot.md && echo "autopilot emit OK"
+# Verify autopilot describes the iteration-shipped emission (flat-hyphenated form per round-2 M5)
+grep -qE "iter<N>-shipped\.md|autopilot-<run-ts>-iter<N>-shipped" .claude/commands/autopilot.md \
+  && echo "autopilot emit OK"
 
 # Verify autopilot describes the read-only-latest-shipped rule
-grep -q "iter_<N>_shipped" .claude/commands/autopilot.md && echo "autopilot read OK"
+grep -qE "iter<N>-shipped|autopilot-<run-ts>-iter<N>-shipped" .claude/commands/autopilot.md \
+  && echo "autopilot read OK"
 
 # Run cross-task tests
 uv run pytest tests/orchestrator/test_iter_shipped_emission.py tests/orchestrator/test_cross_task_context_constant.py -v
@@ -137,6 +139,7 @@ uv run pytest tests/orchestrator/test_iter_shipped_emission.py tests/orchestrato
 
 - **L3 (round 1, 2026-04-27):** The `(within 10 %)` cross-task test threshold is the same heuristic as T03's L2. Document as heuristic, not empirical bound. T22's actual baseline measurement may revise.
 - **L2 (round 3, 2026-04-27):** AC #3 references "`runs/autopilot-<run-ts>/` directory convention documented in autopilot.md" — but the round-2 M5 fix pinned flat hyphenated paths (no per-run subdirectory). Reword AC #3 to: "Path naming convention (`runs/autopilot-<run-ts>-iter<N>(-shipped)?.md`) documented in autopilot.md per §Path convention."
+- **L2 (round 4, 2026-04-27):** Test descriptions in §Tests / `tests/orchestrator/test_iter_shipped_emission.py` reference `iter_1_shipped.md` (underscored shorthand). Replace with the chosen path form `runs/autopilot-<run-ts>-iter1-shipped.md` etc. (or describe with a `<run-ts>` placeholder). Same shape as round-3 L1 against T03.
 
 ## Carry-over from prior audits
 
