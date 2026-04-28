@@ -1,6 +1,6 @@
 # Task 09 — Task-integrity safeguards (non-empty-diff + non-empty test-diff + independent gate re-run)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Safeguards / code.
 **Grounding:** [milestone README](README.md) · memory `project_autonomy_optimization_followups.md` thread #11 · sibling [task_08](task_08_gate_output_integrity.md) (gate-level integrity) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md).
 

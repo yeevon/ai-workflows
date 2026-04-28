@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M20 Task 09: Task-integrity safeguards (non-empty diff + non-empty test diff for code tasks + independent pre-stamp gate re-run; uses T08 gate_parse_patterns.md) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Three pre-commit safeguards the orchestrator runs after all reviewers SHIP and before
+stamping AUTO-CLEAN: (1) `git diff --stat <pre>..HEAD` must be non-empty; (2) for code
+tasks, `git diff --stat <pre>..HEAD -- tests/` must be non-empty (bypassed for doc-only
+and analysis-only tasks); (3) `uv run pytest -q` re-runs independently and must pass.
+Reuses T08's `parse_gate_output` for the pytest-footer regex — no duplication.
+
+**Files touched:**
+- `.claude/commands/_common/integrity_checks.md` — NEW. Canonical reference for the three
+  checks: failure-mode signatures, halt message format, task-kind parsing rule (spec
+  `**Kind:**` line with README fallback), captured output location
+  (`runs/<task>/integrity.txt`), relationship to T08 gate-capture-and-parse.
+- `.claude/commands/auto-implement.md` — Added `## Pre-commit ceremony` section between
+  G6 TERMINAL CLEAN and the commit ceremony. Describes all three checks with exact halt
+  messages. Added `<pre-task-commit>` SHA capture instruction to the project-setup section.
+- `tests/orchestrator/test_integrity_checks.py` — NEW. 34 tests covering all 5 spec-named
+  cases: empty-diff halt, empty-test-diff halt for code task, failing-pytest halt,
+  doc-only bypass (no halt), all-pass no-halt; plus unit tests of individual check
+  functions and file-existence + content assertions for both integrity_checks.md and
+  auto-implement.md.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `.claude/commands/auto-implement.md` describes the pre-commit ceremony with three checks.
+- AC-2: `.claude/commands/_common/integrity_checks.md` exists.
+- AC-3: Halt surfaces the specific failed check (check ID + name in every BLOCKED message).
+- AC-4: `tests/orchestrator/test_integrity_checks.py` passes (34 tests).
+- AC-5: This CHANGELOG entry.
+- AC-6: Status surfaces flipped (spec Status, milestone README task row + G5 exit criterion #10).
+
+**Deviations from spec:** None. T08's `parse_gate_output` is imported directly from
+`tests/orchestrator/test_gate_output_capture.py` (the shared-helper approach the spec
+recommends); no intermediate scripts/orchestration/ module was needed.
+
 ### Added — M20 Task 08: Gate-output integrity (orchestrator-side raw-stdout capture + footer-line parse; fail-closed on missing output; load-bearing under default-Sonnet) (2026-04-28)
 
 Orchestration-infrastructure task. No `ai_workflows/` package changes.

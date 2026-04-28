@@ -199,6 +199,10 @@ Resolve `$ARGUMENTS` to concrete paths:
 
 (Branch + clean-tree checks already ran in the pre-flight section above.)
 
+**Capture pre-task commit SHA:** run `git rev-parse HEAD` and record as `<pre-task-commit>`.
+This is used by the Pre-commit ceremony (Check 1 and Check 2) to compare the working tree
+against the state before the first Builder spawn. Record to `runs/<task-shorthand>/pre_task_commit.txt`.
+
 Build the **project context brief** — pass verbatim to every subsequent `Task` spawn:
 
 ```text
@@ -465,6 +469,66 @@ If **any** of the following is true for any gate, halt immediately with:
 
 The captured files become the durable record consulted by Auditor + sr-dev + sr-sdet
 on their re-runs (per the per-cycle directory layout above).
+
+---
+
+## Pre-commit ceremony (runs once, after G6 TERMINAL CLEAN — before commit)
+
+**Reference:** [`.claude/commands/_common/integrity_checks.md`](_common/integrity_checks.md)
+
+After all reviewers SHIP (G6 TERMINAL CLEAN) and before the commit ceremony, the
+orchestrator runs three task-integrity checks. Each check is independent; the first
+failure halts immediately without running the remaining checks.
+
+Capture all outputs to `runs/<task-shorthand>/integrity.txt` (top-level under the task
+directory, not per-cycle — latest run wins). See `_common/integrity_checks.md` §Captured
+output location for the append format.
+
+### Check 1 — Non-empty diff
+
+Run `git diff --stat <pre-task-commit>..HEAD`. The `<pre-task-commit>` is the commit
+SHA recorded at the start of cycle 1 (before the first Builder spawn — capture it with
+`git rev-parse HEAD` during project setup).
+
+Assert: output is non-empty (at least one insertion or deletion line).
+
+If empty: halt with:
+```
+🚧 BLOCKED: task-integrity check 1 (empty diff) failed; see runs/<task>/integrity.txt
+```
+
+### Check 2 — Non-empty test diff (code tasks only)
+
+Determine task-kind: parse the spec's `**Kind:**` line (e.g. `Safeguards / code`,
+`Compaction / doc + code`). If absent, read the milestone README's task-pool
+"Phase / Kind" column for this task's row.
+
+If task-kind contains `code`:
+
+  Run `git diff --stat <pre-task-commit>..HEAD -- tests/`.
+  Assert: output is non-empty.
+
+  If empty: halt with:
+  ```
+  🚧 BLOCKED: task-integrity check 2 (empty test diff for code task) failed; see runs/<task>/integrity.txt
+  ```
+
+If task-kind does NOT contain `code` (doc-only, analysis-only): skip Check 2.
+
+### Check 3 — Independent pytest re-run
+
+Run `uv run pytest -q`. Parse the footer per the `pytest` pattern in
+`_common/gate_parse_patterns.md` (reuse the same parser — no duplication).
+
+Assert: exit code 0 AND footer matches `^=+ \d+ passed` AND footer does not contain
+`failed`.
+
+If any assertion fails: halt with:
+```
+🚧 BLOCKED: task-integrity check 3 (pytest failure) failed; see runs/<task>/integrity.txt
+```
+
+**Do not proceed to the commit ceremony if any integrity check halts.**
 
 ---
 
