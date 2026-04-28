@@ -166,6 +166,99 @@ These ceilings are validated by `tests/orchestrator/test_spawn_prompt_size.py`:
 
 ---
 
+---
+
+## Stable-prefix discipline (T23 — Cache-breakpoint discipline)
+
+Claude Code caches the **stable prefix** of each sub-agent spawn prompt. A
+misplaced cache breakpoint (one that sits *inside* the dynamic context rather
+than at the end of the stable block) causes Claude Code to re-cache the entire
+conversation on every spawn, producing **5–20× session-cost blowups**. The
+anthropics/claude-code issue tracker documents this failure mode in issues
+#27048, #34629, #42338, and #43657.
+
+### What the stable prefix is
+
+The stable prefix is the byte-for-byte-identical portion of the spawn prompt
+that does **not** change between calls within a session. It consists of:
+
+1. The agent system prompt (the per-agent Markdown body in `.claude/agents/`).
+2. The `CLAUDE.md` / non-negotiables block (when prepended by the orchestrator).
+3. The tool list (Claude Code locks these at session start; never modified mid-session).
+
+The dynamic context follows **after** the stable prefix, separated by `\n\n`.
+
+Structured as:
+
+```
+<stable prefix>
+
+<dynamic context>
+```
+
+### Rules (MUST hold for every spawn)
+
+1. **No timestamps, UUIDs, or per-request strings in the prefix.** Any value
+   that changes between spawns within a session (wall-clock time, run ID,
+   hostname, random nonce) belongs in the dynamic context, never the prefix.
+
+2. **Tool list is fixed at session start; never modified mid-session.** Adding
+   or removing MCP tools mid-session invalidates the entire conversation cache
+   (per research brief §Lens 2.2). The orchestrator must not alter the tool
+   list between spawns within a single `/auto-implement` run.
+
+3. **Agent system prompt (frontmatter + body) is byte-identical between spawns
+   within a session.** The orchestrator reads the agent's `.md` file exactly
+   once at startup and passes the same bytes to every spawn. No dynamic
+   interpolation in the system-prompt portion.
+
+4. **`\n\n` boundary between prefix and dynamic context.** The orchestrator
+   constructs every spawn prompt by concatenating the stable prefix first, then
+   appending `\n\n`, then the dynamic context (task-specific data: current diff,
+   issue-file content, cycle_summary). This boundary is where Claude Code's
+   cache-detection algorithm splits the prompt.
+
+### Verification
+
+T23 ships `scripts/orchestration/cache_verify.py` — a 2-call verification
+harness that reads T22's `cache_read_input_tokens` telemetry records:
+
+- **Spawn 1:** `cache_creation_input_tokens` ≈ stable-prefix-token-count,
+  `cache_read_input_tokens` ≈ 0.
+- **Spawn 2 (within 5 min TTL):** `cache_read_input_tokens` ≈
+  stable-prefix-token-count.
+
+If spawn 2's `cache_read_input_tokens` is < 80% of the stable-prefix token
+count, the harness surfaces:
+
+```
+🚧 Cache breakpoint regression — see runs/<task>/cache_verification.txt
+```
+
+Run on demand:
+
+```bash
+python scripts/orchestration/cache_verify.py --agent auditor --task m12_t01
+```
+
+Dry-run (hermetic, no real claude subprocess):
+
+```bash
+python scripts/orchestration/cache_verify.py --agent auditor --task m12_t01 \
+    --dry-run \
+    --spawn1-record runs/m12_t01/cycle_1/auditor.usage.json \
+    --spawn2-record runs/m12_t01/cycle_2/auditor.usage.json
+```
+
+Output lands at `runs/<task>/cache_verification.txt`.
+
+The empirical validation (running M12 T01 audit cycle twice in close succession
+and asserting spawn 2's `cache_read_input_tokens` > 80%) is an **operator-resume
+step** deferred to outside the autopilot iteration (parallel to T06 L5 deferral).
+See `runs/cache_verification/methodology.md` for the operator runbook.
+
+---
+
 ## Notes
 
 - This file is the second entry under `.claude/commands/_common/` (after
@@ -176,3 +269,6 @@ These ceilings are validated by `tests/orchestrator/test_spawn_prompt_size.py`:
   `effort_table.md` (T21), `auditor_context_management.md` (T27).
 - The KDR extraction helper is implemented in `tests/orchestrator/_helpers.py`
   and tested in `tests/orchestrator/test_kdr_section_extractor.py`.
+- The stable-prefix discipline rules above are tested in
+  `tests/orchestrator/test_stable_prefix_construction.py` and
+  `tests/orchestrator/test_cache_breakpoint_verification.py` (T23).

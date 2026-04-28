@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M20 Task 23: Cache-breakpoint discipline (stable-prefix construction + 2-call verification harness; addresses anthropics/claude-code #27048/#34629/#42338/#43657 5–20× session-cost blowup failure mode) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Establishes the stable-prefix discipline for sub-agent spawn prompts and ships a
+2-call verification harness that reads T22's `cache_read_input_tokens` telemetry
+records to confirm Claude Code's cache breakpoint is correctly placed.
+
+**Files touched:**
+- `.claude/commands/_common/spawn_prompt_template.md` — extended with
+  §Stable-prefix discipline section (four rules: no timestamps/UUIDs in prefix,
+  fixed tool list, byte-identical system prompt, `\n\n` boundary before dynamic
+  context). References `cache_verify.py` for verification CLI.
+- `scripts/orchestration/cache_verify.py` — NEW. Verification harness.
+  `verify_cache_discipline(record1, record2)` core logic; `run_dry_run()` CLI
+  helper; exit codes 0=PASS/1=SKIP/2=FAIL/3=ERROR; `--dry-run` mode for
+  hermetic testing. AC-7 empirical validation deferred to operator-resume
+  (parallel to T06 L5 deferral; recursive-subprocess confound + TTL fragility).
+- `.claude/commands/auto-implement.md` — §Cache-breakpoint verification section
+  added: CLI form, output location (`runs/<task>/cache_verification.txt`), halt
+  surface (`🚧 Cache breakpoint regression`), operator-resume framing.
+- `runs/cache_verification/methodology.md` — NEW. Operator runbook for empirical
+  AC-7 validation outside autopilot.
+- `tests/orchestrator/test_cache_breakpoint_verification.py` — NEW. 19 hermetic
+  tests: PASS/FAIL/SKIP/ERROR paths, boundary conditions (exactly 80%, exactly at
+  TTL, None timestamps), `run_dry_run` exit-code mapping, output file contents.
+- `tests/orchestrator/test_stable_prefix_construction.py` — NEW. 14 hermetic
+  tests: no timestamp/UUID/hostname in prefix segment for all prompt builders,
+  `\n\n` boundary present, per-call values isolated to dynamic context, byte-
+  identical prefix invariant.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `spawn_prompt_template.md` has §Stable-prefix discipline section.
+- AC-2: `scripts/orchestration/cache_verify.py` exists with 2-call harness.
+- AC-3: `auto-implement.md` §Cache-breakpoint verification describes verifier CLI,
+        output location, and halt surface.
+- AC-4: Verification halt-surface fires correctly (FAIL exit 2 + 🚧 in output).
+- AC-5: `test_cache_breakpoint_verification.py` passes (19 tests).
+- AC-6: `test_stable_prefix_construction.py` passes (14 tests).
+- AC-7: DEFERRED to operator-resume. See `runs/cache_verification/methodology.md`
+        and issue file §Carry-over. Rationale: recursive-subprocess confound +
+        5-min TTL fragility + telemetry attribution conflict (parallel to T06 L5).
+- AC-8: This CHANGELOG entry.
+- AC-9: Status surfaces flipped (spec Status, milestone README task-table row,
+        milestone README exit criterion #11).
+
+**Deviations from spec:** AC-7 (empirical validation) deferred per task brief
+§For AC-7. Harness ships fully implemented; `--dry-run` mode covers hermetic
+testing. Operator runbook at `runs/cache_verification/methodology.md`.
+
+#### Cycle 2 (2026-04-28) — terminal-gate sr-dev + sr-sdet fix-then-ship
+
+Applied 5 fixes from sr-dev + sr-sdet cycle-1 terminal reviews.
+
+**Files touched:**
+- `scripts/orchestration/cache_verify.py` — sr-dev FIX-1: absent
+  `cache_read_input_tokens` key in record2 now returns ERROR (not silent FAIL
+  with misleading 0-token ratio); sr-dev FIX-2: `to_text` ratio line now uses
+  `is not None` guard (was truthy int check; suppressed ratio when
+  `stable_prefix_tokens == 0`).
+- `tests/orchestrator/test_cache_breakpoint_verification.py` — sr-sdet FIX-3:
+  added `test_spawn2_missing_cache_read_input_tokens_key_returns_error` asserting
+  absent key → ERROR; docstring for `test_skip_ttl_boundary_exactly_at_limit`
+  corrected from "exclusive" to "inclusive ge boundary" (ADV-1).
+- `tests/orchestrator/test_stable_prefix_construction.py` — sr-sdet FIX-1:
+  `test_rule1_no_per_request_strings_in_builder_prefix` rewritten to call real
+  `build_builder_spawn_prompt` directly (no appended UUID section) and extended to
+  `build_task_analyzer_spawn_prompt` + `build_roadmap_selector_spawn_prompt`;
+  sr-sdet FIX-2: added `test_real_builder_prefix_is_byte_identical_across_two_calls`
+  and `test_real_auditor_prefix_is_byte_identical_across_two_calls` exercising real
+  builders; ADV-2: added `test_hardcoded_hostname_never_appears_in_builder_prefix`
+  (hostname regression check independent of runtime `socket.gethostname()` value).
+- `CHANGELOG.md` — this cycle-2 sub-entry.
+
+**Gate results:** 46 tests pass (up from 33 in cycle 1); `uv run lint-imports`
+5 contracts kept; `uv run ruff check` all checks passed.
+
 ### Changed — M20 Task 20: Auditor anti-cargo-cult inspections (carry-over diff cross-ref + cycle-N overlap + rubber-stamp detection) (2026-04-28)
 
 Orchestration-infrastructure task. No `ai_workflows/` package changes.

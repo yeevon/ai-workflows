@@ -32,6 +32,51 @@ After every `Task` spawn, parse the agent's return per
 
 ---
 
+## Cache-breakpoint verification (T23)
+
+**Reference:** [`scripts/orchestration/cache_verify.py`](../../scripts/orchestration/cache_verify.py) · [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md) §Stable-prefix discipline
+
+After the pre-flight checks and before spawning the first Builder, the operator
+may run the cache-breakpoint verifier to confirm the stable-prefix discipline
+is in effect for the agents this run will use:
+
+```bash
+python scripts/orchestration/cache_verify.py --agent builder  --task <task-shorthand> \
+    --dry-run \
+    --spawn1-record runs/<task>/cycle_1/builder.usage.json \
+    --spawn2-record runs/<task>/cycle_2/builder.usage.json
+python scripts/orchestration/cache_verify.py --agent auditor  --task <task-shorthand> \
+    --dry-run \
+    --spawn1-record runs/<task>/cycle_1/auditor.usage.json \
+    --spawn2-record runs/<task>/cycle_2/auditor.usage.json
+```
+
+Output lands at `runs/<task>/cache_verification.txt` (one file per task, last
+run wins — the task shorthand in the filename is the same as the current task).
+
+**Halt surface:** if the verifier exits with code 2 (FAIL), the orchestrator
+surfaces:
+
+```
+🚧 Cache breakpoint regression — see runs/<task>/cache_verification.txt
+```
+
+and halts.  The fix is to locate and remove any per-request timestamp, UUID, or
+hostname string from the agent's stable prefix (see
+`.claude/commands/_common/spawn_prompt_template.md` §Stable-prefix discipline).
+
+**When the verifier fires per-cycle vs. operator-resume:**
+The verification requires two consecutive telemetry records for the same agent,
+which are only available after at least 2 cycles have run.  The verifier is
+therefore an **operator-resume step** (run after a task completes to confirm
+cache discipline held) rather than a per-cycle gate.  The AC-7 empirical
+validation (re-running M12 T01 audit cycle with T23 in place) is explicitly
+deferred to operator-resume — see `runs/cache_verification/methodology.md`
+and the T23 issue file §Carry-over for the full rationale (parallel to T06 L5
+deferral).
+
+---
+
 ## Spawn-prompt scope discipline
 
 **Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
