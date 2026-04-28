@@ -58,6 +58,9 @@ Look specifically for:
 - Scope creep from `nice_to_have.md`.
 - Silent architecture drift Phase 1 missed.
 - **Status-surface drift.** Four surfaces must agree at audit close: (a) per-task spec `**Status:**` line, (b) milestone README task table row, (c) `tasks/README.md` row if the milestone has one, (d) any milestone README "Done when" checkboxes the audited task satisfies. Each disagreeing surface is a HIGH finding.
+- **Carry-over checkbox-cargo-cult.** For every `[x]` item in the spec's `## Carry-over from prior audits` section, verify a corresponding diff hunk exists that addresses it (`git log -p` for the cycle's commits). A ticked carry-over item with no matching change is a **HIGH** finding: "Carry-over `<ID>` checked without corresponding diff hunk." Diff-vs-checkbox cross-reference runs before you grade any ACs as `met`.
+- **Cycle-N-vs-cycle-(N-1) finding overlap (loop-spinning detection).** Read the previous cycle's issue file (if it exists). For each finding in the current cycle, compute `difflib.SequenceMatcher(None, title_N, title_prev).ratio()` over all prior-cycle finding titles (strip AC-ID prefix and severity tag before comparing). If ≥ 50% of current-cycle findings score > `AIW_LOOP_DETECTION_THRESHOLD` (default 0.70) against any prior-cycle finding → emit **MEDIUM**: "cycle-N findings substantially overlap cycle-(N-1) — loop may be spinning; recommend human review." Detection helper: `scripts/orchestration/cargo_cult_detector.py::detect_cycle_overlap`.
+- **Rubber-stamp detection.** When the verdict is `PASS` AND the cycle's diff exceeds 50 lines AND zero HIGH+MEDIUM findings were raised → emit **MEDIUM**: "Auditor verdict PASS with substantial diff and no findings — verify reasoning on critical sweep." Use the existing MEDIUM tier — do NOT introduce a new ADVISORY tier. Detection helper: `scripts/orchestration/cargo_cult_detector.py::detect_rubber_stamp`.
 
 ## Phase 5 — Write or update the issue file; emit cycle summary
 

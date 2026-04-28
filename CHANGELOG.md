@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M20 Task 20: Auditor anti-cargo-cult inspections (carry-over diff cross-ref + cycle-N overlap + rubber-stamp detection) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Extends the Auditor agent with three detection modes in Phase 4 (Critical sweep):
+(1) Carry-over checkbox-cargo-cult — HIGH when a `[x]` carry-over item has no
+    corresponding diff hunk (M12-T01 lesson, ported from template).
+(2) Cycle-N-vs-cycle-(N-1) finding overlap — MEDIUM when ≥ 50% of cycle-N finding
+    titles score > 0.70 (operator-tunable via AIW_LOOP_DETECTION_THRESHOLD) against
+    prior-cycle titles (loop-spinning detection).
+(3) Rubber-stamp detection — MEDIUM when verdict is PASS + diff > 50 lines +
+    zero HIGH/MEDIUM findings (no new ADVISORY tier — uses existing MEDIUM per audit L6).
+
+**Files touched:**
+- `.claude/agents/auditor.md` — Phase 4 extended with three new bullets; M12-T01
+  carry-over checkbox-cargo-cult paragraph ported from template.
+- `scripts/orchestration/cargo_cult_detector.py` — NEW. Python detection helpers:
+  `detect_checkbox_without_diff`, `detect_cycle_overlap`, `detect_rubber_stamp`,
+  `extract_finding_titles`, `count_diff_lines`, `get_loop_detection_threshold`,
+  `run_all_detectors`. Threshold env-var: `AIW_LOOP_DETECTION_THRESHOLD`.
+- `tests/agents/test_auditor_anti_cargo_cult.py` — NEW. Hermetic tests for all three
+  detectors (true-positives + true-negatives + threshold env-var + structural grep).
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: Phase 4 extended with cycle-overlap + rubber-stamp bullets; no new phase number.
+- AC-2: M12-T01 carry-over patch ported verbatim to live auditor.md.
+- AC-3: HIGH for checkbox; MEDIUM for cycle-overlap; MEDIUM for rubber-stamp.
+- AC-4: `tests/agents/test_auditor_anti_cargo_cult.py` passes — true-positives + negatives.
+- AC-5: This CHANGELOG entry.
+- AC-6: Status surfaces flipped (spec Status, milestone README task-table row).
+
+**Deviations from spec:** None. Detection logic placed in
+`scripts/orchestration/cargo_cult_detector.py` per the "smallest surface area" option
+in the spec's implementation-pattern section; no new `ai_workflows/` package module.
+
+_Cycle 2 (2026-04-28): Fixed sr-sdet BLOCK B-1 (tautological carry-over assertion replaced
+with verbatim phrase check), FIX F-1 (phase-4-scoped overlap/rubber-stamp assertions via
+`_phase4_block` helper), FIX F-2 (boundary tests at diff_lines=50 and diff_lines=51),
+A-1 advisory (env-var tests converted to `monkeypatch.setenv/delenv`), A-2 advisory
+(rubber-stamp assertion simplified to `"rubber-stamp" in phase4.lower()`)._
+
+_Cycle 3 (2026-04-28): sr-dev F-1 — wrapped `text.index("## Phase 4")` in try/except in
+`_phase4_block`; on ValueError calls `pytest.fail(...)` for a descriptive failure instead
+of a bare traceback._
+
 ### Added — M20 Task 09: Task-integrity safeguards (non-empty diff + non-empty test diff for code tasks + independent pre-stamp gate re-run; uses T08 gate_parse_patterns.md) (2026-04-28)
 
 Orchestration-infrastructure task. No `ai_workflows/` package changes.

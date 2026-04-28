@@ -130,7 +130,7 @@ The pool is reorganized into seven phases keyed to the optimization themes. Each
 |---|---|---|---|---|
 | 08 | Gate-output integrity (parse raw stdout, fail-closed on missing output, paired with T01's orchestrator-side schema parser as first-defence layer) | SUPPORT + EXTEND (T08 from #10) | Safeguards / code | ✅ Done |
 | 09 | Task-integrity safeguards (non-empty-diff check + non-empty test-diff for feature work + independent gate re-run) | SUPPORT + EXTEND (T09 from #11) | Safeguards / code | ✅ Done |
-| 20 | Carry-over checkbox-cargo-cult catch — extended to inspect (a) checkboxes marked done without diff/test, (b) two consecutive cycles producing near-identical output, (c) Auditor rubber-stamping pattern | SUPPORT + EXTEND (T20 from #5) | Safeguards / doc | 📝 Candidate |
+| 20 | Carry-over checkbox-cargo-cult catch — extended to inspect (a) checkboxes marked done without diff/test, (b) two consecutive cycles producing near-identical output, (c) Auditor rubber-stamping pattern | SUPPORT + EXTEND (T20 from #5) | Safeguards / doc | ✅ Done |
 | 23 | **NEW** — Cache-breakpoint discipline (pin breakpoints on last stable block; verify empirically with 2-call cache-hit telemetry; addresses the 5–20× session-cost blowup failure mode) | NEW (research-brief T23) | Safeguards / code | 📝 Candidate |
 | 27 | **NEW** — Tool-result clearing for long Auditor runs (`clear_tool_uses_20250919` strategy with `keep` window of 3–5 most recent tool results) | NEW (research-brief T27) | Safeguards / code | 📝 Candidate |
 | ZZ | M20 milestone close-out (Phases A-D done; baseline measurements published; M21 unblocked) | n/a | Closeout / doc | 📝 Planned |

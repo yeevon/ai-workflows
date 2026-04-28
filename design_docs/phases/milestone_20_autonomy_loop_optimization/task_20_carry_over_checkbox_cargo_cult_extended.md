@@ -1,6 +1,6 @@
 # Task 20 — Carry-over checkbox-cargo-cult catch (extended detection)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Safeguards / doc.
 **Grounding:** [milestone README](README.md) · memory `project_autonomy_optimization_followups.md` thread #5 (post-M12-T01 lesson) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) · template equivalent in [`/home/papa-jochy/prj/ai-workflows-template/template/.claude/agents/auditor.md`](../../../../ai-workflows-template/template/.claude/agents/auditor.md).
 
