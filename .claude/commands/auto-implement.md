@@ -226,8 +226,8 @@ If anything material is unclear (spec missing, milestone README absent, ambiguou
 
 1. **BLOCKER** — Issue file contains a HIGH issue marked `🚧 BLOCKED` requiring user input. Halt, surface verbatim.
 2. **USER INPUT REQUIRED** — Any issue recommends "stop and ask the user" / "user decision needed" **and the auditor's recommendation is genuinely ambiguous** (two or more reasonable paths surfaced; the auditor declines to pick one; the choice is a substantive design lock the user must own). Halt, list all such issues. **Auditor-agreement bypass:** if the auditor surfaced a single clear recommendation (one path, not "Option A vs Option B for the user to pick") and you concur with that recommendation against the spec + KDRs + locked decisions in the issue file, treat the recommendation as the locked decision: stamp it into the issue file as `Locked decision (loop-controller + Auditor concur, YYYY-MM-DD): <one-line summary>`, feed it to the next Builder cycle as a carry-over AC, and continue the loop. Halt only if (a) the auditor presents two or more options without a recommendation, (b) the recommendation conflicts with a locked KDR / prior user decision / the spec, (c) the recommendation expands scope beyond the spec, or (d) the recommendation defers work to a future task that the user hasn't already agreed exists.
-3. **FUNCTIONALLY CLEAN** — Issue file status line reads `✅ PASS` with no OPEN issues. Proceed to the **security + team gates** below.
-4. **CYCLE LIMIT** — 10 build → audit cycles without 1–3. Halt, present outstanding issues. **Do not run the security or team gates against an unclean task.**
+3. **FUNCTIONALLY CLEAN** — Issue file status line reads `✅ PASS` with no OPEN issues. Proceed to the **unified terminal gate** below.
+4. **CYCLE LIMIT** — 10 build → audit cycles without 1–3. Halt, present outstanding issues. **Do not run the terminal gate against an unclean task.**
 
 **At the start of cycle 1 only:** if the issue file already contains an unresolved BLOCKER from a prior session, treat as condition 1 immediately — don't spawn the Builder against an open blocker.
 
@@ -253,7 +253,7 @@ identifiers (compact pointer per scope-discipline section above). Wait for compl
 
 ### Step 3 — Read issue file and evaluate stop conditions
 
-**Read the issue file on disk.** Do not trust the Auditor's chat summary — the issue file is the source of truth. Evaluate the four stop conditions in order against what's actually written. If condition 3 (FUNCTIONALLY CLEAN) triggers, go to the **security gate**. If none trigger and cycles remain, loop to Step 1 targeting only the OPEN issues the audit identified.
+**Read the issue file on disk.** Do not trust the Auditor's chat summary — the issue file is the source of truth. Evaluate the four stop conditions in order against what's actually written. If condition 3 (FUNCTIONALLY CLEAN) triggers, go to the **unified terminal gate**. If none trigger and cycles remain, loop to Step 1 targeting only the OPEN issues the audit identified.
 
 **Between Step 1 and Step 2, forbidden:**
 
@@ -267,72 +267,112 @@ The Auditor is the only thing that can decide whether the task is functionally c
 
 ---
 
-## Security gate (runs once, after FUNCTIONALLY CLEAN)
+## Unified terminal gate (runs once, after FUNCTIONALLY CLEAN — parallel)
 
-Same shape as `/clean-implement`. Re-stated here so the autonomous loop is self-contained.
+Replaces the prior two-gate Security+Team sequential flow. sr-dev, sr-sdet, and
+security-reviewer run concurrently in a single orchestrator message (three Task tool
+calls in one assistant turn). Each writes to a fragment file; the orchestrator
+stitches the fragments into the issue file in a follow-up turn.
 
-### Step S1 — Security reviewer (always runs)
+### Step G1 — Parallel spawn (three Task tool calls in one assistant turn)
 
-Spawn `security-reviewer` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task (aggregate from all Builder reports), cited KDR identifiers (compact pointer per scope-discipline section above).
+Spawn sr-dev, sr-sdet, and security-reviewer concurrently in a single
+orchestrator message (three Task tool calls in one assistant turn).
 
-Output appends under `## Security review` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+Each agent writes its review to `runs/<task>/cycle_<N>/<agent>-review.md`
+per the agent's updated `## Output format`:
+- sr-dev → `runs/<task>/cycle_<N>/sr-dev-review.md`
+- sr-sdet → `runs/<task>/cycle_<N>/sr-sdet-review.md`
+- security-reviewer → `runs/<task>/cycle_<N>/security-review.md`
 
-### Step S2 — Dependency auditor (conditional)
+Spawn inputs per scope discipline:
+- sr-dev: task identifier, spec path, issue file path, project context brief, list of
+  files touched across the whole task, the most recent Auditor verdict.
+- sr-sdet: task identifier, spec path, issue file path, project context brief, list of
+  test files touched across the whole task, the most recent Auditor verdict.
+- security-reviewer: task identifier, spec path, issue file path, project context brief,
+  list of files touched across the whole task, cited KDR identifiers (compact pointer).
 
-Run **only if** the aggregated diff across this task touched `pyproject.toml` or `uv.lock`. Check by inspecting Builder reports for manifest edits.
+Wait for all three Tasks to complete.
 
-If triggered, spawn `dependency-auditor` via `Task` with: task identifier, list of dep-manifest files changed, project context brief, lockfile path. Output appends under `## Dependency audit` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+### Step G2 — Read fragments, parse verdicts, apply precedence rule
+
+In a follow-up turn:
+
+1. Read the three fragment files in one multi-Read call:
+   `runs/<task>/cycle_<N>/sr-dev-review.md`,
+   `runs/<task>/cycle_<N>/sr-sdet-review.md`,
+   `runs/<task>/cycle_<N>/security-review.md`.
+2. Parse each agent's T01 return-schema verdict line.
+3. Apply the precedence rule:
+   - **All three SHIP → TERMINAL CLEAN.** Proceed to stitch step (G3) then
+     conditional spawns (G4, G5), then the commit ceremony.
+   - **Any reviewer BLOCK → TERMINAL BLOCK.** Halt loop; surface the
+     security-reviewer BLOCK first if applicable (threat-model finding is the
+     most user-load-bearing), else the offending reviewer's BLOCK verbatim.
+     Next action is another Builder → Auditor cycle targeting these findings.
+   - **Any reviewer FIX-THEN-SHIP (no BLOCK) → TERMINAL FIX.** Apply the
+     Auditor-agreement bypass: if all FIX findings carry single clear
+     recommendations and you concur against KDRs + spec, stamp
+     `Locked terminal decision (loop-controller + reviewer concur, YYYY-MM-DD): <summary>`
+     per finding and re-loop with each as carry-over. Halt only on the same
+     four conditions (multi-option, KDR conflict, scope expansion, deferral to
+     nonexistent task).
+4. If TERMINAL CLEAN: stitch the three fragment files into the issue file under
+   `## Sr. Dev review`, `## Sr. SDET review`, `## Security review` sections in
+   one Edit pass.
+
+### Step G3 — Stitch fragments into issue file (TERMINAL CLEAN only)
+
+Read all three fragment files (already done in G2 step 1). In one Edit pass,
+append all three `## <Name> review` sections to the issue file in this order:
+`## Sr. Dev review`, `## Sr. SDET review`, `## Security review`.
+
+### Step G4 — Dependency auditor (conditional, synchronous, post-parallel-batch)
+
+Run **only if** the aggregated diff across this task touched `pyproject.toml` or
+`uv.lock`. Check by inspecting Builder reports for manifest edits.
+
+If triggered, spawn `dependency-auditor` via `Task` (synchronous — after the
+parallel batch returns and G3 stitch completes) with: task identifier, list of
+dep-manifest files changed, project context brief, lockfile path. Output appends
+under `## Dependency audit` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+
+If triggered and verdict is BLOCK, surface it ahead of any FIX-THEN-SHIP from
+the parallel batch — dependency-auditor BLOCK has the same precedence weight as
+security-reviewer BLOCK (supply-chain-shaped threat).
 
 If not triggered, note in the issue file: `Dependency audit: skipped — no manifest changes.`
 
-### Step S3 — Read issue file and evaluate security verdicts
+### Step G5 — Architect (conditional, on-demand)
 
-Re-read the issue file. Evaluate in priority order:
+Spawn `architect` via `Task` **only if** any of the reviewers (auditor,
+security-reviewer, dependency-auditor, sr-dev, sr-sdet) flagged a finding whose
+recommendation reads "this should be a new KDR" or "violates an unwritten rule".
+Pass: trigger=`new-KDR`, the finding ID, the project context brief.
 
-1. **SECURITY BLOCKER** — Either reviewer's verdict is `BLOCK`. Halt; surface findings verbatim. The task is **not** CLEAN. Next action is another Builder → Auditor cycle targeting these findings.
-2. **SECURITY FIX-THEN-SHIP** — Either reviewer's verdict is `FIX-THEN-SHIP`. Apply the same Auditor-agreement bypass logic from functional condition 2. If clear consensus → stamp `Locked security decision (loop-controller + reviewer concur, YYYY-MM-DD): <summary>` and re-loop with the finding as carry-over. Halt and surface only if (a) two-plus options without recommendation, (b) recommendation conflicts with KDR / prior user decision / spec, (c) scope expansion, or (d) defers to a future task that doesn't exist.
-3. **SECURITY CLEAN** — All applicable reviewers' verdicts are `SHIP`. Proceed to the **team gate**.
+Architect output appends under `## Architect review` in the issue file. Verdict
+line: `ALIGNED / MISALIGNED / OPEN / PROPOSE-NEW-KDR`.
 
----
+This is unchanged from the prior conditional spawn — architect is invoked
+on-demand, not per-cycle.
 
-## Team gate (runs once, after SECURITY CLEAN — autonomous-mode only)
+### Step G6 — Final gate verdict
 
-This gate is the autonomous-mode addition. It does not exist in `/clean-implement`. The gate enforces the consensus rule from autonomy decision 3: "more auditor sub-agents for resolving bugs if they align or agree".
+After G3 stitch (and G4 if triggered, and G5 if triggered), evaluate the final
+terminal verdict in priority order:
 
-### Step T1 — Sr. Dev (always runs)
-
-Spawn `sr-dev` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task, the most recent Auditor verdict.
-
-Output appends under `## Sr. Dev review` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
-
-### Step T2 — Sr. SDET (always runs)
-
-Spawn `sr-sdet` via `Task` with: task identifier, spec path, issue file path, project context brief, list of test files touched across the whole task, the most recent Auditor verdict.
-
-Output appends under `## Sr. SDET review` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
-
-T1 and T2 may run in parallel — they read disjoint files (sr-dev reads source, sr-sdet reads tests) and write to disjoint sections of the same issue file. Spawn both in a single message with two `Task` tool calls.
-
-**Concurrent Edit on disjoint sections — has not raced in practice; if it does (e.g. one section's append clobbers the other's mid-write), serialize: spawn T1, await completion, then spawn T2.** Each agent uses Edit to append its own `## Sr. <Role> review` section, so the disjoint-section assumption holds as long as neither rewrites the other's section. Surface the race as a tooling finding for follow-up rather than retrying the gate.
-
-### Step T3 — Architect (conditional)
-
-Spawn `architect` via `Task` **only if** any of the five reviewers (auditor, security-reviewer, dependency-auditor, sr-dev, sr-sdet) flagged a finding whose recommendation reads "this should be a new KDR" or "violates an unwritten rule". Pass: trigger=`new-KDR`, the finding ID, the project context brief.
-
-Architect output appends under `## Architect review` in the issue file. Verdict line: `ALIGNED / MISALIGNED / OPEN / PROPOSE-NEW-KDR`.
-
-### Step T4 — Read issue file and evaluate team verdicts
-
-Re-read the issue file. Aggregate verdicts from sr-dev + sr-sdet + (if invoked) architect. Evaluate in priority order:
-
-1. **TEAM BLOCKER** — Any sr-* verdict is `BLOCK`. Halt; surface findings. Next action is another Builder → Auditor cycle targeting these findings (BLOCK from sr-dev / sr-sdet means a hidden bug or test-passes-for-wrong-reason — code change required, security and team gates re-run after).
-2. **TEAM FIX-THEN-SHIP** — Any sr-* verdict is `FIX-THEN-SHIP`. Apply the Auditor-agreement bypass: if all FIX findings carry single clear recommendations and you concur against KDRs + spec, stamp `Locked team decision (loop-controller + sr-* concur, YYYY-MM-DD): <summary>` per finding and re-loop with each as carry-over. Halt only on the same four conditions (multi-option, KDR conflict, scope expansion, deferral to nonexistent task).
-3. **DIVERGENT VERDICTS** — sr-dev and sr-sdet disagree (one says BLOCK, other says SHIP, etc.). **HARD HALT.** Surface the disagreement; user arbitrates. Per autonomy decision 3 the team must align before work proceeds.
-4. **TEAM CLEAN** — All sr-* verdicts are `SHIP`. Proceed to the **commit ceremony**.
+1. **TERMINAL BLOCK** — Any reviewer (including dependency-auditor) returned
+   BLOCK. Halt; surface security-reviewer BLOCK first if applicable. The task is
+   **not** CLEAN. Next action is another Builder → Auditor cycle.
+2. **TERMINAL FIX** — Any reviewer returned FIX-THEN-SHIP (no BLOCK). Apply
+   Auditor-agreement bypass or halt for user arbitration.
+3. **TERMINAL CLEAN** — All applicable reviewers returned SHIP. Proceed to the
+   **commit ceremony**.
 
 ---
 
-## Commit ceremony (runs once, after TEAM CLEAN — autonomous-mode only)
+## Commit ceremony (runs once, after TERMINAL CLEAN — autonomous-mode only)
 
 Per autonomy decisions 1 and 2.
 
@@ -386,9 +426,8 @@ task implements>
 
 Cycles run: <N>
 Auditor verdict: ✅ PASS
-Security: SHIP (or "FIX-THEN-SHIP locked: <summary>" if bypass fired)
-Sr. Dev: SHIP
-Sr. SDET: SHIP
+Terminal gate: CLEAN (Sr. Dev: SHIP, Sr. SDET: SHIP, Security: SHIP)
+Dependency audit: <SHIP | skipped — no manifest changes>
 Architect: <if invoked: verdict + KDR-NNN if proposed>
 
 Files touched:
@@ -419,21 +458,23 @@ End-of-cycle one-liner for build → audit cycles:
 
 `Cycle N/10 — [FUNCTIONALLY CLEAN | OPEN: <count> issues | BLOCKED: <issue-id> | USER INPUT: <issue-id>]`
 
-End-of-security-gate one-liner:
+End-of-terminal-gate one-liner:
 
-`Security gate — [CLEAN | SEC-BLOCK: <count> | SEC-FIX: <count>]`
-
-End-of-team-gate one-liner:
-
-`Team gate — [CLEAN | TEAM-BLOCK: <reviewer:count> | TEAM-FIX: <reviewer:count> | TEAM-DIVERGE: <reviewer-A says X, reviewer-B says Y>]`
+`Terminal gate — [CLEAN | TERMINAL-BLOCK: <reviewer:count> | TERMINAL-FIX: <reviewer:count>]`
 
 Final-stop summary (whether AUTO-CLEAN or HALT): stop condition triggered, total cycle count, remaining OPEN issues (id + one-liner), commit hash(es) if AUTO-CLEAN, the user action needed if HALT.
 
 ---
 
-## Why team-gate runs after security-gate, not in parallel
+## Why the unified terminal gate parallelizes all three reviewers
 
-The security-reviewer's threat-model check is narrower than sr-dev / sr-sdet's quality check; running them all in parallel would burn tokens redundantly when a security BLOCK already invalidates the run. Order matters: security-blockers are the hardest gate (re-loops to Builder), then quality-blockers, then quality-fixes. Each later gate only fires when its prerequisite passed.
+sr-dev, sr-sdet, and security-reviewer each check non-overlapping concerns (code quality,
+test quality, threat model) and write to non-overlapping fragment files — no shared-state
+or file-write contention. Spawning all three concurrently reduces wall-clock time from
+sum-of-three to max-of-three (target ≥ 2× improvement). When security-reviewer returns
+BLOCK, the TERMINAL BLOCK precedence rule surfaces that finding first — the same
+precedence that the old sequential flow achieved implicitly (by running security first)
+is now made explicit in the combined verdict evaluation step (G2).
 
 ## Why this is a separate command from /clean-implement
 

@@ -88,7 +88,13 @@ Findings:
 
 ## Output format
 
-Append to the issue file under `## Sr. SDET review (YYYY-MM-DD)`:
+Write your full review to `runs/<task>/cycle_<N>/sr-sdet-review.md` (where `<task>` is
+the zero-padded `m<MM>_t<NN>` shorthand per audit M12 and `cycle_<N>/` is the per-cycle
+subdirectory per audit M11). The orchestrator stitches it into the issue file in a
+follow-up turn. Your `file:` return value points at the fragment path; `section:` is
+`## Sr. SDET review (YYYY-MM-DD)` — the heading the orchestrator will use when stitching.
+
+Fragment file content (identical to the prior `## Sr. SDET review` section content):
 
 ```markdown
 ## Sr. SDET review (YYYY-MM-DD)
@@ -128,7 +134,7 @@ Three lines, exactly. No prose summary, no preamble, no chat body before or afte
 
 ```
 verdict: <one of: SHIP / FIX-THEN-SHIP / BLOCK>
-file: <repo-relative path to the durable artifact you wrote, or "—" if none>
+file: runs/<task>/cycle_<N>/sr-sdet-review.md
 section: ## Sr. SDET review (YYYY-MM-DD)
 ```
 

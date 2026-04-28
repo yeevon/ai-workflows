@@ -43,12 +43,12 @@ After every `Task` spawn, the orchestrator:
 |---|---|---|---|
 | `builder` | `BUILT` / `BLOCKED` / `STOP-AND-ASK` | `runs/<task>/cycle_<N>/builder_handoff.md` (per-cycle nested directory; T03 §directory layout is authoritative on artifact placement) | `—` |
 | `auditor` | `PASS` / `OPEN` / `BLOCKED` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` | `—` (auditor writes the entire issue file) |
-| `security-reviewer` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` | `## Security review (YYYY-MM-DD)` |
+| `security-reviewer` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `runs/<task>/cycle_<N>/security-review.md` | `## Security review (YYYY-MM-DD)` |
 | `dependency-auditor` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` (or CHANGELOG `### Security`) | `## Dependency audit (YYYY-MM-DD)` |
 | `task-analyzer` | `CLEAN` / `LOW-ONLY` / `OPEN` | `design_docs/phases/<milestone>/task_analysis.md` | `—` |
 | `architect` | `ALIGNED` / `MISALIGNED` / `OPEN` / `PROPOSE-NEW-KDR` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` | `## Architect review (YYYY-MM-DD)` |
-| `sr-dev` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` | `## Sr. Dev review (YYYY-MM-DD)` |
-| `sr-sdet` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` | `## Sr. SDET review (YYYY-MM-DD)` |
+| `sr-dev` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `runs/<task>/cycle_<N>/sr-dev-review.md` | `## Sr. Dev review (YYYY-MM-DD)` |
+| `sr-sdet` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `runs/<task>/cycle_<N>/sr-sdet-review.md` | `## Sr. SDET review (YYYY-MM-DD)` |
 | `roadmap-selector` | `PROCEED` / `NEEDS-CLEAN-TASKS` / `HALT-AND-ASK` | `runs/queue-pick-<ts>.md` (or invoker-named recommendation file) | `—` |
 
 (`section:` is `—` for agents that write a whole standalone file. The orchestrator reads the entire file for those.)

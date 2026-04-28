@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M20 Task 05: Unified parallel terminal gate (sr-dev + sr-sdet + security-reviewer in single multi-Task message; fragment files; replaces two-gate Security+Team flow with single TERMINAL CLEAN/BLOCK/FIX precedence rule; research brief §Lens 1.4) (2026-04-28) (cycle 2 follow-up: aligned reviewer verdict templates, updated schema doc, hardened benchmark test)
+
+**Files touched:**
+- `.claude/commands/auto-implement.md` — DELETE Security gate (steps S1-S3) and Team gate
+  (steps T1-T4); REPLACE with unified `## Unified terminal gate (runs once, after FUNCTIONALLY
+  CLEAN — parallel)` section (steps G1-G6). Commit ceremony updated to reference TERMINAL CLEAN.
+  Reporting section updated: end-of-terminal-gate one-liner replaces two separate gate one-liners.
+  Rationale section updated to explain the parallelism precedence rule.
+- `.claude/agents/sr-dev.md` — `## Output format` updated to write to
+  `runs/<task>/cycle_<N>/sr-dev-review.md` fragment file; `## Return to invoker` `file:` value
+  updated to point at the fragment path.
+- `.claude/agents/sr-sdet.md` — `## Output format` updated to write to
+  `runs/<task>/cycle_<N>/sr-sdet-review.md` fragment file; `## Return to invoker` `file:` value
+  updated to point at the fragment path.
+- `.claude/agents/security-reviewer.md` — `## Output format` updated to write to
+  `runs/<task>/cycle_<N>/security-review.md` fragment file; `## Return to invoker` `file:` value
+  updated to point at the fragment path.
+- `.claude/commands/_common/parallel_spawn_pattern.md` — NEW canonical pattern reference for
+  parallel spawn with fragment files.
+- `tests/orchestrator/test_parallel_terminal_gate.py` — NEW hermetic tests covering:
+  single-turn 3-way spawn assertion, fragment-file landing (all three paths), single-Edit
+  stitch pass assertions, precedence rule correctness (BLOCK > FIX-THEN-SHIP > SHIP;
+  security-reviewer BLOCK surfaced first).
+- `tests/orchestrator/bench_terminal_gate.py` — NEW manual wall-clock benchmark with
+  `@pytest.mark.benchmark` decorator; asserts post-T05 wall-clock ≤ 0.6 × pre-T05 baseline.
+- `pyproject.toml` — registered `benchmark` marker in `[tool.pytest.ini_options].markers`
+  per carry-over L4.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: auto-implement.md describes unified terminal gate; old Security + Team gate sections deleted.
+- AC-2: TERMINAL CLEAN / TERMINAL BLOCK (security-reviewer precedence) / TERMINAL FIX rule documented.
+- AC-3: All 3 reviewer agents write to fragment paths.
+- AC-4: dependency-auditor stays conditional + standalone (step G4); architect stays conditional + standalone (step G5). Verified in auto-implement.md.
+- AC-5: parallel_spawn_pattern.md exists.
+- AC-6: test_parallel_terminal_gate.py passes.
+- AC-7: bench_terminal_gate.py asserts ≥ 1.67× improvement.
+- AC-8: this CHANGELOG entry.
+- AC-9: status surfaces flipped (see spec and milestone README).
+
+**Carry-over L4 satisfied:** `benchmark` marker registered in pyproject.toml.
+**Carry-over L2 verified:** smoke-test grep uses `cycle_<N>/` form (test_reviewer_agents_write_to_fragment_paths in test_parallel_terminal_gate.py).
+
+**Deviations from spec:** none.
+
 ### Added — M20 Task 28: Server-side compaction evaluation document (design_docs/analysis/server_side_compaction_evaluation.md; verdict DEFER) (2026-04-28)
 
 Analysis-only task. Evaluates Anthropic's beta `compact_20260112` strategy for use in

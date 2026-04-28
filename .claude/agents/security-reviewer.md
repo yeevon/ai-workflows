@@ -77,7 +77,13 @@ If the `dependency-auditor` agent ran for this task, defer to it — don't dupli
 
 ## Output format
 
-Append to the existing issue file under a `## Security review` section. Structure:
+Write your full review to `runs/<task>/cycle_<N>/security-review.md` (where `<task>` is
+the zero-padded `m<MM>_t<NN>` shorthand per audit M12 and `cycle_<N>/` is the per-cycle
+subdirectory per audit M11). The orchestrator stitches it into the issue file in a
+follow-up turn. Your `file:` return value points at the fragment path; `section:` is
+`## Security review (YYYY-MM-DD)` — the heading the orchestrator will use when stitching.
+
+Fragment file content (identical to the prior `## Security review` section content):
 
 ```markdown
 ## Security review (YYYY-MM-DD)
@@ -85,10 +91,10 @@ Append to the existing issue file under a `## Security review` section. Structur
 ### 🔴 Critical — must fix before publish/ship
 ### 🟠 High — should fix before publish/ship
 ### 🟡 Advisory — track; not blocking
-### Verdict: SHIP | FIX-THEN-SHIP | BLOCK
+**Verdict:** SHIP | FIX-THEN-SHIP | BLOCK
 ```
 
-Every finding names the file:line, the threat-model item it maps to, and an Action line. The Verdict is the single most important line — the orchestrator reads it to decide whether the security gate is clean.
+Every finding names the file:line, the threat-model item it maps to, and an Action line. The Verdict is the single most important line — the orchestrator reads it to decide the terminal gate verdict.
 
 ## Return to invoker
 
@@ -96,7 +102,7 @@ Three lines, exactly. No prose summary, no preamble, no chat body before or afte
 
 ```
 verdict: <one of: SHIP / FIX-THEN-SHIP / BLOCK>
-file: <repo-relative path to the durable artifact you wrote, or "—" if none>
+file: runs/<task>/cycle_<N>/security-review.md
 section: ## Security review (YYYY-MM-DD)
 ```
 
