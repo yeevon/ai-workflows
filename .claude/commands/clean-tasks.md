@@ -21,6 +21,20 @@ The analysis runs in a dedicated `task-analyzer` subagent via `Task`. Fix applic
 
 ---
 
+## Agent-return parser convention
+
+After every `Task` spawn (the `task-analyzer` subagent), parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/<milestone>/round_<N>/agent_task-analyzer_raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of `CLEAN`, `LOW-ONLY`, `OPEN` (task-analyzer's allowed tokens); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent task-analyzer returned non-conformant text —
+   see the raw return file`. **Do not auto-retry.**
+
+---
+
 ## Project setup (run once at the start)
 
 Resolve `$ARGUMENTS` to a milestone directory:

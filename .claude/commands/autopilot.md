@@ -15,6 +15,20 @@ This command is the meta-loop on top of `/queue-pick`, `/clean-tasks`, and `/aut
 
 ---
 
+## Agent-return parser convention
+
+After every `Task` spawn, parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/autopilot-<run-timestamp>-iter<N>/agent_<name>_raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of the agent's allowed tokens (see schema reference); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent <name> returned non-conformant text —
+   see the raw return file`. **Do not auto-retry.**
+
+---
+
 ## Hard halt boundaries (autonomous-mode non-negotiables)
 
 Same as `/auto-implement`'s set, restated so this orchestrator is self-contained. Memory: `feedback_autonomous_mode_boundaries.md`.

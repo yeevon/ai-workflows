@@ -15,6 +15,21 @@ This is the manual / one-shot version: run `/queue-pick`, get a recommendation, 
 
 ---
 
+## Agent-return parser convention
+
+After the `roadmap-selector` `Task` spawn, parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/queue-pick-<ts>-raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of `PROCEED`, `NEEDS-CLEAN-TASKS`, `HALT-AND-ASK`
+   (roadmap-selector's allowed tokens); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent roadmap-selector returned non-conformant text —
+   see the raw return file`. **Do not auto-retry.**
+
+---
+
 ## Project setup
 
 Resolve `$ARGUMENTS`:

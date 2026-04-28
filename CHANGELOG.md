@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M20 Task 01: Sub-agent return-value schema (3-line verdict / file / section), schema-compliance tests, orchestrator parser convention (research brief §Lens 1.3) (2026-04-28)
+
+Hard 3-line return-value schema enforced across all 9 sub-agents in the autonomy fleet
+(builder, auditor, security-reviewer, dependency-auditor, task-analyzer, architect, sr-dev,
+sr-sdet, roadmap-selector). Each agent's `## Return to invoker` section mandates the schema.
+Orchestrator-side parser convention described in all 5 slash commands that spawn agents.
+Canonical reference at `.claude/commands/_common/agent_return_schema.md` (first file under
+`_common/`, unblocking subsequent M20 tasks T02 / T05 / T07–T09 / T21 / T23 / T27).
+
+**Files touched:**
+- `.claude/agents/builder.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/auditor.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/security-reviewer.md` — `## Return to invoker` schema (verified from 030152f)
+- `.claude/agents/dependency-auditor.md` — `## Return to invoker` schema (verified from 030152f)
+- `.claude/agents/task-analyzer.md` — renamed `## Phase 5 — Return to invoker` to `## Return to invoker` for uniformity (AC-1)
+- `.claude/agents/architect.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/sr-dev.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/sr-sdet.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/roadmap-selector.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/commands/_common/agent_return_schema.md` — NEW; canonical schema reference with per-agent verdict table
+- `.claude/commands/auto-implement.md` — `## Agent-return parser convention` section added; links to `_common/`
+- `.claude/commands/clean-implement.md` — same parser convention section
+- `.claude/commands/clean-tasks.md` — same parser convention section
+- `.claude/commands/queue-pick.md` — same parser convention section
+- `.claude/commands/autopilot.md` — same parser convention section
+- `tests/agents/__init__.py` — NEW test package
+- `tests/agents/_helpers.py` — NEW parser helper (`parse_agent_return`, `MalformedAgentReturn`, `token_count_proxy`)
+- `tests/agents/test_return_schema_compliance.py` — NEW; 142 hermetic tests across 9 agents
+- `tests/agents/test_orchestrator_parser.py` — NEW; parser unit tests (positive + negative paths)
+- `tests/agents/fixtures/<agent>/` — NEW; 28 fixture files (one per verdict token per agent)
+- `CHANGELOG.md` — this entry
+
+**ACs satisfied:**
+- AC-1: All 9 agent files have uniform `## Return to invoker` section with per-agent verdict tokens.
+- AC-2: `.claude/commands/_common/agent_return_schema.md` is the canonical reference with full table.
+- AC-3: All 5 slash commands have `## Agent-return parser convention` sections linking to `_common/`.
+- AC-4: `test_return_schema_compliance.py` passes — 142 tests (3–4 fixture cases per agent, one per token).
+- AC-5: `test_orchestrator_parser.py` passes — conformant + all negative paths covered.
+- AC-6: Token-cap assertions (≤ 100 proxy units) pass for every fixture case.
+- AC-7: CHANGELOG updated with `### Changed — M20 Task 01: ...` entry.
+- AC-8: Status surfaces flipped (spec **Status:** line, milestone README T01 row, "Done when" #1).
+- L1 (carry-over): Fixture-based default suite + `AIW_AGENT_SCHEMA_E2E=1` opt-in guard.
+- L8 (carry-over): Token-cap proxy `len(re.findall(r"\\S+", text)) * 1.3`; no tiktoken dep.
+
+**Deviations from spec:**
+- Parser helper placed in `tests/agents/_helpers.py` (not `ai_workflows/agents/return_schema.py`),
+  per spec's stated alternative. Adding it to `ai_workflows/` would introduce a subpackage with
+  no runtime caller, conflicting with layer discipline. The spec explicitly offered this as the
+  correct fallback.
+
+*Cycle 2 (2026-04-28): architect verdict-token drift fix (`architect.md:42` + `auto-implement.md:189`) + parser trailing-whitespace robustness (`_helpers.py` `.strip()` + `test_trailing_spaces_in_verdict_are_tolerated`) + architect-prompt/helper token-consistency regression test.*
+
 ### Added — M12 Task 03: Workflow wiring — cascade opt-in via module constant + env-var (2026-04-27)
 
 Wires `audit_cascade_node()` (M12 T02) into the `planner` and `slice_refactor` workflows

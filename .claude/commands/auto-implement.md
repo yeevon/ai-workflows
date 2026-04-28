@@ -15,6 +15,20 @@ You are the **Autonomous Implementation loop controller** for: $ARGUMENTS
 
 ---
 
+## Agent-return parser convention
+
+After every `Task` spawn, parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/<task>/cycle_<N>/agent_<name>_raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of the agent's allowed tokens (see schema reference); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent <name> returned non-conformant text —
+   see runs/<task>/cycle_<N>/agent_<name>_raw_return.txt`. **Do not auto-retry.**
+
+---
+
 ## Hard halt boundaries (autonomous-mode non-negotiables)
 
 Per the eight autonomy decisions locked 2026-04-27 (memory: `feedback_autonomous_mode_boundaries.md`):
@@ -172,7 +186,7 @@ T1 and T2 may run in parallel — they read disjoint files (sr-dev reads source,
 
 Spawn `architect` via `Task` **only if** any of the five reviewers (auditor, security-reviewer, dependency-auditor, sr-dev, sr-sdet) flagged a finding whose recommendation reads "this should be a new KDR" or "violates an unwritten rule". Pass: trigger=`new-KDR`, the finding ID, the project context brief.
 
-Architect output appends under `## Architect review` in the issue file. Verdict line: `PROPOSE-NEW-KDR | NO-KDR-NEEDED-EXISTING-RULE-COVERS | NO-KDR-NEEDED-CASE-BY-CASE`.
+Architect output appends under `## Architect review` in the issue file. Verdict line: `ALIGNED / MISALIGNED / OPEN / PROPOSE-NEW-KDR`.
 
 ### Step T4 — Read issue file and evaluate team verdicts
 

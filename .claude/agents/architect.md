@@ -39,7 +39,7 @@ The Auditor or sr-dev / sr-sdet flagged a finding whose recommendation reads "th
    `## Architect review`. Include: failure mode, locked pattern,
    alternative considered, ADR draft skeleton (Status / Context /
    Decision / Rationale / Alternatives / Consequences / Related).
-6. **Verdict:** `PROPOSE-NEW-KDR | NO-KDR-NEEDED-EXISTING-RULE-COVERS | NO-KDR-NEEDED-CASE-BY-CASE`.
+6. **Verdict:** `ALIGNED / MISALIGNED / OPEN / PROPOSE-NEW-KDR`.
 
 The orchestrator owns whether to accept — your role is the proposal,
 not the lock.

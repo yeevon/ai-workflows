@@ -203,7 +203,7 @@ Write to the path the invoker named (typically `<milestone-dir>/task_analysis.md
 (Anything informational that shaped findings — e.g. "M10 is on hold per project memory; specs are written assuming clean thaw," or "M16 just shipped; KDR-013 implications are now load-bearing for any public-API change.")
 ```
 
-## Phase 5 — Return to invoker
+## Return to invoker
 
 Three lines, exactly. No prose summary, no preamble, no chat body before or after:
 

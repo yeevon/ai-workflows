@@ -1,0 +1,3 @@
+verdict: NEEDS-CLEAN-TASKS
+file: runs/queue-pick-20260428-120000.md
+section: —
