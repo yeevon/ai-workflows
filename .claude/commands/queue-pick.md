@@ -30,6 +30,34 @@ After the `roadmap-selector` `Task` spawn, parse the agent's return per
 
 ---
 
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what the `roadmap-selector` will certainly use. Let the agent pull milestone
+README contents and task spec details on demand via its own `Read` tool.
+
+After the `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into
+`runs/queue-pick-<ts>/spawn_roadmap-selector.tokens.txt`.
+
+### roadmap-selector spawn
+
+Minimal pre-load set: recommendation file path, project context brief, milestone scope
+(from `$ARGUMENTS`, or "all open").
+
+**Remove from inline content:** full milestone README content, full task spec content,
+`architecture.md` content.
+
+Output budget directive (include verbatim in the roadmap-selector spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the recommendation file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+---
+
 ## Project setup
 
 Resolve `$ARGUMENTS`:

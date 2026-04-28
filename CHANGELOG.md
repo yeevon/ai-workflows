@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M20 Task 02: Sub-agent input prune (orchestrator-side scope discipline + per-spawn output budget; research brief §Lens 2.3) (2026-04-28)
+
+Orchestrator-side scope discipline across all 5 spawning slash commands (`auto-implement`,
+`clean-tasks`, `clean-implement`, `queue-pick`, `autopilot`): each spawn passes only the
+minimal pre-load set and an output budget directive; bulk content inlining (full
+`architecture.md`, sibling issue files, whole-milestone-README content) is removed.
+Canonical scaffold in `.claude/commands/_common/spawn_prompt_template.md`; all 5 commands
+link to it. KDR-section extractor parses only cited KDR identifiers from a task spec and
+builds a compact pointer for the Auditor spawn rather than inlining the full §9 table.
+Per-spawn token-count instrumentation lands at `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt`.
+Validated: post-T02 Auditor spawn for M12 T01 is ≥ 30% smaller than the pre-T02 baseline
+(frozen fixture `tests/orchestrator/fixtures/m12_t01_pre_t02_spawn_prompt.txt`).
+
+**Files touched:**
+- `.claude/commands/_common/spawn_prompt_template.md` — NEW; canonical spawn-prompt scaffold
+- `.claude/commands/auto-implement.md` — `## Spawn-prompt scope discipline` section added
+- `.claude/commands/clean-tasks.md` — `## Spawn-prompt scope discipline` section added
+- `.claude/commands/clean-implement.md` — `## Spawn-prompt scope discipline` section added
+- `.claude/commands/queue-pick.md` — `## Spawn-prompt scope discipline` section added
+- `.claude/commands/autopilot.md` — `## Spawn-prompt scope discipline` section added
+- `tests/orchestrator/__init__.py` — NEW test package
+- `tests/orchestrator/_helpers.py` — NEW; token-count proxy, KDR extraction helpers, per-agent spawn-prompt builders
+- `tests/orchestrator/test_spawn_prompt_size.py` — NEW; per-agent ceiling assertions + 30% reduction validation (44 tests)
+- `tests/orchestrator/test_kdr_section_extractor.py` — NEW; KDR-citation parser + compact-pointer tests
+- `tests/orchestrator/fixtures/m12_t01_pre_t02_spawn_prompt.txt` — NEW; frozen pre-T02 baseline fixture
+- `CHANGELOG.md` — this entry
+
+**ACs satisfied:**
+- AC-1: All 5 spawning slash commands describe the pruned spawn-prompt convention with per-agent minimal pre-load sets and output budget directives.
+- AC-2: `.claude/commands/_common/spawn_prompt_template.md` exists as the canonical reference; all 5 slash commands link to it.
+- AC-3: `tests/orchestrator/test_spawn_prompt_size.py` passes with the per-agent ceilings (Builder 8K, Auditor 6K, reviewers 4K, task-analyzer 6K, roadmap-selector 4K).
+- AC-4: `tests/orchestrator/test_kdr_section_extractor.py` passes with positive + edge cases.
+- AC-5: Per-spawn token-count instrumentation lands at `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt` (nested per-cycle directory, no `_<cycle>` suffix on filename; verified by `TestSpawnTokenInstrumentation`).
+- AC-6: Validation re-run test `test_m12_t01_audit_spawn_30pct_reduction` asserts ≥ 30% input-token reduction against the frozen M12 T01 baseline.
+- AC-7: CHANGELOG updated with `### Changed — M20 Task 02: ...` entry.
+- AC-8: Status surfaces flipped (spec **Status:** line, milestone README T02 row, "Done when" #2).
+
+**Deviations from spec:** None.
+
+**Cycle 2 (2026-04-28) — 5 locked team decisions applied:** FIX-1 (`auto-implement.md` + `clean-implement.md` Step 2/S1 prose aligned with scope-discipline section); FIX-2 (`autopilot.md` Reviewers row + `architect` row added); FIX-SDET-1 (tautological test deleted, `test_spawn_tokens_file_path_convention` parametrized over `auditor`+`builder`); FIX-SDET-2 (`dependency-auditor` added to reviewer ceiling parametrize); FIX-SDET-3 (`extract_kdr_sections` normalisation + unnormalised-input test added).
+
 ### Changed — M20 Task 01: Sub-agent return-value schema (3-line verdict / file / section), schema-compliance tests, orchestrator parser convention (research brief §Lens 1.3) (2026-04-28)
 
 Hard 3-line return-value schema enforced across all 9 sub-agents in the autonomy fleet

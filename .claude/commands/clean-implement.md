@@ -60,6 +60,71 @@ If anything material is unclear (spec missing, milestone README absent, ambiguou
 
 ---
 
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what each agent will certainly use. Let agents pull the rest on demand via their
+own `Read` tool. Full-document content inlining is wasteful; path references are always safe.
+
+After every `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into
+`runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt` (nested per-cycle directory; no `_<cycle>`
+suffix on the filename).
+
+### Builder spawn
+
+Minimal pre-load set: task spec path, issue file path (may not exist yet), parent milestone
+README path, project context brief.
+
+**Remove from inline content:** sibling task issue files, `architecture.md` content,
+`CHANGELOG.md` content.
+
+Output budget directive (include verbatim in the Builder spawn prompt):
+
+```
+Output budget: 4K tokens. Durable findings live in the file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+### Auditor spawn
+
+Minimal pre-load set: task spec path, issue file path, parent milestone README path,
+project context brief, current `git diff`, cited KDR identifiers (parsed from the task
+spec — e.g. "KDR-003, KDR-013" from the spec's Grounding line).
+
+**Remove from inline content:** whole `architecture.md` content (Auditor reads on-demand),
+sibling issue file content, whole-milestone-README content. Path references stay; content
+inlining goes.
+
+**KDR pre-load rule:** parse KDR citations from the task spec. Pass only those identifiers
+as a compact list (e.g. "Relevant KDRs: KDR-003, KDR-013 — read §9 of architecture.md
+on-demand for the full text"). When no KDRs are cited, pass the §9 grid header only.
+
+Output budget directive (include verbatim in the Auditor spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the issue file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+### Reviewer spawns (security-reviewer, dependency-auditor)
+
+Minimal pre-load set: task spec path, issue file path, project context brief, current
+`git diff`, list of files touched (aggregated from Builder reports across all cycles).
+
+**Remove from inline content:** full source file content, full test file content,
+`architecture.md` content.
+
+Output budget directive (include verbatim in each reviewer spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the issue file you append;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+---
+
 ## Stop conditions (check after every audit, in priority order)
 
 1. **BLOCKER** — Issue file contains a HIGH issue marked `🚧 BLOCKED` requiring user input. Stop, surface verbatim.
@@ -81,7 +146,7 @@ Spawn the `builder` subagent via `Task` with: task identifier, spec path, issue 
 
 ### Step 2 — Auditor
 
-Spawn the `auditor` subagent via `Task` with: task identifier, spec path, issue file path, architecture docs + KDR paths, gate commands, project context brief, the Builder's report from Step 1. Wait for completion.
+Spawn the `auditor` subagent via `Task` with: task identifier, spec path, issue file path, cited KDR identifiers (compact pointer per scope-discipline section above), gate commands, project context brief, the Builder's report from Step 1. Wait for completion.
 
 ### Step 3 — Read issue file and evaluate stop conditions
 
@@ -105,7 +170,7 @@ The functional audit confirmed the task does what the spec says. The security ga
 
 ### Step S1 — Security reviewer (always runs)
 
-Spawn `security-reviewer` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task (aggregate from all Builder reports), architecture docs + KDR paths.
+Spawn `security-reviewer` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task (aggregate from all Builder reports), cited KDR identifiers (compact pointer per scope-discipline section above).
 
 The security-reviewer writes findings into the same issue file under `## Security review`. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
 

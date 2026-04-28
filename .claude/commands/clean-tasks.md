@@ -80,6 +80,35 @@ Project memory: <MEMORY_PATH computed above; substitute the resolved absolute pa
 
 ---
 
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what the `task-analyzer` will certainly use. Let the agent pull full spec contents
+on demand via its own `Read` tool. Inlining the full text of every spec into the spawn prompt
+is wasteful and degrades attention; path references are sufficient.
+
+After every `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into
+`runs/<milestone>/round_<N>/spawn_task-analyzer.tokens.txt`.
+
+### task-analyzer spawn
+
+Minimal pre-load set: milestone directory path, analysis-output file path, project context
+brief, round number, list of task spec filenames.
+
+**Remove from inline content:** full task spec contents (analyzer reads them via its own
+Read tool), `architecture.md` content, sibling milestone README content.
+
+Output budget directive (include verbatim in the task-analyzer spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the task_analysis.md file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+---
+
 ## Phase 1 — Generate (run inline; skip if specs already exist)
 
 Check the milestone directory for `task_*.md` files. If at least one exists, skip generation and go to Phase 2 — the user has already tasked the milestone out.

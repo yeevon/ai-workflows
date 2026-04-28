@@ -29,6 +29,41 @@ After every `Task` spawn, parse the agent's return per
 
 ---
 
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what each agent will certainly use. Let agents pull the rest on demand via their
+own `Read` tool. Full-document content inlining is wasteful; path references are always safe.
+
+After every `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into the appropriate path:
+- For roadmap-selector: `runs/autopilot-<ts>-iter<N>/spawn_roadmap-selector.tokens.txt`
+- For task-analyzer: `runs/<milestone>/round_<N>/spawn_task-analyzer.tokens.txt`
+- For all per-task agents: `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt`
+
+### Per-agent rules (summary — full details in spawn_prompt_template.md)
+
+| Agent | Minimal pre-load | Remove |
+|---|---|---|
+| Builder | spec path, issue path, milestone README path, context brief | sibling issues, architecture.md content, CHANGELOG content |
+| Auditor | spec path, issue path, milestone README path, context brief, `git diff`, cited KDR IDs | architecture.md content, sibling issue content, milestone README content |
+| Reviewers (sr-dev, sr-sdet, security-reviewer, dependency-auditor) | spec path, issue path, context brief, `git diff`, files-touched list | full source files, full test files, architecture.md content |
+| architect | recommendation file path, issue path, context brief, KDR identifiers | full source files, full architecture.md content — see spawn_prompt_template.md §architect |
+| roadmap-selector | recommendation file path, context brief, milestone scope | full milestone README content, full spec content |
+| task-analyzer | milestone dir path, analysis file path, context brief, round number, spec filenames list | full spec content, architecture.md, sibling milestone READMEs |
+
+Output budget directives (include verbatim in each spawn prompt — substitute `<BUDGET>`):
+
+```
+Output budget: <BUDGET> tokens. Durable findings live in the file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+Budgets: Builder = 4K; all other agents = 1–2K.
+
+---
+
 ## Hard halt boundaries (autonomous-mode non-negotiables)
 
 Same as `/auto-implement`'s set, restated so this orchestrator is self-contained. Memory: `feedback_autonomous_mode_boundaries.md`.
