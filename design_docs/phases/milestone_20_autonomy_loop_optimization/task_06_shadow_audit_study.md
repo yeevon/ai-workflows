@@ -9,9 +9,9 @@
 A **decision document** at `design_docs/analysis/autonomy_model_dispatch_study.md` that empirically evaluates a 6-cell matrix of `{Sonnet 4.6, Opus 4.6, Opus 4.7} × {Builder, Auditor}` across 5 representative tasks. The study produces per-cell deltas on:
 
 - **Verdict-count delta.** How many HIGH / MEDIUM / LOW findings each (Builder × Auditor) pair surfaces vs the baseline cell. Catches regressions where Sonnet-Auditor would miss a finding Opus-Auditor would catch.
-- **Token-cost delta.** Total input + output tokens consumed per cell. Sourced from T22's `runs/<task>/<cycle>/<agent>.usage.json` records.
+- **Token-cost delta.** Total input + output tokens consumed per cell. Sourced from T22's `runs/<task>/cycle_<N>/<agent>.usage.json` records (path convention per round-2 M3 — nested `cycle_<N>/` directory).
 - **Wall-clock delta.** Time from task spawn to PASS verdict per cell.
-- **Max-subscription weekly-quota consumption delta** (binding constraint per KDR-003). Sourced from T22's quota proxy. **Primary metric** for the GO/NO-GO recommendation.
+- **Max-subscription weekly-quota consumption delta** (binding constraint per KDR-003). Computed by T06's own analysis script from T22's raw `input_tokens` + `output_tokens` + `cache_*` records (per-model coefficient applied at analysis time — API-price ratio and / or observed Max-quota consumption from the T06 runs themselves). **Primary metric** for the GO/NO-GO recommendation.
 
 Recommendation framing: *"expand the autopilot's queue-drain capacity within the existing weekly quota,"* not *"5× cheaper at the API"* (the published per-token API ratio is directional, not binding for ai-workflows operators).
 
@@ -48,7 +48,7 @@ For each (cell, task) pair (6 × 5 = 30 runs):
 4. Record final Auditor verdict, total cycles, total wall-clock.
 5. Aggregate per-cell across the 5 tasks.
 
-T22's record format (input/output tokens + cache-* + quota-proxy + wall-clock + verdict + cycle-count) is exactly the data the study consumes; no additional instrumentation needed.
+T22's record format (input/output tokens + cache-creation/read tokens + wall-clock + model + effort + verdict, per spawn) is exactly the raw measurement substrate the study consumes; T06's own analysis script computes per-cell quota / cost proxy aggregations from those raw counts (per round-2 H1 layering — T22 substrate, T06 analysis layer).
 
 **Run order:** A1 baseline first (re-runs validate the methodology against today's known PASS results). Then A2-A6 in any order. Each cell-task pair is independent; can be parallelized across days if convenient (no cross-cell state).
 

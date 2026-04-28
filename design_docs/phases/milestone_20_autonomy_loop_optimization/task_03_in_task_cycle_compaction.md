@@ -149,6 +149,7 @@ uv run pytest tests/orchestrator/test_cycle_summary_emission.py tests/orchestrat
 ## Carry-over from task analysis
 
 - **L2 (round 1, 2026-04-27):** The `(within 10 %)` test threshold is a heuristic — without a concrete pre-T03 baseline measurement (M12 T01 spawn was ~12.4 K input tokens — see T22's surface-check output), the 10% bound is impressionistic. Document in the test docstring that 10% is a heuristic, not an empirical bound. T22's actual baseline measurement may revise the threshold once telemetry data lands.
+- **L1 (round 3, 2026-04-27):** T03's test descriptions (the `tests/orchestrator/test_cycle_summary_emission.py` block) cite the flat filename form `cycle_1_summary.md`, `cycle_2_summary.md`, `cycle_3_summary.md`. The directory-layout authority is the nested form `cycle_1/summary.md`, `cycle_2/summary.md`, `cycle_3/summary.md` per audit M11. Update the three test-description lines to use the nested form when the Builder writes the test.
 
 ## Carry-over from prior audits
 

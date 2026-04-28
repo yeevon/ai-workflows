@@ -136,6 +136,7 @@ uv run pytest tests/orchestrator/test_iter_shipped_emission.py tests/orchestrato
 ## Carry-over from task analysis
 
 - **L3 (round 1, 2026-04-27):** The `(within 10 %)` cross-task test threshold is the same heuristic as T03's L2. Document as heuristic, not empirical bound. T22's actual baseline measurement may revise.
+- **L2 (round 3, 2026-04-27):** AC #3 references "`runs/autopilot-<run-ts>/` directory convention documented in autopilot.md" — but the round-2 M5 fix pinned flat hyphenated paths (no per-run subdirectory). Reword AC #3 to: "Path naming convention (`runs/autopilot-<run-ts>-iter<N>(-shipped)?.md`) documented in autopilot.md per §Path convention."
 
 ## Carry-over from prior audits
 
