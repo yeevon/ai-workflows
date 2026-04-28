@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M20 Task 27: Auditor input-volume rotation trigger (client-side simulation of clear_tool_uses_20250919; tunable via AIW_AUDITOR_ROTATION_THRESHOLD; ≤ 70% cumulative input-token reduction on long-cycle audits; Path A rejected per audit H6 — Claude Code Task tool does not expose context_management.edits) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Implements the client-side rotation trigger for Auditor spawns: when an Auditor cycle's
+`input_tokens >= 60000` and verdict is OPEN, the next Auditor spawn receives a compacted
+input (spec path + issue path + `git diff` + `cycle_N/summary.md`) instead of the
+standard pre-load set. Path A (server-side `clear_tool_uses_20250919` via agent
+frontmatter) is rejected — Claude Code's Task tool accepts only
+`name`/`description`/`tools`/`model`; no `context_management.edits` pass-through exists.
+
+**Files touched:**
+- `scripts/orchestration/auditor_rotation.py` — NEW. Core helper exposing
+  `should_rotate(cycle_usage, threshold)`, `get_threshold()` (env-var aware),
+  `write_rotation_log(...)`, `build_compacted_auditor_spawn_input(...)`, and CLI
+  entry point (`--input-tokens`, `--verdict`, `--threshold`).
+- `.claude/commands/_common/auditor_context_management.md` — NEW. Documents the
+  threshold (60K default, `AIW_AUDITOR_ROTATION_THRESHOLD` env override), compaction
+  recovery target (≤ 30K), Path A rejection rationale (audit H6), Auditor-only scope,
+  rotation log format, and integration points.
+- `.claude/commands/auto-implement.md` — §Step 2 Auditor updated with rotation-trigger
+  check (pre-spawn decision logic + rotation log write + compacted-input shape + env var
+  reference). Per-cycle directory layout extended with `auditor_rotation.txt`.
+- `.claude/commands/clean-implement.md` — same rotation-trigger pattern applied.
+- `tests/orchestrator/test_auditor_rotation_trigger.py` — NEW. 29 hermetic tests:
+  threshold-fire, threshold-no-fire, verdict-PASS, verdict-BLOCKED, tunability,
+  env-var override, rotation log format, compacted-input shape.
+- `tests/orchestrator/test_auditor_rotation_doesnt_break_verdict.py` — NEW. 9 hermetic
+  tests: 5-cycle fixture comparing T27-enabled vs disabled; verdicts identical;
+  cumulative input tokens ≤ 70% of disabled when ≥ 1 rotation fires; custom threshold.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `.claude/commands/auto-implement.md` describes the rotation trigger in the
+        per-cycle Auditor spawn loop (per §Mechanism).
+- AC-2: `.claude/commands/clean-implement.md` matches.
+- AC-3: `.claude/commands/_common/auditor_context_management.md` exists; documents
+        threshold (60K default, `AIW_AUDITOR_ROTATION_THRESHOLD` env override),
+        compaction recovery target (≤ 30K), Path A rejection (Claude Code Task tool
+        surface limitation per audit H6).
+- AC-4: Rotation events log to `runs/<task>/cycle_<N>/auditor_rotation.txt`
+        (documented in commands + implemented in `write_rotation_log()`).
+- AC-5: `test_auditor_rotation_trigger.py` passes (29 tests).
+- AC-6: `test_auditor_rotation_doesnt_break_verdict.py` passes (9 tests).
+- AC-7: CHANGELOG updated.
+- AC-8: Status surfaces flipped (spec Status, milestone README task-table row).
+
+**Deviations from spec:** None.
+
+#### Cycle 2 sub-entry — M20 Task 27 terminal-gate fixes (sr-sdet B-1 + F-1 + F-2 + A-1) (2026-04-28)
+
+Test-quality fixes only. No `ai_workflows/` changes. No functional logic change to `auditor_rotation.py` except `get_threshold()` now guards zero (adds `int(stripped) > 0` to the isdigit check, preventing zero-threshold runaway).
+
+**Files touched:**
+- `scripts/orchestration/auditor_rotation.py` — `get_threshold()` docstring updated to document accepted/rejected env-var values (positive integers only; -1/0/float strings all fall back to 60K); zero guard added (`int(stripped) > 0`).
+- `tests/orchestrator/test_auditor_rotation_trigger.py` — F-1: added 3 boundary tests to `TestGetThreshold` (`-1`, `0`, `60000.0` all fall back to 60K). F-2: replaced tautological `test_no_prior_chat_history_placeholder` with structural `test_no_duplication_of_cycle_summary_content` (passes prior-Auditor-verdict text as input; verifies it appears exactly once in the output). A-1: `repo_root` + `rotation_mod` fixtures promoted to `scope="module"`.
+- `tests/orchestrator/test_auditor_rotation_doesnt_break_verdict.py` — B-1: replaced tautological `TestVerdictsUnchanged` (2 tests asserting `VERDICTS == VERDICTS` + 1 test asserting `len()==len()`) with a single `test_same_record_count` asserting both simulators return `len(VERDICTS)` records; inline comment acknowledges "rotation doesn't change verdicts" requires a live test. A-2: `test_same_number_of_cycles` removed (absorbed into `test_same_record_count`). A-1: `repo_root` + `rotation_mod` fixtures promoted to `scope="module"`.
+
+**ACs satisfied (carry-over from cycle-1 terminal gate):**
+- B-1 fixed: `TestVerdictsUnchanged` no longer tautological.
+- F-1 fixed: `get_threshold()` documented + zero guard added + 3 boundary tests added.
+- F-2 fixed: `test_no_duplication_of_cycle_summary_content` replaces weak negative assertion.
+- A-1 applied: both `rotation_mod` fixtures use `scope="module"`.
+- A-2 resolved: `test_same_number_of_cycles` removed; merged into `test_same_record_count`.
+
+**Deviations from locked decision:** None. Option B selected for F-1 as locked.
+
 ### Added — M20 Task 23: Cache-breakpoint discipline (stable-prefix construction + 2-call verification harness; addresses anthropics/claude-code #27048/#34629/#42338/#43657 5–20× session-cost blowup failure mode) (2026-04-28)
 
 Orchestration-infrastructure task. No `ai_workflows/` package changes.

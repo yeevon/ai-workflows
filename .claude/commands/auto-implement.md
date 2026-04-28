@@ -96,7 +96,7 @@ first Builder.  Create `runs/<task-shorthand>/cycle_<N>/` at the start of each s
 cycle.  `<task-shorthand>` is `m<MM>_t<NN>` with both M and T zero-padded to two digits
 (e.g. `m20_t03`, `m05_t02`, `m09_t01`).
 
-Per-cycle directory layout (canonical — shared with T05, T08, T22):
+Per-cycle directory layout (canonical — shared with T05, T08, T22, T27):
 
 ```
 runs/<task-shorthand>/
@@ -112,6 +112,7 @@ runs/<task-shorthand>/
     gate_ruff.txt               ← T08
     spawn_<agent>.tokens.txt    ← T02 — per-spawn token count
     agent_<name>_raw_return.txt ← T01 — full text return per agent
+    auditor_rotation.txt        ← T27 — rotation event log (present only if rotation fired)
   cycle_2/
     ...
   cycle_N/
@@ -315,10 +316,39 @@ Record lands at `runs/<task>/cycle_<N>/builder.usage.json`.
 
 ### Step 2 — Auditor
 
-Spawn the `auditor` subagent via `Task` with the inputs prescribed by the
-"Auditor spawn — read-only-latest-summary rule" section above (cycle 1: standard
-pre-load set; cycle N ≥ 2: add the latest cycle summary). Include cited KDR
-identifiers (compact pointer per scope-discipline section above). Wait for completion.
+**Input-volume rotation trigger (T27):** Before spawning the Auditor on cycle N ≥ 2,
+read `runs/<task>/cycle_{N-1}/auditor.usage.json` (T22 record from the previous cycle).
+Run the rotation check:
+
+```bash
+python scripts/orchestration/auditor_rotation.py \
+  --input-tokens <input_tokens from cycle_{N-1} record> \
+  --verdict <verdict from cycle_{N-1} record>
+```
+
+- Output `ROTATE` (exit 1) AND cycle N-1 verdict was `OPEN` → spawn the Auditor with
+  the **compacted input** (spec path + issue file path + project context brief +
+  current `git diff` + `runs/<task>/cycle_{N-1}/summary.md` content only).
+  Write the rotation event log:
+  ```bash
+  # (orchestrator writes this file directly — no separate script call needed)
+  # Path: runs/<task>/cycle_{N-1}/auditor_rotation.txt
+  # Content: ROTATED: cycle <N-1> input_tokens=<value>; cycle <N> spawn input
+  #          compacted (cycle_summary + diff only)
+  ```
+  See [`.claude/commands/_common/auditor_context_management.md`](_common/auditor_context_management.md)
+  for the full compacted-input shape and Path A rejection rationale (audit H6).
+- Output `NO-ROTATE` (exit 0) → spawn the Auditor with the **standard input** per
+  the "Auditor spawn — read-only-latest-summary rule" section above.
+- **Cycle 1:** no prior telemetry record exists; always use standard input (no rotation check).
+- **Verdict PASS:** rotation check is moot — the loop ends. No rotation log written.
+
+`AIW_AUDITOR_ROTATION_THRESHOLD` env var lowers/raises the trigger threshold (default
+60 000 input tokens). Pass it through when invoking the helper.
+
+Spawn the `auditor` subagent via `Task` with the inputs selected above (compacted or
+standard). Include cited KDR identifiers (compact pointer per scope-discipline section
+above). Wait for completion.
 
 **Telemetry (T22):** before spawning, run:
 ```bash
