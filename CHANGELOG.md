@@ -7,6 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M20 Task 06: Autonomy model-dispatch study (6-cell × 5-task matrix; recommendation gates T07; design_docs/analysis/autonomy_model_dispatch_study.md) (2026-04-28)
+
+Shadow-Audit empirical study harness and study report for the 6-cell model-dispatch
+matrix (Sonnet 4.6 / Opus 4.6 / Opus 4.7 × Builder / Auditor roles across 5 representative
+tasks). Verdict: DEFER — recursive-subprocess confound and multi-day wall-clock make full
+30-cell data collection infeasible inside a single autopilot iteration. Harness is ready
+for operator-run resumption outside autopilot.
+
+**Files touched:**
+- `design_docs/analysis/autonomy_model_dispatch_study.md` — NEW. 208-line study report with
+  all spec sections: verdict (DEFER), 6-cell results table, per-task-kind verdict deltas,
+  cost analysis, wall-clock analysis, provisional default-tier rule, complexity threshold,
+  risks + caveats, reopen triggers, appendices.
+- `scripts/orchestration/run_t06_study.py` — NEW. Reproducible harness: single-cell and
+  full-study subcommands; throwaway-branch management; T22 telemetry aggregation; L5
+  bail-out (quota projection > 5% of weekly Max → exit code 2 + bail_manifest.json).
+- `runs/study_t06/A1-m12_t01/methodology_note.json` — NEW. A1 methodology validation stub
+  documenting why recursive-subprocess invocation was not attempted inline.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/task_06_shadow_audit_study.md` —
+  Status flipped to Done (partial — harness + DEFER report; AC #7 deferred to T06-resume).
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/README.md` — T06 task table
+  row + G3 exit criterion flipped to Done.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/issues/task_06_issue.md` — NEW.
+  Issue file with AC evaluation, locked decisions, and carry-over for T06-resume.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `design_docs/analysis/autonomy_model_dispatch_study.md` exists with all sections populated.
+- AC-2: Verdict line `**Recommendation: DEFER on T07 default flips**` with two-reason justification.
+- AC-3: Per-cell metrics table has all 6 cells (A1-A6); `grep -c "^| A[1-6]"` returns 6.
+- AC-4: Per-task-kind verdict deltas table present; 5 task kinds; data DEFERRED with directional priors.
+- AC-5: Default-tier rule table with per-role provisional assignments + `--expert`/`--cheap` scope.
+- AC-6: Complexity threshold section with 4 named signals.
+- AC-7: DEFERRED — only `runs/study_t06/A1-m12_t01/` exists (methodology stub). Carry-over
+  C1 in issue file for T06-resume operator.
+- AC-8: this CHANGELOG entry.
+- AC-9: status surfaces flipped (spec Status, milestone README task row, G3 exit criterion).
+
+**KDR note:** T06 is analysis-only. No `ai_workflows/` package changes. Layer rule N/A.
+KDR-003 holds: zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY` reads.
+The harness calls `claude --dangerously-skip-permissions` via the production OAuth path.
+
+**Deviations from spec:**
+- AC #7 (30 cell-task run directories) not satisfied. Documented rationale: recursive-subprocess
+  confound makes inside-autopilot measurement invalid; multi-day wall-clock infeasible in single
+  iteration. Harness fully implemented for outside-autopilot resumption.
+
+*(2026-04-28 cycle 2 audit fix — MED-1 resolution):*
+- `design_docs/analysis/autonomy_model_dispatch_study.md` — Study status header corrected from
+  "Methodology validated" to "Methodology designed; data collection and methodology execution
+  both deferred (harness ready)."
+- `runs/study_t06/A1-m12_t01/result.json` — renamed to `result_dry_run.json` to disambiguate
+  dry-run artifact from a real cell result.
+
+*(2026-04-28 cycle 4 terminal-gate fix — sr-dev FIX-THEN-SHIP + sr-sdet BLOCK resolved):*
+- `scripts/orchestration/run_t06_study.py` — four harness bugs fixed:
+  - **BLOCK-1 (sr-sdet):** `_compute_quota_projection` parameter renamed
+    `n_remaining_cells` → `n_total_cells` (default 6); formula changed from
+    `a1_total_tokens × 30` to `a1_total_tokens × n_total_cells`. The old formula
+    treated the 5-task A1 aggregate as a per-pair cost, producing a 5× overestimate
+    that caused the bail-out to fire on every non-trivial run.
+  - **BLOCK-2 / FIX-1 (sr-sdet / sr-dev):** `_write_bail_manifest` call in
+    `run_full_study` now receives an `a1_summary` dict
+    (`{"a1_task_results": [...], "a1_total_tokens": <int>}`) instead of the stale
+    last-loop `result` variable. Updated function signature, docstring, and
+    `bail_manifest.json` schema accordingly.
+  - **FIX-2 (sr-dev):** `run_cell` `finally:` block now raises on
+    `_restore_branch` failure (FATAL print + re-raise), preventing the outer loop
+    from continuing on a corrupt repo where HEAD is still on the throwaway branch.
+    `_delete_throwaway_branch` is only reached when restore succeeded.
+  - **FIX-2 (sr-sdet):** L5 bail-out check moved to fire after the **first task pair**
+    (A1-m12_t01) inside the A1 loop, using per-pair scale factor 30
+    (`len(CELLS) × len(STUDY_TASKS)`), per spec L5 "bail if cost exceeds 5% projected
+    to study end." Previously the check fired only after all 5 A1 tasks completed.
+  - **Dry-run fix (uncovered by new test):** `_get_current_branch` now guarded inside
+    `if dry_run:` block — dry-run path no longer calls git at all.
+- `tests/orchestration/test_run_t06_harness.py` — NEW. 5 hermetic tests:
+  `test_compute_quota_projection_uses_correct_scale_factor`,
+  `test_compute_quota_projection_default_n_total_cells_is_6`,
+  `test_compute_quota_projection_no_bail_when_low_tokens`,
+  `test_bail_manifest_contains_aggregate_not_last_task_result`,
+  `test_run_cell_dry_run_completes_without_subprocess`. All pass without network or
+  subprocess.
+
+*(2026-04-28 cycle 5 terminal-gate fix — sr-sdet FIX-A + FIX-B + LOW-9 closure):*
+- **FIX-B / LOW-9:** `scripts/orchestration/run_t06_study.py` — single-cell CLI
+  bail-out call site (line ~842) fixed: `_write_bail_manifest(projection, result)` →
+  `_write_bail_manifest(projection, {"a1_task_results": [result], "a1_total_tokens": ...})`.
+  Aligns with the full-study path's aggregate dict contract.
+- **FIX-A:** `tests/orchestration/test_run_t06_harness.py` — 2 new tests added (5 → 7):
+  `test_run_full_study_dry_run_completes_without_bail` pins the `i==0` bail-out guard
+  (zero tokens in dry_run must not trigger bail; study_manifest.json must have total_pairs==30);
+  `test_single_cell_bail_manifest_shape` pins the LOW-9 call-site fix through `main()`.
+- **ADV-4:** `test_compute_quota_projection_default_n_total_cells_is_6` strengthened
+  from tautological equality assertion to independent arithmetic check
+  (`projected_total == 600_000`).
+
 ### Added — M20 Task 22: Per-cycle agent telemetry wrapper (raw token capture + model + effort + wall-clock + verdict; cache-* fields conditional on Task tool surface check; quota-proxy aggregation owned by T06; basis for T06 study + T07 dispatch defaults + T23 cache verification + T27 rotation trigger; mitigates anthropics/claude-code #52502 metering opacity) (2026-04-28) (cycle 2 follow-up: rewrote concurrency test for same-triple contention + added zero-cache divide-by-zero guard test)
 
 New orchestration-layer telemetry infrastructure. Wraps every sub-agent Task spawn
