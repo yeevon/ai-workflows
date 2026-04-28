@@ -294,6 +294,55 @@ When re-looping from a security verdict, the Builder's next-cycle inputs include
 
 ---
 
+## Gate-capture-and-parse convention (required before declaring CLEAN)
+
+**Reference:** [`.claude/commands/_common/gate_parse_patterns.md`](_common/gate_parse_patterns.md)
+
+Before declaring the task fully CLEAN (after the security gate passes), the orchestrator
+independently runs each gate command and captures output to
+`runs/<task>/cycle_<N>/gate_<name>.txt`.
+
+### Capture step
+
+For each gate (`uv run pytest`, `uv run lint-imports`, `uv run ruff check`, plus any
+task-specific smoke test gates named in the spec):
+
+1. Run the gate command via Bash.
+2. Capture stdout + stderr + exit code into `runs/<task>/cycle_<N>/gate_<name>.txt`
+   using the format described in `_common/gate_parse_patterns.md` §Capture format.
+   Gate file names: `gate_pytest.txt`, `gate_lint-imports.txt`, `gate_ruff.txt`
+   (task-specific gates use their command slug, e.g. `gate_smoke.txt`).
+3. Record the exit code in the same file or a companion `gate_<name>.exit` file.
+
+### Parse step
+
+For each captured file, parse the footer line per the regex table in
+`_common/gate_parse_patterns.md`:
+
+- `pytest`:       `^=+ \d+ passed` (and no `failed` on the same line)
+- `ruff`:         `^All checks passed\.$` or `^\d+ files? checked\.$`
+- `lint-imports`: `^Contracts kept$` (exact, trimmed)
+
+### Halt condition
+
+If **any** of the following is true for any gate, halt immediately with:
+
+```
+🚧 BLOCKED: gate <name> output not parseable; see runs/<task>/cycle_<N>/gate_<name>.txt
+```
+
+1. The captured file is empty (zero bytes or whitespace only).
+2. No line in the file matches the gate's footer regex.
+3. Exit code ≠ 0 (even if a footer line is present).
+4. Footer line is present but indicates failures (e.g. `failed` in a pytest footer).
+
+**Do not declare the task CLEAN if any gate halts.**
+
+The captured files become the durable record consulted by the user on their follow-up
+review (per the per-cycle directory layout above).
+
+---
+
 ## Reporting
 
 End-of-cycle one-liner for build → audit cycles:

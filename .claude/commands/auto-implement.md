@@ -419,6 +419,55 @@ terminal verdict in priority order:
 
 ---
 
+## Gate-capture-and-parse convention (required before AUTO-CLEAN stamp)
+
+**Reference:** [`.claude/commands/_common/gate_parse_patterns.md`](_common/gate_parse_patterns.md)
+
+Before stamping AUTO-CLEAN (i.e., before the commit ceremony), the orchestrator
+independently runs each gate command and captures output to
+`runs/<task>/cycle_<N>/gate_<name>.txt`.
+
+### Capture step
+
+For each gate (`uv run pytest`, `uv run lint-imports`, `uv run ruff check`, plus any
+task-specific smoke test gates named in the spec):
+
+1. Run the gate command via Bash.
+2. Capture stdout + stderr + exit code into `runs/<task>/cycle_<N>/gate_<name>.txt`
+   using the format described in `_common/gate_parse_patterns.md` §Capture format.
+   Gate file names: `gate_pytest.txt`, `gate_lint-imports.txt`, `gate_ruff.txt`
+   (task-specific gates use their command slug, e.g. `gate_smoke.txt`).
+3. Record the exit code in the same file or a companion `gate_<name>.exit` file.
+
+### Parse step
+
+For each captured file, parse the footer line per the regex table in
+`_common/gate_parse_patterns.md`:
+
+- `pytest`:       `^=+ \d+ passed` (and no `failed` on the same line)
+- `ruff`:         `^All checks passed\.$` or `^\d+ files? checked\.$`
+- `lint-imports`: `^Contracts kept$` (exact, trimmed)
+
+### Halt condition
+
+If **any** of the following is true for any gate, halt immediately with:
+
+```
+🚧 BLOCKED: gate <name> output not parseable; see runs/<task>/cycle_<N>/gate_<name>.txt
+```
+
+1. The captured file is empty (zero bytes or whitespace only).
+2. No line in the file matches the gate's footer regex.
+3. Exit code ≠ 0 (even if a footer line is present).
+4. Footer line is present but indicates failures (e.g. `failed` in a pytest footer).
+
+**Do not proceed to AUTO-CLEAN stamp if any gate halts.**
+
+The captured files become the durable record consulted by Auditor + sr-dev + sr-sdet
+on their re-runs (per the per-cycle directory layout above).
+
+---
+
 ## Commit ceremony (runs once, after TERMINAL CLEAN — autonomous-mode only)
 
 Per autonomy decisions 1 and 2.

@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M20 Task 08: Gate-output integrity (orchestrator-side raw-stdout capture + footer-line parse; fail-closed on missing output; load-bearing under default-Sonnet) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Defense-in-depth: the orchestrator independently captures and parses the raw stdout of
+each gate command before stamping AUTO-CLEAN / CLEAN. Fail-closed on missing or
+unparseable output. Paired with T01's return-schema parser as the second defence layer
+(T01 catches malformed agent verdict-lines; T08 catches Builder claims of "gates pass"
+with empty or failure-indicating actual stdout).
+
+**Files touched:**
+- `.claude/commands/_common/gate_parse_patterns.md` — NEW. Single source of truth for
+  per-gate footer-line regex (pytest, ruff, lint-imports) plus extension hooks for
+  task-specific smoke tests. Capture format spec. Halt condition wording.
+- `.claude/commands/auto-implement.md` — Added `## Gate-capture-and-parse convention`
+  section before the commit ceremony. References `gate_parse_patterns.md`. Mandates
+  `gate_pytest.txt`, `gate_lint-imports.txt`, `gate_ruff.txt` in
+  `runs/<task>/cycle_<N>/`. Halt message: `🚧 BLOCKED: gate <name> output not parseable`.
+- `.claude/commands/clean-implement.md` — Same gate-capture-and-parse convention added
+  before the `## Reporting` section. Consistent with auto-implement.md.
+- `tests/orchestrator/test_gate_output_capture.py` — NEW. 46 tests covering: valid pytest
+  footer, empty stdout, claim-pass-without-footer, exit-code-nonzero, footer-with-failures,
+  ruff and lint-imports variants, unknown gate, BLOCKED message format, and
+  gate_parse_patterns.md file-existence + content assertions.
+- `tests/orchestrator/test_auto_clean_stamp_safety.py` — NEW. Orchestrator-level stamp-
+  safety simulation: empty gate file halts, all-passing gates stamp AUTO-CLEAN, one failure
+  footer halts, non-zero exit halts, BLOCKED message references correct path, capture path
+  convention, command-file reference assertions.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `.claude/commands/auto-implement.md` describes gate-capture-and-parse convention.
+- AC-2: `.claude/commands/clean-implement.md` matches.
+- AC-3: `.claude/commands/_common/gate_parse_patterns.md` exists with per-gate regex.
+- AC-4: Captured gate outputs land at `runs/<task>/cycle_<N>/gate_<name>.txt` (convention
+  documented in gate_parse_patterns.md + verified in test_auto_clean_stamp_safety.py).
+- AC-5: Halt-on-missing-footer surfaces `🚧 BLOCKED: gate <name> output not parseable`.
+- AC-6: `tests/orchestrator/test_gate_output_capture.py` passes (46 tests).
+- AC-7: `tests/orchestrator/test_auto_clean_stamp_safety.py` passes.
+- AC-8: This CHANGELOG entry.
+- AC-9: Status surfaces flipped (spec Status, milestone README task row + G5 exit criterion #9).
+
+**KDR note:** T08 is orchestration-layer infrastructure (no `ai_workflows/` change). Layer rule
+N/A. (orchestration infrastructure; no `ai_workflows/` change)
+
+_Cycle 2 (2026-04-28): Fixed sr-sdet BLOCK-1 (added `test_failure_footer_zero_exit_is_blocked_by_condition4` with exit_code=0 to exercise Condition 4; renamed prior test to `test_failure_footer_nonzero_exit_is_blocked`) and BLOCK-2 (replaced tautological `test_gate_filename_convention` assertion with path derivation via `build_blocked_message`); added ADV-1 comment to `test_no_gates_stamps`._
+
 ### Added — M20 Task 06: Autonomy model-dispatch study (6-cell × 5-task matrix; recommendation gates T07; design_docs/analysis/autonomy_model_dispatch_study.md) (2026-04-28)
 
 Shadow-Audit empirical study harness and study report for the 6-cell model-dispatch

@@ -1,6 +1,6 @@
 # Task 08 — Gate-output integrity (raw-stdout parse, fail-closed on missing output)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done (2026-04-28).
 **Kind:** Safeguards / code.
 **Grounding:** [milestone README](README.md) · memory `project_autonomy_optimization_followups.md` thread #10 · sibling [task_01](task_01_sub_agent_return_value_schema.md) (T08's first defence layer reuses T01's orchestrator parser) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md).
 
