@@ -69,6 +69,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ai_workflows.primitives.retry import RetryPolicy
+from ai_workflows.primitives.tiers import TierConfig
 from ai_workflows.workflows.loader import (
     ExternalWorkflowImportError,
     load_extra_workflow_modules,
@@ -90,6 +91,7 @@ __all__ = [
     "get",
     "get_spec",
     "list_workflows",
+    "auditor_tier_registry",
     "ExternalWorkflowImportError",
     "load_extra_workflow_modules",
     # M19 T01 — declarative authoring surface:
@@ -165,6 +167,43 @@ def get_spec(name: str) -> WorkflowSpec | None:
 def list_workflows() -> list[str]:
     """Return all registered workflow names, sorted alphabetically."""
     return sorted(_REGISTRY)
+
+
+def auditor_tier_registry() -> dict[str, TierConfig]:
+    """Return the two auditor :class:`TierConfig` entries for M12 T05.
+
+    M12 Task 05 — used by the standalone ``run_audit_cascade`` MCP tool
+    (``mcp/server.py``) to obtain an auditor-only tier registry without
+    pulling in the full workflow-specific registry (which includes planner,
+    explorer, or slice-refactor tiers the standalone audit does not need).
+
+    Extracts ``auditor-sonnet`` and ``auditor-opus`` from
+    :func:`ai_workflows.workflows.planner.planner_tier_registry` at call
+    time so the auditor tier definitions stay in one canonical location
+    (``planner.py:789-846``) — the MCP tool is a consumer, not a second
+    definition site (KDR-011 / ADR-0004 §Decision item 1).
+
+    Relationship to other modules
+    -----------------------------
+    * :mod:`ai_workflows.workflows.planner` — canonical owner of the
+      auditor-tier ``TierConfig`` entries; this helper is a thin
+      projection on top.
+    * :mod:`ai_workflows.mcp.server` — sole consumer at T05 scope; used
+      inside ``_build_standalone_audit_config`` to supply the tier
+      registry for a single-pass audit invocation.
+    """
+    # Import here (not at module top) to avoid circular import at
+    # ai_workflows.workflows package-load time: planner.py calls
+    # `register("planner", ...)` which imports ai_workflows.workflows,
+    # so a top-level import of planner would form a cycle on the first
+    # import of this package.
+    from ai_workflows.workflows.planner import planner_tier_registry
+
+    full = planner_tier_registry()
+    return {
+        "auditor-sonnet": full["auditor-sonnet"],
+        "auditor-opus": full["auditor-opus"],
+    }
 
 
 def _reset_for_tests() -> None:

@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M12 Task 05: run_audit_cascade MCP tool + SKILL.md ad-hoc-audit section (2026-04-28)
+
+Adds a standalone `run_audit_cascade` MCP tool that audits an existing artefact via a
+single-pass auditor-tier `tiered_node` invocation, outside any workflow run.
+
+**Files touched:**
+- `ai_workflows/mcp/schemas.py` — new `RunAuditCascadeInput` + `RunAuditCascadeOutput` pydantic
+  models added to `__all__`. `AuditVerdict` imported from `graph/audit_cascade.py` for the
+  `verdicts_by_tier` type hint only — NOT added to `__all__` (canonical owner stays
+  `graph/audit_cascade.py:75`). `model_validator` import added.
+- `ai_workflows/mcp/server.py` — new `@mcp.tool() async def run_audit_cascade(payload) ->
+  RunAuditCascadeOutput` (fifth tool). Four private helpers: `_resolve_audit_artefact`,
+  `_build_standalone_audit_config`, `_build_audit_configurable`,
+  `_make_standalone_auditor_prompt_fn`. Updated imports: `uuid`, `json`, `CostTracker`,
+  `CostTrackingCallback`, `tiered_node`, `AuditVerdict`, `NonRetryable`, `RetryableSemantic`,
+  `RetryPolicy`, `TierConfig`, `auditor_tier_registry`.
+- `ai_workflows/workflows/__init__.py` — new `auditor_tier_registry()` helper returning
+  `{"auditor-sonnet": ..., "auditor-opus": ...}` extracted from `planner_tier_registry()` at
+  call time. Added `TierConfig` import and `"auditor_tier_registry"` to `__all__`.
+- `.claude/skills/ai-workflows/SKILL.md` — new "Ad-hoc artefact audit" section under §Primary
+  surface — MCP, after the existing four tool sections.
+- `tests/mcp/test_run_audit_cascade.py` — NEW: 6 hermetic tests covering all 4 validator edge
+  cases + inline-artefact happy path + storage-backed artefact with H2 decode check.
+- `tests/mcp/test_run_audit_cascade_e2e.py` — NEW: 1 AIW_E2E-gated wire-level smoke against
+  real `auditor-sonnet` Claude CLI.
+- `tests/mcp/test_scaffold.py` — updated `EXPECTED_TOOLS` set from 4 to 5 tools;
+  `test_all_four_tools_registered` → `test_all_five_tools_registered`.
+- `design_docs/architecture.md:105` — `M12 T04` → `M12 T05` (stale task-number fix).
+- `design_docs/adr/0004_tiered_audit_cascade.md:56` — `M12 T04` → `M12 T05`.
+- `design_docs/adr/0004_tiered_audit_cascade.md:73` — `M12 T04` → `M12 T05`.
+
+**KDR cited:** KDR-008 (FastMCP pydantic schema as public contract; tool additions purely
+additive — existing 4 tools' schemas unchanged). KDR-011 (auditor tier telemetry via
+`CostTracker.by_role(audit_run_id)` with factory-time `role="auditor"` on `tiered_node`).
+
+**Locked decisions applied:**
+- H1 Option A (bypass cascade primitive): tool instantiates `tiered_node(role="auditor")`
+  directly, does NOT call `audit_cascade_node()`. Round-2 explicit parse:
+  `AuditVerdict.model_validate_json(raw_text)` added between auditor node call and verdict check.
+- H2 Option A (caller supplies `artefact_kind`): `storage.read_artifact(run_id, kind)` + 
+  `json.loads(row["payload_json"])` decode — `read_artifact` returns the SQL row wrapper, not
+  the artefact payload.
+
+**Stale references fixed:** 3 `M12 T04` → `M12 T05` occurrences across `architecture.md` and
+`adr/0004_tiered_audit_cascade.md` (TA-T05-LOW-02 partial — only the task-number fix; cascade-
+reuse framing rewrite forward-deferred to M12 T07 close-out per spec carry-over).
+
+**Carry-over satisfied:**
+- TA-T04-LOW-04: `by_role: dict[str, float] | None` on `RunAuditCascadeOutput` — landed.
+- TA-T05-LOW-01: validator error-message ordering — informational, no action.
+- TA-T05-LOW-02: only task-number fix applied; framing rewrite deferred to T07.
+- TA-T05-LOW-03: `pricing={}` inline comment softened from "required/raises KeyError" to
+  "explicit per spec — Max flat-rate computes $0 with empty pricing".
+
+**AIW_E2E smoke result (cycle 1 — RETRACTED):** Cycle 1 claimed PASSED; auditor
+re-ran and found 1 FAILED — `ToolError: auditor produced unparseable output` because
+real `auditor-sonnet` wraps JSON in a markdown code fence (```` ```json…``` ````).
+
+**Cycle 2 fix (HIGH-01) — markdown code-fence strip:**
+- Added `_strip_code_fence(raw_text: str) -> str` helper to
+  `ai_workflows/graph/audit_cascade.py` (alongside `AuditVerdict`; exported in
+  `__all__`). Strips a leading/trailing ```` ```json…``` ```` markdown fence before
+  calling `model_validate_json`. Both fenced and unfenced shapes accepted.
+- Updated `_audit_verdict_node` in `audit_cascade.py` to call
+  `AuditVerdict.model_validate_json(_strip_code_fence(auditor_raw))` — same latent
+  bug fixed in the cascade primitive so workflows with `audit_cascade_enabled=True`
+  don't re-discover it independently (cross-task observation from T05 audit).
+- Updated `run_audit_cascade` tool body in `mcp/server.py` to import and call
+  `_strip_code_fence` before `model_validate_json`.
+- Added 2 hermetic regression tests to `tests/graph/test_audit_cascade.py` (tests
+  14-15): fenced-JSON shape parses cleanly; unfenced raw JSON passes through
+  unchanged.
+- Added hazard note to `tests/mcp/conftest.py` docstring documenting that the
+  autouse `_stub_planner_tier_registry` also implicitly stubs `auditor_tier_registry`
+  and explaining the two established workaround patterns (MED-02 fix, Option B).
+
+**Cycle 3 defect-fix (SR-DEV-BLOCK-01 / SR-SDET-BLOCK-01 + SR-SDET-FIX-01 + SR-SDET-FIX-02):**
+`RetryableTransient` added to the `except` tuple in `run_audit_cascade` (`server.py:485`)
+and to the import at `server.py:109`. Two new hermetic tests: test 7 seeds
+`RetryableTransient` into the stub and asserts `ToolError`; test 8 seeds `_AUDIT_FAIL_JSON`
+and asserts the `passed=False` / `suggested_approach` / `failure_reasons` shape. Test 5's
+`by_role.get("auditor", 0.0)` tautological assertion tightened to `"auditor" in output.by_role`.
+
+**AIW_E2E smoke result (cycle 2):** `1 passed in 16.00s`
+(`AIW_E2E=1 uv run pytest tests/mcp/test_run_audit_cascade_e2e.py -v`,
+`test_inline_artefact_audited_by_real_sonnet_e2e PASSED`, real `auditor-sonnet`
+Claude CLI subprocess, inline artefact `{"sample": "tiny artefact"}`,
+`output.passed` returned, `by_role["auditor"]` populated).
+
 ### Added — M12 Task 04: Telemetry — TokenUsage.role tag + CostTracker.by_role + cascade-step records (2026-04-27)
 
 Adds `role` attribution to the cost ledger so cascade-enabled runs can surface the

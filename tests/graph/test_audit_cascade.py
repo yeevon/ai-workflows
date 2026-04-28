@@ -1,7 +1,7 @@
 """Tests for ``ai_workflows.graph.audit_cascade`` (M12 Task 02 / amended M12 Task 08
-/ M12 Task 04 — KDR-004, KDR-006, KDR-011).
+/ M12 Task 04 / M12 Task 05 — KDR-004, KDR-006, KDR-011).
 
-Thirteen hermetic tests exercising the compiled cascade sub-graph with stub provider
+Fifteen hermetic tests exercising the compiled cascade sub-graph with stub provider
 adapters.  No real LLM call, no subprocess.  The stub pattern mirrors
 ``tests/graph/test_tiered_node.py:104,172`` — ``monkeypatch.setattr`` on the
 module-level adapter names inside ``ai_workflows.graph.tiered_node``.
@@ -30,6 +30,10 @@ T04 tests (cascade tests 12-13 in this file):
     node does NOT dispatch — protective assertion).
 13. Role attribution survives audit retry cycle: no author record carries
     role="auditor" and vice versa across retry cycles.
+
+T05 tests (cascade tests 14-15 in this file — ``_strip_code_fence`` regression):
+14. Fenced JSON (```json…```) parses cleanly via ``_strip_code_fence``.
+15. Unfenced raw JSON passes through ``_strip_code_fence`` unchanged and parses.
 """
 
 from __future__ import annotations
@@ -44,7 +48,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel
 
 from ai_workflows.graph import tiered_node as tiered_node_module
-from ai_workflows.graph.audit_cascade import audit_cascade_node
+from ai_workflows.graph.audit_cascade import _strip_code_fence, audit_cascade_node
 from ai_workflows.graph.checkpointer import build_async_checkpointer
 from ai_workflows.graph.cost_callback import CostTrackingCallback
 from ai_workflows.primitives.cost import CostTracker, TokenUsage
@@ -1044,3 +1048,57 @@ async def test_cascade_role_attribution_survives_audit_retry_cycle(
         assert r.role == "author", f"Author record carries unexpected role: {r.role!r}"
     for r in auditor_records:
         assert r.role == "auditor", f"Auditor record carries unexpected role: {r.role!r}"
+
+
+# ---------------------------------------------------------------------------
+# Tests 14-15: _strip_code_fence regression (M12 Task 05 HIGH-01 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_strip_code_fence_handles_markdown_wrapped_json() -> None:
+    """Fenced JSON (```json…```) parses cleanly after ``_strip_code_fence``.
+
+    Pins the M12 T05 HIGH-01 fix: real ``auditor-sonnet`` CLI responses wrap
+    JSON in a markdown code fence despite system-prompt instructions to emit
+    raw JSON only.  ``_strip_code_fence`` must strip the fence so that
+    ``AuditVerdict.model_validate_json`` can parse the inner payload.
+
+    Tests the ````` ```json\\n{...}\\n``` ````` shape (the exact format the
+    AIW_E2E smoke caught failing in cycle 1).
+    """
+    from ai_workflows.graph.audit_cascade import AuditVerdict
+
+    inner_json = '{"passed": true, "failure_reasons": [], "suggested_approach": null}'
+    fenced = f"```json\n{inner_json}\n```"
+
+    stripped = _strip_code_fence(fenced)
+    assert stripped == inner_json, (
+        f"Expected stripped text to equal inner JSON; got {stripped!r}"
+    )
+    # Must parse cleanly into AuditVerdict
+    verdict = AuditVerdict.model_validate_json(stripped)
+    assert verdict.passed is True
+    assert verdict.failure_reasons == []
+    assert verdict.suggested_approach is None
+
+
+def test_strip_code_fence_passes_unfenced_json_unchanged() -> None:
+    """Raw unfenced JSON passes through ``_strip_code_fence`` unchanged.
+
+    Guards against the helper accidentally requiring fences — stub adapters
+    return raw JSON strings; the helper must not corrupt them.
+    """
+    from ai_workflows.graph.audit_cascade import AuditVerdict
+
+    raw_json = (
+        '{"passed": false, "failure_reasons": ["weak content"], '
+        '"suggested_approach": "Try harder"}'
+    )
+    stripped = _strip_code_fence(raw_json)
+    assert stripped == raw_json, (
+        f"Unfenced JSON must pass through unchanged; got {stripped!r}"
+    )
+    verdict = AuditVerdict.model_validate_json(stripped)
+    assert verdict.passed is False
+    assert verdict.failure_reasons == ["weak content"]
+    assert verdict.suggested_approach == "Try harder"

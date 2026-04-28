@@ -29,7 +29,8 @@ from ai_workflows.mcp.schemas import (
     RunWorkflowOutput,
 )
 
-EXPECTED_TOOLS = {"run_workflow", "resume_run", "list_runs", "cancel_run"}
+# M12 T05 adds the fifth tool (run_audit_cascade); update the expected set.
+EXPECTED_TOOLS = {"run_workflow", "resume_run", "list_runs", "cancel_run", "run_audit_cascade"}
 
 
 def test_build_server_returns_fastmcp_instance() -> None:
@@ -44,7 +45,7 @@ def test_build_server_is_idempotent_and_non_global() -> None:
 
 
 @pytest.mark.asyncio
-async def test_all_four_tools_registered() -> None:
+async def test_all_five_tools_registered() -> None:
     server = build_server()
     tools = await server.list_tools()
     names = {t.name for t in tools}

@@ -1,6 +1,6 @@
 # Task 05 — `run_audit_cascade` MCP tool + SKILL.md ad-hoc-audit section
 
-**Status:** 📝 Planned (drafted 2026-04-27).
+**Status:** Complete (2026-04-28).
 **Grounding:** [milestone README](README.md) · [ADR-0004 §Decision item 7 — standalone invocation surface](../../adr/0004_tiered_audit_cascade.md) · [architecture.md §4.4 (MCP surface) / §9 KDR-008 (FastMCP + pydantic schema as public contract) / KDR-011 / KDR-014](../../architecture.md) · [ADR-0009 — framework owns quality policy](../../adr/0009_framework_owns_policy.md) · [task_02 close-out (cascade primitive)](task_02_audit_cascade_node.md) · [task_04 close-out (TokenUsage.role + by_role + factory-time role binding on tiered_node)](task_04_telemetry_role_tag.md) · [task_08 close-out (skip_terminal_gate)](task_08_audit_cascade_skip_terminal_gate.md) · [mcp/server.py:121-204 (existing MCP tools)](../../../ai_workflows/mcp/server.py) · [mcp/schemas.py (existing pydantic I/O models)](../../../ai_workflows/mcp/schemas.py) · [primitives/storage.py:197-203 (`read_artifact` signature)](../../../ai_workflows/primitives/storage.py) · [graph/tiered_node.py:116-122 (factory signature with role kwarg post-T04)](../../../ai_workflows/graph/tiered_node.py) · [graph/audit_cascade.py:75 (`AuditVerdict` canonical owner)](../../../ai_workflows/graph/audit_cascade.py) · [.claude/skills/ai-workflows/SKILL.md (existing skill text)](../../../.claude/skills/ai-workflows/SKILL.md).
 
 ## What to Build
@@ -412,20 +412,20 @@ Filled in at audit time. Anticipated forward-deferrals from T05:
 
 ## Carry-over from prior audits
 
-- [ ] **TA-T04-LOW-04 (DEFERRED from T04 task analysis)** — T04's §Propagation status forward-deferred the `by_role` surfacing in `RunAuditCascadeOutput` to T05. T05 spec lands `by_role: dict[str, float] | None` per the AC list above; this carry-over is satisfied. Builder ticks at implement-close.
+- [x] **TA-T04-LOW-04 (DEFERRED from T04 task analysis)** — T04's §Propagation status forward-deferred the `by_role` surfacing in `RunAuditCascadeOutput` to T05. T05 spec lands `by_role: dict[str, float] | None` per the AC list above; this carry-over is satisfied. Builder ticks at implement-close.
 
 ## Carry-over from task analysis
 
 (Round-1 findings were pre-applied to this rewrite — H1+H2 user-arbitrated to Option A; H3 split smoke into hermetic + AIW_E2E; H4 dropped AuditVerdict re-export; M1 dropped file_path_ref; M2 validator return type; M3 tier_ceiling framing; M4 by_role test assertion + cost-pricing note; M5 standalone-wiring section; M6 stale M12 T04 references. Round-2 added two LOWs that push to carry-over below.)
 
-- [ ] **TA-T05-LOW-01 — Validator error-message ordering / framing precision** (severity: LOW, source: round 2)
+- [x] **TA-T05-LOW-01 — Validator error-message ordering / framing precision** (severity: LOW, source: round 2)
       `RunAuditCascadeInput._exactly_one_artefact_source` validator's three error branches fire in a specific order; the second/third branches' messages assume the first branch already passed. If a future caller bypasses the validator (e.g. constructs the model with `model_construct()`), the error ordering may surface in a confusing sequence. Cosmetic — no current caller does this; standard pydantic instantiation always passes through `@model_validator(mode="after")` in order.
       **Recommendation:** No spec edit at implement time. If a future Builder needs to construct the model bypassing validation, document at that time.
 
-- [ ] **TA-T05-LOW-02 — `architecture.md:105` carries a secondary stale framing about "compiled cascade graph" reuse** (severity: LOW, source: round 2)
+- [x] **TA-T05-LOW-02 — `architecture.md:105` carries a secondary stale framing about "compiled cascade graph" reuse** (severity: LOW, source: round 2)
       Beyond the M12 T04 → M12 T05 task-number fix, `architecture.md:105` also frames the standalone tool as reusing the compiled cascade graph — same stale framing as ADR-0004 §Decision item 7 (post-Option-A). The task-number fix at T05 close-out is mechanical; the cascade-reuse framing fix is an architectural amendment that should land alongside the ADR-0004 amendment at M12 T07 close-out (single doc-amendment commit covers both files' stale framings).
       **Recommendation:** Builder at T05 close-out applies ONLY the task-number fix (`M12 T04` → `M12 T05`); the cascade-reuse framing rewrite at the same line is forward-deferred to T07 close-out alongside the ADR-0004 §Decision item 7 amendment.
 
-- [ ] **TA-T05-LOW-03 — `pricing={}` rationale slightly overstates the requirement** (severity: LOW, source: round 3)
+- [x] **TA-T05-LOW-03 — `pricing={}` rationale slightly overstates the requirement** (severity: LOW, source: round 3)
       Spec §Standalone wiring frames `pricing={}` as "required for `ClaudeCodeRoute` dispatch — without it `ClaudeCodeSubprocess` raises KeyError." Live code paths (`tiered_node.py:218` defaults `configurable.get("pricing") or {}`; `claude_code.py:349` returns `0.0` cost when model absent from pricing table) actually default gracefully. Functional behaviour unchanged — `pricing={}` is still passed explicitly per the AC for forward-compatibility — only the rationale framing is slightly stronger than reality.
       **Recommendation:** Builder at implement time may soften the inline comment from "required for ClaudeCodeRoute dispatch (Max flat-rate is $0; empty dict is fine — ClaudeCodeSubprocess accepts empty pricing and computes $0)" to "explicit per spec — Max flat-rate computes $0 with empty pricing; future per-tier-pricing change would surface non-zero values without code change." No spec edit at hardening time; Builder picks at implement time.

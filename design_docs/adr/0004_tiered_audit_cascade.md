@@ -53,7 +53,7 @@ The M9 T04 close-out live smoke (2026-04-21) surfaced the adjacent UX concern th
 
 - **New primitive.** `AuditCascadeNode` lands in `ai_workflows/graph/audit_cascade.py` (M12 T02). Fits the existing four-layer contract (graph imports only primitives; workflows / surfaces import graph). No import-linter edit needed.
 - **New TierConfigs.** `auditor-sonnet` + `auditor-opus` land in `ai_workflows/primitives/tiers.py` (M12 T01) with matching pricing entries. Pricing is **$0 per million tokens** — Max is flat-rate; the zero price keeps `CostTracker`'s ledger shape intact without introducing a fiction about per-call cost. Usage is still recorded in tokens for the empirical-tuning loop.
-- **New MCP tool.** `run_audit_cascade` lands in `ai_workflows/mcp/server.py` (M12 T04) with paired pydantic input/output schemas. Skill gets a matching natural-language entry.
+- **New MCP tool.** `run_audit_cascade` lands in `ai_workflows/mcp/server.py` (M12 T05) with paired pydantic input/output schemas. Skill gets a matching natural-language entry.
 - **Workflow opt-in field.** Each existing workflow's config model grows an `audit_cascade_enabled: bool = False` field (M12 T03). Landing the field without any workflow flipping it on preserves backwards compatibility.
 - **Eval harness gains cascade fixtures.** M7's `EvalRunner` replay-path already handles multi-node sub-graphs; the cascade's author + auditor nodes capture independently under `evals/<workflow>/<node>/` with role-tagged filenames (`author_<case_id>.json` / `auditor_<case_id>.json`). No M7 engine change required; fixture convention only.
 - **Budget-guard tension.** `CostTracker.total(run_id)` against the per-run `budget_usd` (architecture.md §8.5) is presently zero-cost under Claude Max (Opus rate is $0). Cascade does not change this. If the Max quota overage trigger fires ([nice_to_have.md](../nice_to_have.md) — track) and per-tier dollar pricing returns, the cascade multiplies cost, and the budget-guard becomes the natural kill-switch.
@@ -70,7 +70,7 @@ The M9 T04 close-out live smoke (2026-04-21) surfaced the adjacent UX concern th
 ## References
 
 - [architecture.md §4.2](../architecture.md) — graph-layer adapters (TieredNode, ValidatorNode, RetryingEdge, HumanGate; grows AuditCascadeNode at M12 T02).
-- [architecture.md §4.4](../architecture.md) — MCP surface (grows `run_audit_cascade` tool at M12 T04).
+- [architecture.md §4.4](../architecture.md) — MCP surface (grows `run_audit_cascade` tool at M12 T05).
 - [architecture.md §9](../architecture.md) — KDR index (grows KDR-011 at M12 T02).
 - KDR-003 — no Anthropic API. Preserved.
 - KDR-004 — validator-node-after-every-LLM-node. Auditor is a semantic layer *on top* of shape validation; composition, not replacement.

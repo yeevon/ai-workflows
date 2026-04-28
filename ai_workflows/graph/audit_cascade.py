@@ -72,9 +72,35 @@ from ai_workflows.primitives.retry import (
     RetryPolicy,
 )
 
-__all__ = ["AuditVerdict", "audit_cascade_node"]
+__all__ = ["AuditVerdict", "_strip_code_fence", "audit_cascade_node"]
 
 GraphState = Mapping[str, Any]  # mirrors graph/tiered_node.py:111
+
+
+def _strip_code_fence(raw_text: str) -> str:
+    """Strip a leading/trailing markdown code fence if present.
+
+    Real Claude auditor responses sometimes wrap JSON in a markdown code fence
+    (e.g. ````` ```json\\n{...}\\n``` `````) despite system-prompt instructions to
+    emit raw JSON only.  This helper tolerates both fenced and unfenced output.
+
+    Used by both :func:`_audit_verdict_node` (cascade primitive) and the
+    standalone ``run_audit_cascade`` MCP tool's parse step so both surfaces
+    share the same fence-strip behaviour.  If no fence is detected, the
+    input string is returned stripped but otherwise unchanged.
+
+    M12 Task 05 — fix for HIGH-01: AIW_E2E smoke caught real ``auditor-sonnet``
+    wrapping JSON in a markdown fence; this helper is the shared parse-side fix.
+    """
+    text = raw_text.strip()
+    if text.startswith("```"):
+        # Strip the leading fence line (handles ```json, ```, ```\\n, etc.)
+        lines = text.split("\n", 1)
+        text = lines[1] if len(lines) > 1 else ""
+        # Strip the trailing fence
+        if text.endswith("```"):
+            text = text[:-3]
+    return text.strip()
 
 
 class AuditVerdict(BaseModel):
@@ -746,9 +772,12 @@ def _audit_verdict_node(
 
     async def _node(state: GraphState) -> dict[str, Any]:
         # Parse the auditor's raw output as AuditVerdict.
+        # _strip_code_fence tolerates markdown-fenced JSON (e.g. ```json…```)
+        # that real Claude CLI responses sometimes emit despite system-prompt
+        # instructions to return raw JSON only (M12 T05 HIGH-01 fix).
         auditor_raw: str = state.get(f"{name}_auditor_output", "") or ""
         try:
-            verdict = AuditVerdict.model_validate_json(auditor_raw)
+            verdict = AuditVerdict.model_validate_json(_strip_code_fence(auditor_raw))
         except Exception as parse_exc:  # noqa: BLE001
             raise NonRetryable(
                 f"Cascade '{name}': auditor produced unparseable output — "
