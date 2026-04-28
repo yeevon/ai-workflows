@@ -1,13 +1,14 @@
-"""Orchestrator test helpers — spawn-prompt sizing and KDR extraction.
+"""Orchestrator test helpers — spawn-prompt sizing, KDR extraction, and cycle summaries.
 
 Task: M20 Task 02 — Sub-agent input prune (orchestrator-side scope discipline).
+Task: M20 Task 03 — In-task cycle compaction (cycle_<N>/summary.md per Auditor).
 Relationship: Provides the Python implementations of the spawn-prompt scope rules
-  described in `.claude/commands/_common/spawn_prompt_template.md`.  The production
-  versions of these rules run as markdown-prose logic inside the slash-command
-  orchestrators; this module provides equivalent Python implementations so
-  `tests/orchestrator/test_spawn_prompt_size.py` and
-  `tests/orchestrator/test_kdr_section_extractor.py` can exercise every branch
-  without live agent spawns.
+  described in `.claude/commands/_common/spawn_prompt_template.md`, and the cycle-summary
+  emission + read-only-latest-summary rule described in
+  `.claude/commands/_common/cycle_summary_template.md`.  The production versions of these
+  rules run as markdown-prose logic inside the slash-command orchestrators; this module
+  provides equivalent Python implementations so the orchestrator tests can exercise every
+  branch without live agent spawns.
 
 This module intentionally lives under `tests/` (not `ai_workflows/`) because
 it is test infrastructure for the autonomy orchestration layer (`.claude/`).
@@ -409,3 +410,177 @@ def build_roadmap_selector_spawn_prompt(
         f"## Output budget\n\n{budget_directive}\n\n"
         f"## Return schema\n\n{schema_reminder}\n"
     )
+
+
+# ---------------------------------------------------------------------------
+# Cycle-summary helpers (M20 Task 03)
+# ---------------------------------------------------------------------------
+
+# Required keys that every cycle_<N>/summary.md must contain.
+# These are the section headings defined in cycle_summary_template.md.
+CYCLE_SUMMARY_REQUIRED_KEYS: tuple[str, ...] = (
+    "**Cycle:**",
+    "**Date:**",
+    "**Builder verdict:**",
+    "**Auditor verdict:**",
+    "**Files changed this cycle:**",
+    "**Gates run this cycle:**",
+    "**Open issues at end of cycle:**",
+    "**Decisions locked this cycle:**",
+    "**Carry-over to next cycle:**",
+)
+
+
+def make_cycle_summary(
+    cycle_number: int,
+    date: str,
+    builder_verdict: str,
+    auditor_verdict: str,
+    files_changed: list[str],
+    gates: list[tuple[str, str, str]],
+    open_issues: str,
+    decisions_locked: list[str],
+    carry_over: list[str],
+    task_number: int = 3,
+) -> str:
+    """Render a cycle_<N>/summary.md string per the canonical template.
+
+    Implements the template from
+    `.claude/commands/_common/cycle_summary_template.md`.  Used by test helpers
+    to generate synthetic cycle-summary content without live Auditor spawns.
+
+    Args:
+        cycle_number: The 1-based cycle index (N).
+        date: ISO-8601 date string (e.g. "2026-04-28").
+        builder_verdict: One of ``BUILT``, ``BLOCKED``, ``STOP-AND-ASK``.
+        auditor_verdict: One of ``PASS``, ``OPEN``, ``BLOCKED``.
+        files_changed: List of file paths changed this cycle (empty → "none").
+        gates: List of ``(name, command, result)`` tuples for the gate table.
+        open_issues: Human-readable summary of open issues (e.g. "none" or
+            "2 HIGH (M20-T03-ISS-01, M20-T03-ISS-02)").
+        decisions_locked: Bullet items for decisions locked this cycle (empty → "none").
+        carry_over: Bullet items for ACs the next Builder cycle must satisfy.
+            Must be non-empty when ``auditor_verdict`` is ``OPEN`` (invariant from
+            the template).
+        task_number: Task number for the header line (default: 3).
+
+    Returns:
+        A Markdown string conforming to the cycle_<N>/summary.md template.
+    """
+    files_str = (
+        "\n".join(f"- {f}" for f in files_changed) if files_changed else "none"
+    )
+
+    gate_rows = "\n".join(
+        f"| {name} | `{command}` | {result} |" for name, command, result in gates
+    )
+    gate_table = (
+        "| Gate | Command | Result |\n"
+        "|---|---|---|\n"
+        + gate_rows
+    )
+
+    decisions_str = (
+        "\n".join(f"- {d}" for d in decisions_locked)
+        if decisions_locked
+        else "none"
+    )
+
+    carry_str = (
+        "\n".join(f"- {c}" for c in carry_over) if carry_over else "none"
+    )
+
+    return (
+        f"# Cycle {cycle_number} summary — Task {task_number:02d}\n\n"
+        f"**Cycle:** {cycle_number}\n"
+        f"**Date:** {date}\n"
+        f"**Builder verdict:** {builder_verdict}\n"
+        f"**Auditor verdict:** {auditor_verdict}\n"
+        f"**Files changed this cycle:** {files_str}\n"
+        f"**Gates run this cycle:**\n\n{gate_table}\n\n"
+        f"**Open issues at end of cycle:** {open_issues}\n"
+        f"**Decisions locked this cycle:** {decisions_str}\n"
+        f"**Carry-over to next cycle:** {carry_str}\n"
+    )
+
+
+def build_builder_spawn_prompt_cycle_n(
+    task_spec_path: str,
+    issue_file_path: str,
+    project_context_brief: str,
+    latest_cycle_summary: str,
+    cycle_summary_path: str,
+) -> str:
+    """Construct a cycle-N (N ≥ 2) Builder spawn prompt with the latest cycle summary.
+
+    Implements the read-only-latest-summary rule from
+    `.claude/commands/_common/cycle_summary_template.md`:
+    cycle N (N ≥ 2) replaces the parent milestone README with the most recent
+    `cycle_{N-1}/summary.md` content.  No prior Builder reports, no prior Auditor
+    chat content, no prior cycle summaries beyond the most recent one.
+
+    Args:
+        task_spec_path: Repo-relative path to the task spec.
+        issue_file_path: Repo-relative path to the issue file.
+        project_context_brief: Verbatim project context brief.
+        latest_cycle_summary: Full content of the most recent cycle summary.
+        cycle_summary_path: Repo-relative path of the most recent cycle summary
+            (e.g. ``"runs/m20_t03/cycle_1/summary.md"``).
+
+    Returns:
+        A spawn-prompt string for the Builder on cycle N ≥ 2.
+    """
+    budget_directive = (
+        "Output budget: 4K tokens. Durable findings live in the file you write;\n"
+        "the return is the 3-line schema only — "
+        "see .claude/commands/_common/agent_return_schema.md"
+    )
+    schema_reminder = (
+        "Return per .claude/commands/_common/agent_return_schema.md — exactly 3 lines:\n"
+        "verdict: <token>\n"
+        "file: <path or —>\n"
+        "section: <## header or —>\n"
+        "No prose, no preamble, no chat body outside those three lines."
+    )
+    return (
+        f"Task spec path: {task_spec_path}\n"
+        f"Issue file path: {issue_file_path}\n\n"
+        f"## Project context brief\n\n{project_context_brief}\n\n"
+        f"## Latest cycle summary ({cycle_summary_path})\n\n"
+        f"{latest_cycle_summary}\n\n"
+        f"## Output budget\n\n{budget_directive}\n\n"
+        f"## Return schema\n\n{schema_reminder}\n"
+    )
+
+
+def parse_cycle_summary(summary_text: str) -> dict[str, str]:
+    """Parse a cycle_<N>/summary.md into a key→value mapping.
+
+    Extracts each ``**Key:**`` field from the summary text.  Multi-line values
+    (e.g. gate tables, bullet lists) are captured up to the next ``**Key:**``
+    marker.  This is test-infrastructure parsing; it is not designed to be
+    exhaustive against adversarial input.
+
+    Args:
+        summary_text: Full text of a ``cycle_<N>/summary.md`` file.
+
+    Returns:
+        A dict mapping each ``**Key:**`` label (without the ``**`` delimiters or
+        trailing ``:``) to its value string (stripped).
+    """
+    result: dict[str, str] = {}
+    # Match lines like "**Key:** value" or "**Key:**" (possibly multi-line value)
+    key_re = re.compile(r"^\*\*(.+?):\*\*\s*(.*)", re.MULTILINE)
+    matches = list(key_re.finditer(summary_text))
+    for i, match in enumerate(matches):
+        key = match.group(1).strip()
+        # Value is the rest of this line plus lines until the next key match
+        inline_value = match.group(2).strip()
+        if i + 1 < len(matches):
+            between = summary_text[match.end():matches[i + 1].start()]
+        else:
+            between = summary_text[match.end():]
+        extra = between.strip()
+        value = (inline_value + ("\n" + extra if extra else "")).strip()
+        result[key] = value
+    return result

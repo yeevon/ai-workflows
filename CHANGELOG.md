@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M20 Task 03: In-task cycle compaction (cycle_<N>/summary.md per Auditor; constant per-cycle orchestrator context; research brief §Lens 2.1) (2026-04-28)
+
+Implements the Anthropic note-taking memory primitive (research brief Lens 2.1) at
+per-cycle granularity.  The Auditor's Phase 5 now emits `runs/<task>/cycle_<N>/summary.md`
+as a structured projection of the issue file it already writes.  Orchestrators
+(`auto-implement`, `clean-implement`) read ONLY the latest cycle summary on cycle N+1's
+Builder and Auditor spawns — not the full chat history of cycles 1..N-1.  Combined with
+T01 (3-line schema) and T02 (input prune), the orchestrator's per-cycle context becomes
+roughly constant instead of linear-in-cycle-count.
+
+**Files touched:**
+- `.claude/agents/auditor.md` — Phase 5 extended with Phase 5a (issue file) + Phase 5b
+  (cycle-summary emission); nested `cycle_<N>/summary.md` path documented; carry-over
+  invariant documented.
+- `.claude/commands/auto-implement.md` — `runs/<task>/` directory convention, per-cycle
+  layout, and read-only-latest-summary rule for Builder + Auditor spawns added.
+- `.claude/commands/clean-implement.md` — same read-only-latest-summary rule added.
+- `.claude/commands/_common/cycle_summary_template.md` — NEW; canonical template +
+  directory-layout authority + read-only-latest-summary rule.
+- `tests/orchestrator/_helpers.py` — extended with `make_cycle_summary`,
+  `build_builder_spawn_prompt_cycle_n`, `parse_cycle_summary`, and
+  `CYCLE_SUMMARY_REQUIRED_KEYS`.
+- `tests/orchestrator/test_cycle_summary_emission.py` — NEW; 3-cycle simulation (11 tests).
+- `tests/orchestrator/test_cycle_context_constant.py` — NEW; cycle-N context constancy
+  tests + M12 T03 validation re-run (6 tests).
+- `tests/orchestrator/fixtures/m12_t03_pre_t03_cycle3_spawn_prompt.txt` — NEW; frozen
+  pre-T03 cycle-3 spawn-prompt fixture for validation re-run (AC-7).
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: Auditor Phase 5 (issue-file write) extended to emit `cycle_<N>/summary.md` per
+  cycle; no new phase numbering introduced (per audit M14).
+- AC-2: `cycle_<N>/summary.md` template structure documented in auditor.md Phase 5b and
+  in `.claude/commands/_common/cycle_summary_template.md`.
+- AC-3: `auto-implement.md` and `clean-implement.md` describe the read-only-latest-summary
+  rule for cycle-N Builder and Auditor spawns.
+- AC-4: `runs/<task>/` directory convention and `<task-shorthand>` format (`m<MM>_t<NN>`)
+  documented in both orchestrator command files; directory creation on cycle 1 documented.
+- AC-5: `tests/orchestrator/test_cycle_summary_emission.py` passes (3-cycle simulation,
+  11 tests: nested `cycle_<N>/summary.md` form, required keys, carry-over invariant).
+- AC-6: `tests/orchestrator/test_cycle_context_constant.py` passes (6 tests: cycle-2 ≈
+  cycle-3 within 10%, cycle-N vs cycle-1 within 50% permissive bound, no prior Builder
+  report in cycle-3 spawn prompt). 10% threshold documented as heuristic per L2 carry-over.
+- AC-7: Validation re-run using frozen `m12_t03_pre_t03_cycle3_spawn_prompt.txt` fixture;
+  post-T03 cycle-3 context is ≤ 50% of cycle-1 deviation (permissive), and pre-T03
+  fixture is >1.5× larger than post-T03 cycle-3 prompt.
+- AC-8: CHANGELOG updated with `### Changed — M20 Task 03: ...` entry.
+- AC-9: Status surfaces flipped (spec **Status:** line, milestone README T03 row).
+
+**Carry-over (from spec) satisfied:**
+- L2 (round 1): 10% threshold documented as heuristic in `test_cycle_context_constant.py`
+  module docstring; T22 baseline data may revise it.
+- L1 (round 3): All test descriptions in `test_cycle_summary_emission.py` use the nested
+  form `cycle_<N>/summary.md`; flat form `cycle_<N>_summary.md` is explicitly rejected.
+
+**Deviations from spec:**
+- The `within 10%` comparison between cycle-1 and cycle-2/3 uses a permissive 50% bound
+  in `test_cycle2_within_50pct_of_cycle1` and `test_cycle3_within_50pct_of_cycle1`
+  (renamed in cycle 3 from `test_cycle2_within_10pct_of_cycle1` / `test_cycle3_within_10pct_of_cycle1`)
+  because cycle-1 carries a README path reference (one line) while cycle-2/3 carry
+  summary content. The structurally meaningful 10% assertion is applied to cycle-2 vs
+  cycle-3 (both carry exactly one summary) in `test_cycle2_within_10pct_of_cycle3`.
+  The discrepancy is documented in the module docstring and test docstrings per L2.
+
+**Cycle 2 fixes (2026-04-28) — resolves M20-T03-ISS-01 and M20-T03-ISS-02:**
+- `.claude/commands/auto-implement.md` Step 1 (Builder) and Step 2 (Auditor) reworded
+  to reference the "read-only-latest-summary rule" sections rather than re-listing fixed
+  spawn args that contradict the cycle-1-vs-N≥2 branch (M20-T03-ISS-01).
+- `.claude/commands/clean-implement.md` same Step 1 + Step 2 rewording (M20-T03-ISS-01).
+- `.claude/commands/_common/spawn_prompt_template.md` Builder pre-load table updated:
+  "Parent milestone README path" removed from the unconditional "Always pass" list;
+  replaced with a cycle-N rule note referencing `cycle_summary_template.md` as the
+  authoritative single source of truth (M20-T03-ISS-02, option b).
+
+**Cycle 3 test rewrites (2026-04-28) — locked team decisions (sr-sdet BLOCK arbitrated by user):**
+- `tests/orchestrator/test_cycle_context_constant.py` — three test changes per locked decisions:
+  1. `test_cycle3_carries_summary_drops_prior_chat` (renamed from `test_cycle3_does_not_include_cycle1_builder_report`):
+     replaced vacuous "phrase not in prompt" assertion with a discriminating two-part assertion:
+     (a) summary marker IS present in cycle-3 prompt (proves summary is carried forward);
+     (b) prior-cycle chat marker is NOT present (proves prior-cycle chat is dropped and
+     that `build_builder_spawn_prompt_cycle_n`'s signature cannot admit prior context at all).
+  2. `test_cycle2_within_10pct_of_cycle3`: constructors now use meaningfully different content
+     volumes — summary_1 with minimal content (1 carry-over, 3 files, no decisions) and
+     summary_2 with realistic larger content (5 files, 1 decision, 2 carry-overs, longer
+     open-issues) — making the bound discriminating: a regression adding unbounded raw text
+     would blow the 10% bound and the test would fail.
+  3. Renamed `test_cycle2_within_10pct_of_cycle1` → `test_cycle2_within_50pct_of_cycle1`
+     and `test_cycle3_within_10pct_of_cycle1` → `test_cycle3_within_50pct_of_cycle1` to
+     match the actual 50% bound used in both bodies.  Docstrings updated to note that the
+     strict 10% bound for cycle-1 baseline is deferred to T22's empirical telemetry.
+
 ### Changed — M20 Task 02: Sub-agent input prune (orchestrator-side scope discipline + per-spawn output budget; research brief §Lens 2.3) (2026-04-28)
 
 Orchestrator-side scope discipline across all 5 spawning slash commands (`auto-implement`,

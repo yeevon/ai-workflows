@@ -55,7 +55,9 @@ Look specifically for:
 - Silent architecture drift Phase 1 missed.
 - **Status-surface drift.** Four surfaces must agree at audit close: (a) per-task spec `**Status:**` line, (b) milestone README task table row, (c) `tasks/README.md` row if the milestone has one, (d) any milestone README "Done when" checkboxes the audited task satisfies. Each disagreeing surface is a HIGH finding.
 
-## Phase 5 — Write or update the issue file
+## Phase 5 — Write or update the issue file; emit cycle summary
+
+### Phase 5a — Issue file
 
 At `design_docs/phases/milestone_<M>_<name>/issues/task_<NN>_issue.md`. Update **in place** — never create a `_v2`. Required structure:
 
@@ -97,6 +99,53 @@ At `design_docs/phases/milestone_<M>_<name>/issues/task_<NN>_issue.md`. Update *
 ### Every issue carries an Action / Recommendation line
 
 Name the file to edit, test to add, or task to own follow-up. Trade-offs if relevant. If the fix is unclear (two reasonable options, crosses milestones, needs spec change) — **stop and ask the user** before finalising. No invented direction. Same rule applies to issues surfaced outside the audit file (chat, status updates): pair each with a solution or an explicit ask.
+
+### Phase 5b — Cycle summary (emit after the issue file; before Phase 6)
+
+After writing or updating the issue file, **emit `runs/<task-shorthand>/cycle_<N>/summary.md`**.
+This is a structured projection of the issue file you just wrote — they share the same
+underlying content.  The summary is optimised for orchestrator re-read on the next cycle;
+the issue file is the authoritative artifact for humans and future agents.
+
+`<task-shorthand>` format: `m<MM>_t<NN>` with both M and T zero-padded to two digits
+(e.g. `m20_t03`, `m05_t02`).  The nested directory form `cycle_<N>/summary.md` is
+authoritative — the flat form `cycle_<N>_summary.md` is incorrect.
+
+The orchestrator creates `runs/<task>/cycle_<N>/` before spawning you; use `Write` to
+emit the summary file at the path the orchestrator will read.
+
+**Template** (fill values from the issue file you just wrote):
+
+```markdown
+# Cycle <N> summary — Task <NN>
+
+**Cycle:** N
+**Date:** YYYY-MM-DD
+**Builder verdict:** <BUILT | BLOCKED | STOP-AND-ASK>
+**Auditor verdict:** <PASS | OPEN | BLOCKED>
+**Files changed this cycle:** <bullet list or "none">
+**Gates run this cycle:**
+
+| Gate | Command | Result |
+|---|---|---|
+| pytest | `uv run pytest` | PASS / FAIL |
+| lint-imports | `uv run lint-imports` | PASS / FAIL |
+| ruff | `uv run ruff check` | PASS / FAIL |
+
+**Open issues at end of cycle:** <count by severity + IDs — or "none">
+**Decisions locked this cycle:** <bullet list of Auditor-agreement-bypass locks, user
+  arbitrations, or KDR carry-overs — or "none">
+**Carry-over to next cycle:** <bullet list of explicit ACs for the next Builder cycle
+  — or "none" if Auditor verdict is PASS>
+```
+
+**Invariants:**
+- `Carry-over to next cycle:` must be non-empty when the Auditor verdict is `OPEN`.
+  Empty carry-over on an OPEN verdict is a spec violation.
+- Write the summary **after** the issue file, **before** Phase 6 forward-deferral
+  propagation runs.
+- See [`.claude/commands/_common/cycle_summary_template.md`](_common/cycle_summary_template.md)
+  for the full directory-layout spec and the read-only-latest-summary rule.
 
 ## Phase 6 — Forward-deferral propagation
 

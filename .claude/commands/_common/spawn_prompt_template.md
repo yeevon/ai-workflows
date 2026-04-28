@@ -29,9 +29,14 @@ large documents is wasteful and should be avoided.
 | Always pass | Never inline |
 |---|---|
 | Task spec path | Sibling task issue files (content) |
-| Parent milestone README path | `architecture.md` content |
-| Project context brief | `CHANGELOG.md` content |
-| Issue file path (may not exist yet) | Whole-milestone README content |
+| Project context brief | `architecture.md` content |
+| Issue file path (may not exist yet) | `CHANGELOG.md` content |
+| | Whole-milestone README content |
+
+**Cycle-N pre-load rule:** on cycle 1 also pass the parent milestone README path; on
+cycle N ≥ 2 replace it with the most recent `cycle_{N-1}/summary.md` (path + content).
+See `.claude/commands/_common/cycle_summary_template.md` §Read-only-latest-summary rule
+for the authoritative per-cycle Builder pre-load definition.
 
 ### Auditor
 

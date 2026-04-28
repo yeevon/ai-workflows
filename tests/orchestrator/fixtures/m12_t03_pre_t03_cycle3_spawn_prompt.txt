@@ -1,0 +1,137 @@
+Task spec path: design_docs/phases/milestone_12_audit_cascade/task_03_workflow_wiring.md
+Issue file path: design_docs/phases/milestone_12_audit_cascade/issues/task_03_issue.md
+Parent milestone README path: design_docs/phases/milestone_12_audit_cascade/README.md
+
+## Project context brief
+
+Project: ai-workflows (Python, MIT, published as jmdl-ai-workflows on PyPI)
+Layer rule: primitives → graph → workflows → surfaces (enforced by `uv run lint-imports`)
+Gate commands: `uv run pytest`, `uv run lint-imports`, `uv run ruff check`
+Architecture: design_docs/architecture.md (especially §3 four-layer rule, §6 dep table, §9 KDRs)
+ADRs: design_docs/adr/*.md
+Deferred-ideas file: design_docs/nice_to_have.md (out-of-scope by default)
+Changelog convention: ## [Unreleased] → ### Added — M<N> Task <NN>: <Title> (YYYY-MM-DD)
+Dep manifests: pyproject.toml + uv.lock — either changing triggers the dependency-auditor
+Load-bearing KDRs: 002 (MCP-as-substrate), 003 (no Anthropic API), 004 (validator pairing),
+                   006 (three-bucket retry via RetryingEdge), 008 (FastMCP + pydantic schema),
+                   009 (SqliteSaver-only checkpoints), 013 (user-owned external workflow code)
+Issue file path: design_docs/phases/milestone_12_audit_cascade/issues/task_03_issue.md
+Status surfaces (must flip together at task close): per-task spec **Status:** line,
+                   milestone README task table row, tasks/README.md row if present,
+                   milestone README "Done when" checkboxes
+
+## Cycle 1 Builder report (FULL CHAT — pre-T03 pattern)
+
+[Builder cycle 1 chat content — this is the verbatim Builder report from cycle 1,
+including all file reads, edits, bash outputs, and internal reasoning steps.
+In the pre-T03 world, the orchestrator carries this entire transcript into the cycle 3
+Builder spawn prompt, causing quadratic context growth.]
+
+The Builder read the spec at task_03_workflow_wiring.md (2 400 tokens), read
+architecture.md (8 100 tokens), read the existing workflows/__init__.py (1 200 tokens),
+read ai_workflows/workflows/audit_cascade.py (3 100 tokens), read
+tests/workflows/test_audit_cascade.py (2 800 tokens), then:
+
+- Created ai_workflows/workflows/audit_cascade.py with the StateGraph wiring
+- Added AuditCascadeState TypedDict
+- Wired TieredNode → ValidatorNode → RetryingEdge → HumanGate per KDR-004 / KDR-006
+- Added tier_registry() returning {"auditor-sonnet": ..., "auditor-opus": ...}
+- Created tests/workflows/test_audit_cascade.py (6 test functions)
+- Updated CHANGELOG.md under [Unreleased] with ### Added — M12 Task 03
+
+Gate outputs from cycle 1:
+  uv run pytest: 142 passed, 0 failed, 0 errors (47.3s)
+  uv run lint-imports: OK
+  uv run ruff check: All checks passed.
+
+Return: BUILT / runs/m12_t03/cycle_1/builder_handoff.md / —
+
+## Cycle 1 Auditor report (FULL CHAT — pre-T03 pattern)
+
+[Auditor cycle 1 chat content — verbatim transcript of the Auditor's complete audit run,
+including all file reads, grep/glob calls, gate re-runs, finding notes, and issue-file
+writes. In the pre-T03 world this entire transcript is carried forward to cycle 3.]
+
+The Auditor loaded task_03_workflow_wiring.md, architecture.md (KDR-004, KDR-006,
+KDR-009), milestone README, sibling task issue files (task_01_issue.md 1 800 tokens,
+task_02_issue.md 2 100 tokens), CHANGELOG.md, pyproject.toml, all 6 test functions,
+the full audit_cascade.py module, then:
+
+Phase 1 — Design-drift check: no drift detected. TieredNode + ValidatorNode pairing
+present. RetryingEdge used. SqliteSaver delegated. No anthropic imports.
+
+Phase 2 — Gate re-run:
+  uv run pytest: 142 passed (47.1s) — PASS
+  uv run lint-imports: OK — PASS
+  uv run ruff check: All checks passed — PASS
+
+Phase 3 — AC grading:
+  AC-1: ✅ StateGraph wiring matches spec
+  AC-2: ✅ tier_registry() returns expected keys
+  AC-3: ⚠️ OPEN — smoke test missing; spec calls for end-to-end MCP tool round-trip
+  AC-4: ✅ Tests cover happy path
+  AC-5: ✅ CHANGELOG updated
+
+Phase 4 — Critical sweep: AC-3 open issue identified.
+
+Phase 5 — Issue file written. Status: ⚠️ OPEN
+
+Carry-over: AC-3 (smoke test end-to-end MCP round-trip) unmet.
+
+Return: OPEN / design_docs/phases/milestone_12_audit_cascade/issues/task_03_issue.md / —
+
+## Cycle 2 Builder report (FULL CHAT — pre-T03 pattern)
+
+[Builder cycle 2 chat content — again full transcript. At this point the spawn prompt
+already contains cycle 1 builder + cycle 1 auditor transcripts above, plus this cycle 2
+content. Total pre-T03 context grows with each cycle.]
+
+The Builder read the issue file (task_03_issue.md, 1 400 tokens), read the spec again,
+read the MCP surface (mcp/tools.py, 2 900 tokens), read the existing smoke test scaffold
+(tests/release/test_install_smoke.py, 1 600 tokens), then:
+
+- Added tests/integration/test_audit_cascade_mcp_e2e.py (wire-level MCP round-trip test)
+- Used subprocess to invoke `aiw` CLI rather than importing the module directly
+- Test calls run_workflow("audit_cascade", ...) via MCP and asserts non-empty result
+
+Gate outputs from cycle 2:
+  uv run pytest: 143 passed, 0 failed, 0 errors (49.1s)
+  uv run lint-imports: OK
+  uv run ruff check: All checks passed.
+
+Return: BUILT / runs/m12_t03/cycle_2/builder_handoff.md / —
+
+## Cycle 2 Auditor report (FULL CHAT — pre-T03 pattern)
+
+[Auditor cycle 2 chat content — full audit transcript. The spawn prompt for the cycle 3
+Builder will carry all of cycles 1 and 2's builder + auditor transcripts, plus this
+cycle 2 auditor content — making the total context approximately 3× cycle 1's context.]
+
+The Auditor re-read the issue file, the new test file, mcp/tools.py, and re-ran all
+gates. Wire-level smoke test verified: test calls aiw CLI dispatch, not fixture-based
+registration. AC-3 now met.
+
+Phase 2 — Gate re-run:
+  uv run pytest: 143 passed (49.0s) — PASS
+  uv run lint-imports: OK — PASS
+  uv run ruff check: All checks passed — PASS
+
+Phase 3 — AC grading:
+  AC-1: ✅ (unchanged)
+  AC-2: ✅ (unchanged)
+  AC-3: ✅ wire-level MCP round-trip test passes
+  AC-4: ✅ (unchanged)
+  AC-5: ✅ (unchanged)
+
+No open issues. Status: ✅ PASS
+
+Return: PASS / design_docs/phases/milestone_12_audit_cascade/issues/task_03_issue.md / —
+
+## Cycle 3 Builder target (pre-T03 bloat is visible above)
+
+This fixture represents what the pre-T03 orchestrator would pass to the cycle 3 Builder
+spawn: all of cycles 1 and 2's full chat transcripts (builder + auditor each), plus the
+spec path, issue path, README path, and project context brief. Total context ≈ 3×
+cycle 1's context size — the quadratic growth problem T03 addresses.
+
+In a real pre-T03 run that reached 5 cycles, the cycle 5 spawn would be ≈ 5× cycle 1.

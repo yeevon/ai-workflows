@@ -72,13 +72,52 @@ After every `Task` spawn, capture the spawn-prompt token count (regex proxy:
 `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt` (nested per-cycle directory; no `_<cycle>`
 suffix on the filename).
 
-### Builder spawn
+### runs/<task>/ directory convention
 
-Minimal pre-load set: task spec path, issue file path (may not exist yet), parent milestone
-README path, project context brief.
+Create `runs/<task-shorthand>/cycle_1/` at the **start of cycle 1**, before spawning the
+first Builder.  Create `runs/<task-shorthand>/cycle_<N>/` at the start of each subsequent
+cycle.  `<task-shorthand>` is `m<MM>_t<NN>` with both M and T zero-padded to two digits
+(e.g. `m20_t03`, `m05_t02`, `m09_t01`).
 
-**Remove from inline content:** sibling task issue files, `architecture.md` content,
-`CHANGELOG.md` content.
+Per-cycle directory layout (canonical):
+
+```
+runs/<task-shorthand>/
+  cycle_1/
+    summary.md                  ← T03 — cycle-summary (Auditor emits)
+    security-review.md          ← security reviewer fragment
+    spawn_<agent>.tokens.txt    ← T02 — per-spawn token count
+    agent_<name>_raw_return.txt ← T01 — full text return per agent
+  cycle_2/
+    ...
+  cycle_N/
+    ...
+  integrity.txt                 ← T09 — pre-commit ceremony (top-level, latest run wins)
+```
+
+See [`.claude/commands/_common/cycle_summary_template.md`](_common/cycle_summary_template.md)
+for the full `cycle_<N>/summary.md` template and the read-only-latest-summary rule.
+
+### Builder spawn — read-only-latest-summary rule
+
+**Cycle 1** — minimal pre-load set:
+- Task spec path
+- Issue file path (may not exist yet)
+- Parent milestone README path
+- Project context brief
+
+**Cycle N (N ≥ 2)** — replace the parent milestone README with the latest cycle summary:
+- Task spec path
+- Issue file path
+- **Most recent `runs/<task>/cycle_{N-1}/summary.md`** (include path + content inline)
+- Project context brief
+
+**Do not include** prior Builder reports' chat content, prior Auditor chat content, or
+prior cycle summaries beyond `cycle_{N-1}/summary.md`.  The summary is the durable
+carry-forward; earlier chat history is ephemeral and must not re-enter the spawn prompt.
+
+**Remove from inline content (all cycles):** sibling task issue files, `architecture.md`
+content, `CHANGELOG.md` content.
 
 Output budget directive (include verbatim in the Builder spawn prompt):
 
@@ -87,15 +126,31 @@ Output budget: 4K tokens. Durable findings live in the file you write;
 the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
 ```
 
-### Auditor spawn
+### Auditor spawn — read-only-latest-summary rule
 
-Minimal pre-load set: task spec path, issue file path, parent milestone README path,
-project context brief, current `git diff`, cited KDR identifiers (parsed from the task
-spec — e.g. "KDR-003, KDR-013" from the spec's Grounding line).
+**Cycle 1** — minimal pre-load set:
+- Task spec path
+- Issue file path
+- Parent milestone README path
+- Project context brief
+- Current `git diff`
+- Cited KDR identifiers (parsed from the task spec — e.g. "KDR-003, KDR-013")
 
-**Remove from inline content:** whole `architecture.md` content (Auditor reads on-demand),
-sibling issue file content, whole-milestone-README content. Path references stay; content
-inlining goes.
+**Cycle N (N ≥ 2)** — add the latest cycle summary:
+- Task spec path
+- Issue file path
+- Parent milestone README path
+- Project context brief
+- Current `git diff`
+- Cited KDR identifiers (compact pointer)
+- **Most recent `runs/<task>/cycle_{N-1}/summary.md`** (include path + content inline)
+
+**Do not include** prior cycle summaries beyond the most recent one.  The summary is the
+durable carry-forward; full prior-cycle chat history must not re-enter the spawn prompt.
+
+**Remove from inline content (all cycles):** whole `architecture.md` content (Auditor reads
+on-demand), sibling issue file content, whole-milestone-README content. Path references
+stay; content inlining goes.
 
 **KDR pre-load rule:** parse KDR citations from the task spec. Pass only those identifiers
 as a compact list (e.g. "Relevant KDRs: KDR-003, KDR-013 — read §9 of architecture.md
@@ -142,11 +197,17 @@ For cycles 1..10:
 
 ### Step 1 — Builder
 
-Spawn the `builder` subagent via `Task` with: task identifier, spec path, issue file path, project context brief, parent milestone README path. Wait for completion. Capture the Builder's report.
+Spawn the `builder` subagent via `Task` with the inputs prescribed by the
+"Builder spawn — read-only-latest-summary rule" section above (cycle 1: include
+parent milestone README path; cycle N ≥ 2: replace it with the latest cycle
+summary content). Wait for completion. Capture the Builder's report.
 
 ### Step 2 — Auditor
 
-Spawn the `auditor` subagent via `Task` with: task identifier, spec path, issue file path, cited KDR identifiers (compact pointer per scope-discipline section above), gate commands, project context brief, the Builder's report from Step 1. Wait for completion.
+Spawn the `auditor` subagent via `Task` with the inputs prescribed by the
+"Auditor spawn — read-only-latest-summary rule" section above (cycle 1: standard
+pre-load set; cycle N ≥ 2: add the latest cycle summary). Include cited KDR
+identifiers (compact pointer per scope-discipline section above). Wait for completion.
 
 ### Step 3 — Read issue file and evaluate stop conditions
 
