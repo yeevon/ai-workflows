@@ -554,6 +554,34 @@ Re-evaluated during the 2026-04-21 [M9 post-close-out deep-analysis](phases/mile
 
 ---
 
+## 24. Server-side compaction via `compact_20260112`
+
+**Status:** Deferred at M20 T28 (2026-04-28) per evaluation at `design_docs/analysis/server_side_compaction_evaluation.md`. Verdict: DEFER.
+
+**What this would add:**
+
+Activate Anthropic's beta `compact_20260112` strategy in `context_management.edits` for long-running Auditor sub-agent sessions. When `input_tokens` exceeds ~80K, the API summarizes the conversation server-side (replacing older messages with a single compaction-summary block), reducing the effective context load for the remainder of the session. Configured with `pause_after_compaction: True` so the orchestrator can re-stitch state from the current `cycle_<N>/summary.md` (T03) before resuming.
+
+**Composes with — does NOT replace — T03/T04.** File-based memory remains the durable, auditable record visible to the orchestrator, the user, and future audit agents. Server-side compaction is an in-session acceleration for heavy tool-use sessions (large git diffs, many file reads), not a substitute for the cycle-summary artifact.
+
+**Why deferred:**
+
+1. **Surface mismatch.** Claude Code's `Task` tool (ai-workflows' sub-agent spawn primitive) does not expose `context_management.edits`. The primitive is inaccessible from ai-workflows' deployment shape.
+2. **T03/T04 already address the core leak.** The orchestrator's per-cycle and cross-task context is O(1) after M20 Phase A. The marginal benefit of server-side compaction is low.
+3. **Beta stability.** `compact_20260112` is date-stamped beta; GA timeline unknown. Pinning a beta parameter in the autonomy infrastructure is fragile.
+4. **Untested pause-resume semantics.** The `pause_after_compaction: True` path requires multi-turn sub-agent handling not currently supported by the orchestrator.
+
+**Trigger to adopt — both conditions must hold:**
+
+- Claude Code's `Task` tool exposes `context_management.edits` in a stable (non-beta) release, AND
+- Either (a) T22 telemetry shows long Auditor sessions still hitting >80K tokens despite T03/T04, OR (b) Anthropic promotes the strategy to GA with a stable parameter name.
+
+**Integration sketch (if trigger fires):** Add compaction-resume handler to `auto-implement.md` + `clean-implement.md` Auditor spawn blocks. `trigger.value = 80000`. New task T29 (M20 if open, M21 otherwise). Effort: MEDIUM (1–2 days).
+
+**Related:** `design_docs/analysis/server_side_compaction_evaluation.md` (full evaluation document).
+
+---
+
 ## Revisit cadence
 
 Re-read this file:

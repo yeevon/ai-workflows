@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M20 Task 28: Server-side compaction evaluation document (design_docs/analysis/server_side_compaction_evaluation.md; verdict DEFER) (2026-04-28)
+
+Analysis-only task. Evaluates Anthropic's beta `compact_20260112` strategy for use in
+ai-workflows' orchestrator loop. Verdict: **DEFER**.
+
+Surface mismatch is the blocking constraint: Claude Code's `Task` tool (ai-workflows' sub-agent
+spawn primitive) does not expose `context_management.edits`, making the primitive inaccessible
+from ai-workflows' actual deployment shape. Additionally, T01–T04 shipped on 2026-04-28 and
+the orchestrator's context is already O(1); the marginal benefit is low. Beta stability and
+untested `pause_after_compaction` loop semantics add further risk without a forcing function.
+
+DEFER trigger: Claude Code `Task` exposes `context_management.edits` (stable release) AND
+T22 telemetry shows Auditor sessions still hitting >80K tokens.
+
+**Files touched:**
+- `design_docs/analysis/server_side_compaction_evaluation.md` — NEW; 5-section evaluation
+  (Mechanism, ai-workflows fit, Composition with T03/T04, Risk catalogue, Verdict + integration
+  sketch). Full surface-fit analysis citing `auto-implement.md` lines 8–14 and milestone README
+  T01 note (line 50).
+- `design_docs/nice_to_have.md` — added entry §24 with reopen trigger, integration sketch, and
+  cross-reference to the evaluation document (DEFER verdict per AC-4).
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: evaluation document exists with all 5 sections.
+- AC-2: verdict DEFER surfaced in document title and first paragraph.
+- AC-3: n/a (DEFER — no follow-up task ID or integration sketch required beyond the document).
+- AC-4: `design_docs/nice_to_have.md` has new §24 entry with reopen trigger.
+- AC-5: this CHANGELOG entry.
+- AC-6: status surfaces flipped (see spec and milestone README).
+
 ### Changed — M20 Task 04: Cross-task iteration compaction (iter_<N>-shipped.md per autopilot iteration; constant cross-task orchestrator context; research brief §Lens 2.1) (2026-04-28)
 
 Eliminates quadratic context growth across autopilot outer-loop iterations.  The autopilot
