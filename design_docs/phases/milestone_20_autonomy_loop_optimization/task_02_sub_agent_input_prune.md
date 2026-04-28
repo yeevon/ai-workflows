@@ -45,7 +45,7 @@ Canonical spawn-prompt scaffolding referenced by each slash command. Single sour
 
 ### Orchestrator measurement instrumentation (lightweight)
 
-Each Task spawn captures the spawn-prompt size (in tokens, via `tiktoken` cl100k_base or a regex-based proxy — token-counting accuracy is not load-bearing here, magnitude is) into `runs/<task>/spawn_<agent>_<cycle>.tokens.txt`. Aggregated by T22 (per-cycle telemetry). T02 only emits the per-spawn measurement; T22 builds the aggregation surface.
+Each Task spawn captures the spawn-prompt size (in tokens, via the **regex-based proxy** `len(re.findall(r"\S+", text)) * 1.3` — token-counting accuracy is not load-bearing here, magnitude is; same proxy used by T01, T22, T23 for consistency; no `tiktoken` test-only dep added per round-1 L8 carry-over) into `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt` (per audit M11 — nested directory; drop `_<cycle>` suffix from filename since the directory provides the namespace). Aggregated by T22 (per-cycle telemetry). T02 only emits the per-spawn measurement; T22 builds the aggregation surface.
 
 ## Tests
 
@@ -68,7 +68,7 @@ Test the KDR-section parsing logic that extracts only the cited KDRs from archit
 2. `.claude/commands/_common/spawn_prompt_template.md` exists as the canonical reference; each slash command links to it.
 3. `tests/orchestrator/test_spawn_prompt_size.py` passes with the per-agent ceilings.
 4. `tests/orchestrator/test_kdr_section_extractor.py` passes with positive + edge cases.
-5. Per-spawn token-count instrumentation lands at `runs/<task>/spawn_<agent>_<cycle>.tokens.txt` (T22 consumes these aggregates).
+5. Per-spawn token-count instrumentation lands at `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt` (T22 consumes these aggregates; nested per-cycle directory per audit M11).
 6. **Validation re-run:** re-run the M12 T01 audit cycle 1 spawn (against a frozen fixture of M12 T01's pre-T02 spawn-prompt input) and assert the post-T02 input-token count is ≥ 30 % smaller than the pre-T02 baseline.
 7. CHANGELOG.md updated under `[Unreleased]` with `### Changed — M20 Task 02: Sub-agent input prune (orchestrator-side scope discipline + per-spawn output budget; research brief §Lens 2.3)`.
 8. Status surfaces flip together at task close.

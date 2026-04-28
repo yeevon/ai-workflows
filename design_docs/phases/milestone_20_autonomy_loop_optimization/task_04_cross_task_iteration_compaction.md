@@ -51,7 +51,7 @@ T04 emits a structured **iteration-shipped artifact** (`runs/autopilot-<run-ts>-
 
 ### `.claude/commands/autopilot.md` — emit `iter_<N>_shipped.md` at iteration boundary
 
-Update `/autopilot`'s outer-loop Step D (iteration close) to write the iteration-shipped artifact at `runs/autopilot-<run-ts>/iter_<N>_shipped.md`. The artifact's content is derived from the iteration's existing recommendation file (`runs/autopilot-<run-ts>-iter<N>.md` — already produced today) plus the iteration's commit log and the per-cycle summaries from T03.
+Update `/autopilot`'s outer-loop Step D (iteration close) to write the iteration-shipped artifact at `runs/autopilot-<run-ts>-iter<N>-shipped.md`. The artifact's content is derived from the iteration's existing recommendation file (`runs/autopilot-<run-ts>-iter<N>.md` — already produced today) plus the iteration's commit log and the per-cycle summaries from T03.
 
 ### `.claude/commands/autopilot.md` — read-only-latest-shipped rule on iteration N+1 Step A
 
@@ -62,18 +62,20 @@ Update outer-loop Step A (start of each new iteration). Cycle N+1's queue-pick s
 
 This is the cross-task analogue of T03's read-only-latest-cycle-summary rule.
 
-### `runs/autopilot-<run-ts>/` directory convention
+### Path convention — flat hyphenated (matches today's autopilot.md; no migration scope per round-2 user arbitration)
+
+Each iteration emits its close-out artifact at `runs/autopilot-<run-ts>-iter<N>-shipped.md` as a sibling to today's existing kick-off recommendation file `runs/autopilot-<run-ts>-iter<N>.md` (already produced by autopilot.md line 66 today). Pattern:
 
 ```
-runs/autopilot-<run-ts>/
-  iter_1.md             (existing — recommendation file, queue-pick output)
-  iter_1_shipped.md     (NEW — close-out artifact, T04)
-  iter_2.md
-  iter_2_shipped.md
+runs/
+  autopilot-20260427T152243Z-iter1.md            (existing — recommendation file, queue-pick output)
+  autopilot-20260427T152243Z-iter1-shipped.md    (NEW — close-out artifact, T04)
+  autopilot-20260427T152243Z-iter2.md
+  autopilot-20260427T152243Z-iter2-shipped.md
   ...
 ```
 
-The `_shipped.md` suffix distinguishes close-out from kick-off. Both files have read-only semantics after iteration close.
+The `-shipped.md` suffix distinguishes close-out from kick-off. Both files have read-only semantics after iteration close. **No directory-grouping** — flat layout with run-timestamp + iter-number in the filename matches today's autopilot.md convention (no migration of existing recommendation-file paths needed).
 
 ## Tests
 

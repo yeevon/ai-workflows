@@ -37,7 +37,7 @@ Per audit M14: instead of inserting a new "Phase 4.5", extend the existing **Pha
 - **Cycle-N-vs-cycle-(N-1) finding overlap** (loop-spinning detection — see §Mechanism above for the diff-ratio + threshold).
 - **Rubber-stamp detection** (PASS verdict + substantial diff + zero HIGH/MEDIUM findings — flag as MEDIUM with note "verify reasoning").
 
-Both inspections live within Phase 4's existing critical-sweep mandate; no new phase is created. Phase 5 / Phase 6 / Phase 7 numbering stays untouched. (T03's cycle-summary emission, per audit M14, similarly extends an existing phase rather than introducing Phase 7.)
+Both inspections live within Phase 4's existing critical-sweep mandate; no new phase is created. Phases 5 and 6 (issue-file write, forward-deferral propagation) stay untouched. The live auditor has Phases 1–6 only (no Phase 7). Per audit M14, T03's cycle-summary emission similarly extends an existing phase (Phase 5) rather than introducing a new one.
 
 ### `tests/agents/test_auditor_anti_cargo_cult.py` (NEW)
 

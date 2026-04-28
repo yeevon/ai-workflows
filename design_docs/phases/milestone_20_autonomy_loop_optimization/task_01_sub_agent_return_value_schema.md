@@ -31,7 +31,7 @@ The 3-line schema eliminates both: the verdict line is unambiguous (`verdict: PA
 
 | Agent | Verdict tokens | Durable artifact (`file:` field) | Section header (`section:` field) |
 |---|---|---|---|
-| `builder` | `BUILT` / `BLOCKED` / `STOP-AND-ASK` | `runs/<task>/cycle_<N>_builder_handoff.md` (NEW per T03) | `—` |
+| `builder` | `BUILT` / `BLOCKED` / `STOP-AND-ASK` | `runs/<task>/cycle_<N>/builder_handoff.md` (NEW per T03 — per-cycle nested directory per audit M11) | `—` |
 | `auditor` | `PASS` / `OPEN` / `BLOCKED` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` | `—` (auditor writes the entire issue file) |
 | `security-reviewer` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` | `## Security review (YYYY-MM-DD)` |
 | `dependency-auditor` | `SHIP` / `FIX-THEN-SHIP` / `BLOCK` | `design_docs/phases/<milestone>/issues/task_<NN>_issue.md` (or CHANGELOG `### Security`) | `## Dependency audit (YYYY-MM-DD)` |
@@ -69,11 +69,11 @@ The PER-AGENT TOKEN LIST is the second column of the table above.
 
 Add a parsing convention under the Task-spawn invocation. The orchestrator, after every Task return:
 
-1. Captures the agent's full text return into `runs/<task>/agent_<name>_raw_return.txt` (durable record for debugging).
+1. Captures the agent's full text return into `runs/<task>/cycle_<N>/agent_<name>_raw_return.txt` (durable record for debugging — per-cycle nested directory per audit M11; T03 §directory layout is authoritative on artifact placement).
 2. Splits the return on `\n`; expects exactly 3 non-empty lines.
 3. Each line matches `^(verdict|file|section): ?(.+)$`.
 4. The `verdict` value is one of the agent's allowed tokens.
-5. On any failure: halt the loop, surface `🚧 BLOCKED: agent <name> returned non-conformant text — see runs/<task>/agent_<name>_raw_return.txt for full output`. Do not auto-retry.
+5. On any failure: halt the loop, surface `🚧 BLOCKED: agent <name> returned non-conformant text — see runs/<task>/cycle_<N>/agent_<name>_raw_return.txt for full output`. Do not auto-retry.
 
 (Same parser pattern in `/clean-tasks.md`, `/clean-implement.md`, `/queue-pick.md`, `/autopilot.md` — each command that spawns agents needs the parser. The parser logic is described in prose in each command file, not as code, since slash commands are markdown procedure documents.)
 

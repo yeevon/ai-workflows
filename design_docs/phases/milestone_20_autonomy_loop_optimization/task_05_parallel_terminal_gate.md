@@ -46,18 +46,6 @@ Each parallel reviewer writes its verdict to a deterministic fragment path inste
 
 This avoids file-write contention on the issue file. The three reviewers run truly concurrently; no Edit-collision races. After all three return, the orchestrator reads the three fragment files in one Read pass and stitches them into the issue file under their respective `## Sr. Dev review`, `## Sr. SDET review`, `## Security review` sections in one Edit pass.
 
-## Mechanism — fragment files (per research brief §Lens 1.4)
-
-Each reviewer writes its verdict to a deterministic fragment path instead of editing the issue file directly:
-
-- sr-dev → `runs/<task>/<cycle>/sr-dev-review.md`
-- sr-sdet → `runs/<task>/<cycle>/sr-sdet-review.md`
-- security-reviewer → `runs/<task>/<cycle>/security-review.md`
-
-(Where `<task>` is `m<N>_t<NN>` and `<cycle>` is the current cycle number.)
-
-This avoids file-write contention on the issue file. The three reviewers run truly concurrently; no Edit-collision races. After all three return, the orchestrator reads the three fragment files in one Read pass and stitches them into the issue file under their respective `## Sr. Dev review`, `## Sr. SDET review`, `## Security review` sections in one Edit pass.
-
 The Read tool's "Read multiple files at once" pattern (one tool message, multiple Read invocations) keeps the stitch step single-turn.
 
 ## Reviewer-agent updates
@@ -65,7 +53,7 @@ The Read tool's "Read multiple files at once" pattern (one tool message, multipl
 Each of the three reviewer agent files updates its `## Output format` section:
 
 - **Old:** "Append to the existing issue file under a `## <name> review` section."
-- **New:** "Write your full review to `runs/<task>/<cycle>/<agent>-review.md`. The orchestrator stitches it into the issue file in a follow-up turn. Your `## Return to invoker` value (T01) points `file:` at the fragment path; `section:` is the `## <name> review` heading the orchestrator will use when stitching."
+- **New:** "Write your full review to `runs/<task>/cycle_<N>/<agent>-review.md` (where `<task>` is the zero-padded `m<MM>_t<NN>` shorthand per audit M12 and `cycle_<N>/` is the per-cycle subdirectory per audit M11). The orchestrator stitches it into the issue file in a follow-up turn. Your `## Return to invoker` value (T01) points `file:` at the fragment path; `section:` is the `## <name> review` heading the orchestrator will use when stitching."
 
 The fragment file's content is identical to today's `## <name> review` section content (verdict + critical/high/advisory tiers + reviewer-passed-review per-lens). Only the destination changes.
 
@@ -155,7 +143,7 @@ grep -q "parallel.*terminal gate\|three Task tool calls" .claude/commands/auto-i
 
 # Verify each reviewer agent writes to fragment path
 for agent in sr-dev sr-sdet security-reviewer; do
-  grep -q "runs/.*<cycle>.*review.md\|runs/<task>/<cycle>/" .claude/agents/$agent.md \
+  grep -q "runs/.*cycle_<N>.*review.md\|runs/<task>/cycle_<N>/" .claude/agents/$agent.md \
     && echo "$agent OK" \
     || { echo "$agent FAIL"; exit 1; }
 done
@@ -186,6 +174,7 @@ uv run pytest tests/orchestrator/bench_terminal_gate.py -v
 ## Carry-over from task analysis
 
 - **L4 (round 1, 2026-04-27):** The wall-clock benchmark `bench_terminal_gate.py` lands but is "not in CI" — needs an explicit invocation hook. Add `@pytest.mark.benchmark` decorator + register the `benchmark` marker in `pyproject.toml` `[tool.pytest.ini_options]` markers block. Then `uv run pytest -m benchmark` runs benchmarks on demand. Without a marker the file becomes forgotten.
+- **L2 (round 2, 2026-04-27):** Tighten the smoke-test grep at line 158 to pin the `cycle_<N>/` form (`grep -q "runs/.*cycle_<N>.*review.md\|runs/<task>/cycle_<N>/"`). Already applied inline by H2; flagged here in case future drift re-introduces the legacy `<cycle>` shorthand.
 
 ## Carry-over from prior audits
 

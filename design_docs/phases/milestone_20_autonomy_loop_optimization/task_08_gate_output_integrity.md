@@ -14,9 +14,9 @@ This is **especially load-bearing under T07's default-Sonnet** (research brief �
 
 For each gate command (`uv run pytest`, `uv run lint-imports`, `uv run ruff check`, plus task-specific smoke tests):
 
-1. Orchestrator runs the gate via Bash, captures stdout + stderr + exit code into `runs/<task>/<cycle>/gate_<gate-name>.txt`.
+1. Orchestrator runs the gate via Bash, captures stdout + stderr + exit code into `runs/<task>/cycle_<N>/gate_<gate-name>.txt`.
 2. Orchestrator parses the captured output for the test runner's footer line (`==== N passed ====` for pytest; equivalent for ruff / lint-imports).
-3. If footer line is missing OR parse-mismatched OR exit code ≠ 0 → halt with `🚧 BLOCKED: gate <name> output not parseable; see runs/<task>/<cycle>/gate_<gate-name>.txt`. **Do not proceed to AUTO-CLEAN stamp.**
+3. If footer line is missing OR parse-mismatched OR exit code ≠ 0 → halt with `🚧 BLOCKED: gate <name> output not parseable; see runs/<task>/cycle_<N>/gate_<gate-name>.txt`. **Do not proceed to AUTO-CLEAN stamp.**
 4. The captured file becomes the durable record consulted by Auditor + sr-dev + sr-sdet on their re-runs.
 
 T01's orchestrator parser is the **first defence layer** (catches malformed agent verdict-lines). T08 is the **second layer** (catches Builder claims of "gates pass" with empty actual stdout).
@@ -29,7 +29,7 @@ Update the AUTO-CLEAN-stamp section to require:
 
 ```markdown
 Before stamping AUTO-CLEAN, the orchestrator independently runs each
-gate command and captures output to `runs/<task>/<cycle>/gate_<name>.txt`.
+gate command and captures output to `runs/<task>/cycle_<N>/gate_<name>.txt`.
 The orchestrator parses each captured file for the runner's footer line:
 - pytest:  `^=+ \d+ passed`
 - ruff:    `^All checks passed!` or `^\d+ files? checked`
@@ -57,7 +57,7 @@ Single source of truth for the per-gate footer-line regex. Each command's gate-c
 
 ### `tests/orchestrator/test_auto_clean_stamp_safety.py` (NEW)
 
-- Builder claims "gates pass" but `runs/<task>/<cycle>/gate_pytest.txt` is empty → halt.
+- Builder claims "gates pass" but `runs/<task>/cycle_<N>/gate_pytest.txt` is empty → halt.
 - Builder claims "gates pass" and gate captures show pass → AUTO-CLEAN stamp lands.
 - Builder claims "gates pass" but one gate has a failure footer → halt.
 
@@ -66,7 +66,7 @@ Single source of truth for the per-gate footer-line regex. Each command's gate-c
 1. `.claude/commands/auto-implement.md` describes the gate-capture-and-parse convention.
 2. `.claude/commands/clean-implement.md` matches.
 3. `.claude/commands/_common/gate_parse_patterns.md` exists with per-gate regex.
-4. Captured gate outputs land at `runs/<task>/<cycle>/gate_<name>.txt`.
+4. Captured gate outputs land at `runs/<task>/cycle_<N>/gate_<name>.txt`.
 5. Halt-on-missing-footer surfaces `🚧 BLOCKED: gate <name> output not parseable`.
 6. `tests/orchestrator/test_gate_output_capture.py` passes.
 7. `tests/orchestrator/test_auto_clean_stamp_safety.py` passes.

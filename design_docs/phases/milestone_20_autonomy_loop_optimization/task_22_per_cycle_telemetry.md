@@ -87,9 +87,11 @@ T22's aggregation script reads all `runs/<task>/cycle_<N>/*.usage.json` files fo
 
 ```markdown
 ## Telemetry summary
-| Cycle | Agent | Model | Effort | Input tokens | Output tokens | Cache hit % | Quota proxy | Verdict |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Cycle | Agent | Model | Effort | Input tokens | Output tokens | Cache hit % | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 ```
+
+(Per audit M9 + round-2 H1: quota / cost proxies are computed by T06's analysis script in `design_docs/analysis/autonomy_model_dispatch_study.md`, not at T22's capture time or T04's iter_shipped retrofit. T22 + T04's iter_shipped table is raw-counts + cache-hit-% + verdict only.)
 
 T22 produces the per-record JSONs; T04 produces the per-iteration aggregation. Both layers exist; neither replaces the other.
 
@@ -111,8 +113,9 @@ Hermetic test of `scripts/orchestration/telemetry.py`:
 
 Hermetic test of the T04-side aggregation:
 - 3-cycle task with 5 agent invocations per cycle (15 records total) → aggregation table has 15 rows.
-- Quota-proxy column computes correctly per-model.
 - Cache-hit % computes correctly: `cache_read / (cache_read + cache_creation)`.
+
+(Quota-proxy column dropped per round-2 H1 — proxy aggregation is T06's analysis-script scope, not T22's.)
 
 ## Acceptance criteria
 
@@ -130,7 +133,7 @@ Hermetic test of the T04-side aggregation:
 
 ```bash
 # Run a synthetic spawn-then-complete flow
-mkdir -p runs/m20_t22_smoke/1
+mkdir -p runs/m20_t22_smoke/cycle_1
 python scripts/orchestration/telemetry.py spawn \
   --task m20_t22_smoke --cycle 1 --agent auditor \
   --model claude-opus-4-7 --effort high
@@ -140,12 +143,12 @@ python scripts/orchestration/telemetry.py complete \
   --cache-creation 80 --cache-read 20 \
   --verdict PASS --fragment-path '/tmp/x'
 
-# Verify the record landed
-test -f runs/m20_t22_smoke/1/auditor.usage.json && echo "record landed"
+# Verify the record landed (per audit M11 — nested cycle_<N>/ directory)
+test -f runs/m20_t22_smoke/cycle_1/auditor.usage.json && echo "record landed"
 
-# Verify all expected fields
-python -c "import json; d=json.load(open('runs/m20_t22_smoke/1/auditor.usage.json')); \
-  assert d['agent']=='auditor' and d['quota_consumption_proxy']>0 and d['verdict']=='PASS'"
+# Verify expected raw-count fields (no quota_consumption_proxy — that's T06's analysis-layer per audit M9)
+python -c "import json; d=json.load(open('runs/m20_t22_smoke/cycle_1/auditor.usage.json')); \
+  assert d['agent']=='auditor' and d['input_tokens']==100 and d['verdict']=='PASS'"
 
 # Run tests
 uv run pytest tests/orchestrator/test_telemetry_record.py tests/orchestrator/test_telemetry_aggregation.py -v
@@ -169,7 +172,7 @@ uv run pytest tests/orchestrator/test_telemetry_record.py tests/orchestrator/tes
 
 ## Carry-over from task analysis
 
-(populated by `/clean-tasks m20`)
+- **L1 (round 2, 2026-04-27):** T22's `scripts/orchestration/check_task_response_fields.py` surface-check helper can be extended to also probe surface-feasibility for T27 (`context_management.edits` for `clear_tool_uses_20250919`) and T28 (broader `compact_20260112` surface). One helper script for all surface-check questions reduces duplication. Builder absorbs at implementation; not a structural constraint.
 
 ## Carry-over from prior audits
 

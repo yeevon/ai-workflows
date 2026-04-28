@@ -135,7 +135,7 @@ uv run pytest tests/orchestrator/test_cycle_summary_emission.py tests/orchestrat
 
 - **Cross-task compaction** — T04's scope. T03 is intra-task only.
 - **Server-side `compact_20260112` strategy** — T28's evaluation scope. File-based summaries are the auditable durable record per memory `project_autonomy_optimization_followups.md` thread #9; T28 evaluates whether server-side compaction *composes* alongside T03, not replaces it.
-- **Modifying the Auditor's existing audit phases** — T03 only adds Phase 7. Phases 1–6 (design-drift check, gate re-run, AC grading, critical sweep, issue-file write, forward-deferral propagation) are unchanged.
+- **Modifying the Auditor's existing audit phases beyond Phase 5** — T03 only extends Phase 5 (issue-file write) with the cycle-summary emission per audit M14. Phases 1–4 (design-drift check, gate re-run, AC grading, critical sweep) and Phase 6 (forward-deferral propagation) are unchanged. No new phase numbering introduced.
 - **Cycle-summary as the only memory mechanism** — the issue file remains the authoritative artifact. cycle_<N>/summary.md is a structured projection of the issue file's per-cycle delta, optimised for orchestrator re-read; the issue file is the one humans + future agents read for full detail.
 
 ## Dependencies
