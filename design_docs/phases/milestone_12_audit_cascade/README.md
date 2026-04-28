@@ -64,8 +64,8 @@ The mechanism to close this is a **tiered audit cascade**: pair every generative
 | 01 | [Auditor TierConfigs — `auditor-sonnet` + `auditor-opus`](task_01_auditor_tier_configs.md) | code + test | ✅ Complete (2026-04-27) |
 | 02 | [`AuditCascadeNode` graph primitive + `AuditFailure` exception + RetryingEdge re-prompt template](task_02_audit_cascade_node.md) | code + test | ✅ Complete (2026-04-27) |
 | 03 | [Workflow wiring — module-constant cascade enable + planner/slice_refactor integration](task_03_workflow_wiring.md) | code + test | ✅ Complete (2026-04-27) |
-| 04 | Telemetry — `TokenUsage.role` tag + `CostTracker.by_role` + cascade-step records | code + test | ✅ Complete (2026-04-27) |
-| 05 | `run_audit_cascade` MCP tool + SKILL.md ad-hoc-audit section | code + test + doc | Complete (2026-04-28) |
+| 04 | [Telemetry — `TokenUsage.role` tag + `CostTracker.by_role` + cascade-step records](task_04_telemetry_role_tag.md) | code + test | ✅ Complete (2026-04-27) |
+| 05 | [`run_audit_cascade` MCP tool + SKILL.md ad-hoc-audit section](task_05_run_audit_cascade_mcp_tool.md) | code + test + doc | ✅ Complete (2026-04-28) |
 | 06 | Eval harness — author/auditor fixture convention + golden cases for one opt-in workflow | code + test + doc | 📝 Planned |
 | 07 | Milestone close-out | doc | 📝 Planned |
 | 08 | [T02 amendment — `audit_cascade_node(skip_terminal_gate=True)` for cascade-exhaustion-without-interrupt path](task_08_audit_cascade_skip_terminal_gate.md) | code + test | ✅ Complete (2026-04-27) |
@@ -92,3 +92,55 @@ Filled in at audit time. Anticipated forward-deferrals from M12:
 ## Issues
 
 Land under [issues/](issues/) after each task's first audit.
+
+## Autopilot checkpoint — paused 2026-04-28 (T05 close)
+
+Single-session `/autopilot` run on 2026-04-27 → 2026-04-28 shipped 6 of 8 M12 tasks. Paused at iter-10 close (T05 just shipped) for context-budget reasons; resume cleanly per the instructions below.
+
+### State on `design_branch` at pause
+
+| Task | Status | Commit |
+| --- | --- | --- |
+| T01 — Auditor TierConfigs | ✅ Complete (2026-04-27) | `a7f3e8f` |
+| T02 — `AuditCascadeNode` primitive + `AuditFailure` exception | ✅ Complete (2026-04-27) | `fc8ef19` |
+| T08 — `audit_cascade_node(skip_terminal_gate=True)` (T02 amendment) | ✅ Complete (2026-04-27) | `e7e8a31` |
+| T03 — Workflow wiring (module-constant cascade enable) | ✅ Complete (2026-04-27) | `1677889` |
+| T04 — Telemetry (`TokenUsage.role` + `CostTracker.by_role`) | ✅ Complete (2026-04-27) | `f6904cb` |
+| T05 — `run_audit_cascade` MCP tool + SKILL.md | ✅ Complete (2026-04-28) | `8c664f6` |
+| T06 — Eval harness fixture convention | 📝 Planned (spec missing) | — |
+| T07 — Milestone close-out | 📝 Planned (spec missing) | — |
+
+**KDR addition this run:** [KDR-014 + ADR-0009](../../adr/0009_framework_owns_policy.md) (Framework owns quality policy; user owns invocation; operator override is env-var) — committed in isolated commit `91ca343` per autonomy decision 2.
+
+### Locked architectural decisions (user-arbitrated this run)
+
+- T03 round-1 H1 → KDR-014 (drop input field; module constant + env var).
+- T03 round-3 H1 → Option A (slice_refactor cascade channels on `SliceBranchState` only; cascade-exhausted branches surface as `SliceFailure` rows).
+- T03 round-4 H1 → Option A: new task **T08** amends `audit_cascade_node()` with `skip_terminal_gate=True` (T03 prerequisite).
+- T04 round-1 H1 → Option 4: factory-time role binding on `tiered_node` (mirror of existing `tier` kwarg).
+- T05 round-1 H1+H2 → Option A: standalone tool BYPASSES `audit_cascade_node()`; caller supplies `artefact_kind`.
+
+### Latent T02 bugs caught in-flight (cross-task fixes)
+
+- **T03 cycle 2** — `_DynamicState["slice"]` pass-through key was missing; every real cascade-enabled `slice_refactor` invocation would `KeyError`. Fixed via `Any`-typed pass-through key in `audit_cascade.py:_DynamicState`. (Right long-term shape is `extra_state_keys: list[str] | None = None` factory parameter; deferred until first non-`slice` embedding workflow.)
+- **T05 cycle 2** — real `auditor-sonnet` Claude CLI wraps JSON output in markdown code fences; `AuditVerdict.model_validate_json` rejected fenced JSON. Fixed via shared `_strip_code_fence(raw_text)` helper in `graph/audit_cascade.py` consumed by both T05's tool body AND `_audit_verdict_node` (cascade primitive — closes latent T02 bug). The AIW_E2E wire-level smoke caught this on first real-Claude invocation — exactly what CLAUDE.md's non-inferential rule exists to surface.
+
+### Cumulative carry-over forward-deferred to M12 T07 close-out
+
+T07 should bundle a single ADR-0004 amendment commit covering all 4 stale-framing items below + the architecture.md follow-on:
+
+- **ADR-0004 §Decision item 1** stale framing (`primitives/tiers.py` landing site — superseded by T01's workflow-scoped registries) — from T01 TA-LOW-03 / `M12-T01-ISS-02`.
+- **ADR-0004 §Consequences line 54** ("No import-linter edit needed" — superseded by T02's audit_cascade contract) — from T02 `M12-T02-MED-01`.
+- **ADR-0004 §Decision item 7** ("internal routing reuses the same `AuditCascadeNode`" — superseded by T05's Option A bypass) — from T05 spec §Propagation status.
+- **`architecture.md:105`** cascade-reuse framing (matching ADR-0004 §Decision item 7 stale-framing fix) — from T05 round-2 `TA-T05-LOW-02`. (Task-number `M12 T04 → M12 T05` was already fixed at T05 close; only the cascade-reuse framing rewrite remains.)
+
+The `_DynamicState["slice"]` workflow-name leak (T03 audit `M12-T03-LOW-05`) is its own future task triggered by "first non-`slice` embedding workflow"; NOT bundled with T07.
+
+### Resume instructions
+
+1. **Pre-flight check** — `git rev-parse --abbrev-ref HEAD` returns `design_branch`; `git status --short` shows only the M20 directory as untracked (M20 belongs to `workflow_optimization` branch — out of design_branch's scope).
+2. **Re-invoke `/autopilot`**. The roadmap-selector will return `NEEDS-CLEAN-TASKS m12` because T06 spec doesn't exist yet (M12 README convention: per-task specs land at each predecessor's close-out).
+3. **T06 spec drafting** — eval-harness fixture convention is mostly README-derivable from §Goal item 6 + Exit-criteria #9. Should be a 1-2 round task analyzer cycle. Reuses existing `CaptureCallback`'s role-tag from T04. No `EvalRunner` engine change.
+4. **T07 close-out** — doc-only task. Bundles the 4 ADR-0004 amendments above + architecture.md framing fix + final M12 status flip in roadmap.
+
+Memory entry capturing this checkpoint: `project_m12_autopilot_2026_04_27_checkpoint.md`.
