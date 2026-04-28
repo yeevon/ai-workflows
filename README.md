@@ -26,6 +26,7 @@ A LangGraph-native workflow framework for solo developers. Orchestrates multi-st
 | **M16 — External workflows + primitives load path** | Complete (2026-04-24) |
 | M17 — `scaffold_workflow` meta-workflow | Planned |
 | **M19 — Declarative authoring surface** | Complete (2026-04-26) |
+| **M20 — Autonomy loop optimization** | Complete (2026-04-28) |
 
 ## What it is
 
@@ -142,5 +143,7 @@ uv run ruff check     # style + basic correctness
 ```
 
 ## Next
+
+**M21 — Autonomy Loop Continuation** is the next planned milestone. It absorbs the agent-prompt-hardening track (Builder return-schema discipline, Auditor cycle-summary emission, Builder pre-stamp pattern catches) deferred from M20, plus Phases E/F/G (slimming, productivity commands, parallel-builders foundation) split from M20 per audit recommendation M3. M21 prerequisites M20 close-out; `/clean-tasks m21` is now unblocked.
 
 Roadmap + per-milestone task files live at [design_docs/roadmap.md](design_docs/roadmap.md) (builder-only, on design branch).

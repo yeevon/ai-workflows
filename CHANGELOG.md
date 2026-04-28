@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M20 Autonomy Loop Optimization] - 2026-04-28
+
+### Added — M20 Task ZZ: Milestone close-out cycle 2 — sr-dev FIX-THEN-SHIP applied (roadmap.md M20 narrative corrected; section header updated to M2–M20; T01/T02/T03 commit SHAs filled in CHANGELOG) (2026-04-28)
+
+Files touched: `design_docs/roadmap.md` (FIX-1: removed wrong-content M19 paste from M20 row; ADV-2: header updated to M2–M20), `CHANGELOG.md` (ADV-1: T01=1eb67e3, T02=aef31c3, T03=48ed494).
+
+### Added — M20 Task ZZ: Milestone close-out (status surfaces flipped; CHANGELOG promoted; roadmap + README updated; M21 propagation surface recorded) (2026-04-28)
+
+Doc-only milestone close-out. No `ai_workflows/` package changes.
+
+Closes M20 — Autonomy Loop Optimization. Flips all status surfaces, promotes all M20
+`[Unreleased]` CHANGELOG entries into this dated section, adds M20 rows to `roadmap.md`
+and root `README.md`, appends Outcome + Propagation status to the milestone README.
+
+**Shipped tasks (11 of 13 candidates):**
+- T01 (return-value schema) — 1eb67e3
+- T02 (input prune) — aef31c3
+- T03 (in-task cycle compaction) — 48ed494
+- T04 (cross-task iteration compaction) — 7caecbd
+- T05 (parallel terminal gate) — bd27945
+- T06 (shadow-audit study harness; DEFER verdict) — d76f93f
+- T08 (gate-output integrity) — 0dd91f4
+- T09 (task-integrity safeguards) — 8e572dc
+- T20 (auditor anti-cargo-cult inspections) — 851274f
+- T21 (adaptive-thinking migration) — 628b975
+- T22 (per-cycle telemetry) — 426c7fb
+- T23 (cache-breakpoint discipline; AC-7 deferred) — b39efbf
+- T27 (auditor input-volume rotation trigger; Path A rejected) — a266996
+- T28 (server-side compaction evaluation; DEFER verdict) — 21c37ba
+- ZZ prep commit — 0056f02
+
+**DEFER verdicts:**
+- T06: DEFER — recursive-subprocess confound + multi-day wall-clock make full 30-cell study
+  infeasible inside single autopilot iteration. Harness ready at
+  `scripts/orchestration/run_t06_study.py`; operator-resume per
+  `runs/study_t06/A1-m12_t01/methodology_note.json`.
+- T23 AC-7: DEFER — empirical cache-hit validation deferred per parallel L5-equivalent
+  bail-out (recursive-subprocess confound + TTL fragility). Operator-resume per
+  `runs/cache_verification/methodology.md`.
+- T28: DEFER — Claude Code Task tool does not expose `context_management.edits`; analysis at
+  `design_docs/analysis/server_side_compaction_evaluation.md`; `nice_to_have.md §24`.
+
+**T07 BLOCKED:** Dynamic model dispatch spec exists but is gated on T06 producing a non-DEFER
+verdict. Unblocks when operator runs `python scripts/orchestration/run_t06_study.py full-study`
+outside autopilot AND T06 verdict flips from DEFER to GO/NO-GO.
+
+**M21 hardening absorption surface:** 16+ Builder return-schema violations across 6 tasks in 6
+autopilot iterations; Auditor cycle-summary write refusal at multiple cycle boundaries; Builder
+pre-stamp "Auditor verdict" + "Locked decision" patterns; sr-dev `Write` tool missing from tools
+list; harness write-policy + orchestrator-owned post-spawn summary write reframe (LOW-11 from T06
+§C4). All 10 LOWs from T06 §C4 (LOW-1 through LOW-8 + LOW-10 + LOW-11) feed the M21
+agent-prompt-hardening absorbing task. `/clean-tasks m21` is now unblocked.
+
+**Autopilot baseline manual smoke (2026-04-28):**
+- Run timestamp: 20260428T153748Z; branch: `workflow_optimization`; `AIW_AUTONOMY_SANDBOX=1`.
+- 6 iter-shipped artifacts: `runs/autopilot-20260428T153748Z-iter1-shipped.md` through
+  `runs/autopilot-20260428T153748Z-iter6-shipped.md`.
+- Cycle counts: T06=5, T08=2, T09=1, T20=3, T23=2, T27=2 (15 total across 6 tasks).
+- Total agent invocations: ~70+. Cumulative tokens: ~3.5M.
+
+**Green-gate snapshot:**
+- `uv run pytest` — 1293 passed, 10 skipped, 1 pre-existing environmental fail
+  (`test_design_docs_absence_on_main` on `workflow_optimization` branch; LOW-3, out of ZZ scope).
+- `uv run lint-imports` — 5 contracts kept, 0 broken. No new layer contracts at M20
+  (orchestration infrastructure does not touch the package layer rule).
+- `uv run ruff check` — all checks passed.
+
+**Files touched:**
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/README.md` — Status flipped to
+  ✅ Complete; T07 row updated from Candidate to Planned; Outcome + Propagation status appended.
+- `design_docs/roadmap.md` — M20 row added (after M19); M20 narrative summary appended.
+- `README.md` — M20 row added to milestone table; §Next updated to reflect M21 as next milestone.
+- `CHANGELOG.md` — this entry; all M20 [Unreleased] entries promoted to this dated section.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/task_zz_milestone_closeout.md` —
+  Status flipped to ✅ Done.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/issues/task_zz_issue.md` — NEW;
+  audit log + M21 propagation surface + operator-resume actions.
+
+**ACs satisfied:**
+- AC-1 through AC-16 (see issue file for full enumeration).
+
+**Architecture.md:** No changes needed. M20 is orchestration-infrastructure; no §4 sub-bullet
+or §6 dep-table row requires acknowledgment of `scripts/orchestration/` (these are autonomy
+tooling, not runtime package components). Recorded in issue file per spec §5.
+
+**Deviations from spec:** None.
+
 ### Added — M20 Task 27: Auditor input-volume rotation trigger (client-side simulation of clear_tool_uses_20250919; tunable via AIW_AUDITOR_ROTATION_THRESHOLD; ≤ 70% cumulative input-token reduction on long-cycle audits; Path A rejected per audit H6 — Claude Code Task tool does not expose context_management.edits) (2026-04-28)
 
 Orchestration-infrastructure task. No `ai_workflows/` package changes.

@@ -1,6 +1,6 @@
 # Task ZZ — Milestone Close-out
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 
 **Grounding:** [milestone README](README.md) · [task_06](task_06_shadow_audit_study.md) (DEFER verdict; harness shipped) · [task_07](task_07_dynamic_model_dispatch.md) (blocked on T06 GO/NO-GO; spec exists per /clean-tasks output) · [task_08](task_08_gate_output_integrity.md) · [task_09](task_09_task_integrity_safeguards.md) · [task_20](task_20_carry_over_checkbox_cargo_cult_extended.md) · [task_21](task_21_adaptive_thinking_migration.md) · [task_22](task_22_per_cycle_telemetry.md) · [task_23](task_23_cache_breakpoint_discipline.md) · [task_27](task_27_tool_result_clearing.md) · [task_28](task_28_evaluate_server_side_compaction.md) (DEFER verdict; analysis-only) · [M14 T02](../milestone_14_mcp_http/task_02_milestone_closeout.md) + [M11 T02](../milestone_11_gate_review/task_02_milestone_closeout.md) (close-out patterns to mirror) · [CLAUDE.md](../../../CLAUDE.md) §Status-surface discipline · `architecture.md` §9 KDRs (drift-check anchors).
 

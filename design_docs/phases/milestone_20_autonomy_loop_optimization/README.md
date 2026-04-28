@@ -1,6 +1,6 @@
 # Milestone 20 — Autonomy Loop Optimization
 
-**Status:** 📝 Drafting (revised 2026-04-27 after research-brief synthesis; **split 2026-04-27 — Phases E/F/G moved to [M21](../milestone_21_autonomy_loop_continuation/README.md)** per audit recommendation M3). Branch: `workflow_optimization` (user-named; milestone doc uses `autonomy_loop_optimization` to avoid overloading the existing `ai_workflows/workflows/` package term). Grounding: research brief `design_docs/analysis/m20_orchestration_research_brief.md` (Q1–Q2 2026 best-practices synthesis post-Opus-4.6) · project memory `project_autonomy_optimization_followups.md` · `architecture.md` §9 KDRs · autonomy validation (M12 T01 a7f3e8f, T02 fc8ef19, T03 1677889 — autopilot end-to-end validation 2026-04-27).
+**Status:** ✅ Complete (2026-04-28). Branch: `workflow_optimization` (user-named; milestone doc uses `autonomy_loop_optimization` to avoid overloading the existing `ai_workflows/workflows/` package term). Grounding: research brief `design_docs/analysis/m20_orchestration_research_brief.md` (Q1–Q2 2026 best-practices synthesis post-Opus-4.6) · project memory `project_autonomy_optimization_followups.md` · `architecture.md` §9 KDRs · autonomy validation (M12 T01 a7f3e8f, T02 fc8ef19, T03 1677889 — autopilot end-to-end validation 2026-04-27).
 
 **Scope note.** Every milestone before M20 changed the runtime (`ai_workflows/` package). M20 changes the autonomy infrastructure — agent prompts (`.claude/agents/`), slash commands (`.claude/commands/`), and the project context doc (`CLAUDE.md`). Runtime code is read-only at this milestone except where a finding requires a runtime hook (e.g. a structured log line the orchestrator parses, or per-agent telemetry capture). KDR drift checks still apply — M20 must not violate the seven load-bearing KDRs while reshaping the loop that enforces them.
 
@@ -122,7 +122,7 @@ The pool is reorganized into seven phases keyed to the optimization themes. Each
 | 21 | **NEW** — Adaptive-thinking migration (eliminate every `thinking: <literal>` shorthand and `budget_tokens` directive — confirmed 7 hits across `.claude/commands/` 2026-04-27 grep: 6 × `thinking: max` + 1 × `thinking: high` in `implement.md`; migrate to `thinking: {type: "adaptive"}` + per-role `effort`; required for Opus 4.7 forward compatibility AND for T06's Opus 4.7 cells to not 400-error during the study) | NEW (research-brief T21) | Model-tier / doc + code | ✅ Done |
 | 22 | **NEW** — Per-cycle token telemetry per agent (wrapper captures **raw counts only**: cache + input + output tokens, model, effort, wall-clock, verdict; persists to `runs/<task>/cycle_<N>/<agent>.usage.json`). Per-cell quota / cost proxies are computed by T06's analysis script from these raw counts (T22 is the measurement substrate; T06 owns the proxy / aggregation layer per round-2 H1 fix). **Lands second in Phase C** — T06 study cannot produce evidence without T22's records. | NEW (research-brief T22) | Model-tier / code | ✅ Done |
 | 06 | Shadow-Audit empirical study (6-cell matrix: Sonnet/Opus 4.6/Opus 4.7 × Builder/Auditor on 5 tasks; consumes T22's telemetry; produces verdict-count + token + wall-clock + quota-consumption deltas per cell) | STRONGLY SUPPORT + MODIFY (T06 from #7) | Model-tier / analysis | ✅ Done (DEFER verdict; harness shipped; AC #7 deferred to T06-resume) |
-| 07 | Dynamic model dispatch (`get_model_for_agent_role` helper; default-Sonnet + `--expert` Opus + `--cheap` Haiku for mechanical roles; never switch mid-context) | STRONGLY SUPPORT + EXTEND (T07 from #6) | Model-tier / code | 📝 Candidate (gated on T06) |
+| 07 | Dynamic model dispatch (`get_model_for_agent_role` helper; default-Sonnet + `--expert` Opus + `--cheap` Haiku for mechanical roles; never switch mid-context) | STRONGLY SUPPORT + EXTEND (T07 from #6) | Model-tier / code | 📝 Planned (gated on T06) |
 
 ### Phase D — Defense-in-depth integrity (load-bearing if Phase C lands; less so otherwise)
 
@@ -133,7 +133,7 @@ The pool is reorganized into seven phases keyed to the optimization themes. Each
 | 20 | Carry-over checkbox-cargo-cult catch — extended to inspect (a) checkboxes marked done without diff/test, (b) two consecutive cycles producing near-identical output, (c) Auditor rubber-stamping pattern | SUPPORT + EXTEND (T20 from #5) | Safeguards / doc | ✅ Done |
 | 23 | **NEW** — Cache-breakpoint discipline (pin breakpoints on last stable block; verify empirically with 2-call cache-hit telemetry; addresses the 5–20× session-cost blowup failure mode) | NEW (research-brief T23) | Safeguards / code | ✅ Done |
 | 27 | **NEW** — Tool-result clearing for long Auditor runs (`clear_tool_uses_20250919` strategy with `keep` window of 3–5 most recent tool results) | NEW (research-brief T27) | Safeguards / code | ✅ Done |
-| ZZ | M20 milestone close-out (Phases A-D done; baseline measurements published; M21 unblocked) | n/a | Closeout / doc | 📝 Planned |
+| ZZ | M20 milestone close-out (Phases A-D done; baseline measurements published; M21 unblocked) | n/a | Closeout / doc | ✅ Done |
 
 ### Phases E (Slimming), F (Productivity commands), G (Parallel-builders) — moved to M21
 
@@ -173,6 +173,56 @@ Phases **E, F, G** moved to **[M21](../milestone_21_autonomy_loop_continuation/R
 
 ---
 
+## Outcome (2026-04-28)
+
+M20 shipped 11 of 13 candidate tasks (T01–T06, T08, T09, T20, T21, T22, T23, T27, T28 = 11 shipped + T06/T23/T28 carrying DEFER verdicts). T07 remains open, blocked on T06 GO/NO-GO.
+
+### T01–T05 — Compaction quartet + parallel terminal gate (Phase A + B)
+
+**T01** enforces the hard 3-line return-value schema (verdict / file / section) across all 9 sub-agents via prompt-mandate + orchestrator-side parsing. **T02** establishes orchestrator-side scope discipline (spawns receive scoped context only; output budget enforced). **T03** introduces per-cycle `cycle_<N>/summary.md` compaction, making orchestrator context O(1) instead of linear-in-cycle. **T04** introduces cross-task `iter_<N>-shipped.md` compaction at autopilot iteration boundaries, keeping the outer-loop context O(1). **T05** parallelises the terminal gate: sr-dev + sr-sdet + security-reviewer spawn in a single multi-Task message; each writes to a fragment file; orchestrator stitches in one Edit pass. Together these close the four token-accumulation surfaces (sub-agent input, output, in-task cycle, cross-task iteration) and form the structural foundation for the autonomy loop's compaction substrate. Telemetry records under `runs/<task>/cycle_<N>/<agent>.usage.json`.
+
+### T06 — Shadow-Audit empirical study (DEFER verdict)
+
+Methodology designed; data collection deferred to operator-resume. Harness `scripts/orchestration/run_t06_study.py` (791 lines) reproducibly drives the 6-cell × 5-task matrix; bail-out check fires after the first A1 task pair (spec L5 wording). Hermetic harness tests (7) cover projection arithmetic, bail-manifest aggregate shape, dry-run end-to-end, single-cell CLI bail contract. Per-cell measurements deferred to `runs/study_t06/<cell>-<task>/` populated by operator outside autopilot. DEFER verdict rationale: recursive-subprocess confound + multi-day wall-clock make full 30-cell data collection infeasible inside a single autopilot iteration.
+
+### T07 — Dynamic model dispatch (📝 Planned, gated on T06's GO verdict, operator-resume)
+
+Does not ship at M20. T07's spec exists but is gated on T06 producing a non-DEFER verdict (study data populated, GO/NO-GO calibrated). Until the operator runs the harness outside autopilot, T07 stays open; it carries to M21 only when the operator confirms the study verdict and unblocks the dispatch defaults.
+
+### T08–T09 — Gate-output integrity + task-integrity safeguards (Phase D)
+
+**T08**'s `_common/gate_parse_patterns.md` is the single source of truth for gate-footer regex (pytest, ruff, lint-imports); the orchestrator independently captures and parses raw gate stdout before stamping AUTO-CLEAN. **T09**'s `_common/integrity_checks.md` is the canonical reference for the three pre-stamp checks (non-empty diff, non-empty test-diff for code tasks, independent gate re-run). Both form the defense-in-depth pre-AUTO-CLEAN ceremony.
+
+### T20 — Auditor anti-cargo-cult inspections
+
+M12-T01 carry-over-patch ported from template; Phase 4 extended with cycle-N-vs-(N-1) overlap detection + rubber-stamp detection. `scripts/orchestration/cargo_cult_detector.py` ships 50/51 boundary tests.
+
+### T21–T22 — Adaptive-thinking migration + per-cycle telemetry
+
+**T21** eliminated every `thinking: max` literal and `budget_tokens` directive; all 9 agent frontmatters + 7 slash commands now carry `thinking: {type: "adaptive"}` + explicit `effort:` per role. **T22** records `cache_read_input_tokens` / `cache_creation_input_tokens` / `input_tokens` / `output_tokens` / `model` / `effort` per agent invocation under `runs/<task>/cycle_<N>/<agent>.usage.json`.
+
+### T23 — Cache-breakpoint discipline (AC-7 deferred)
+
+Stable-prefix-discipline section added to `_common/spawn_prompt_template.md`; 2-call verification harness `scripts/orchestration/cache_verify.py` with hermetic tests; methodology stub at `runs/cache_verification/methodology.md` for operator-resume. AC-7 empirical validation deferred per parallel L5-equivalent bail-out (recursive-subprocess confound + TTL fragility).
+
+### T27 — Auditor input-volume rotation trigger
+
+Client-side simulation of `clear_tool_uses_20250919`. **Path A explicitly rejected per audit H6** — Claude Code Task tool agent frontmatter does not surface `context_management.edits` (verified across all 9 existing agents — frontmatter accepts only `name`/`description`/`tools`/`model`). Threshold tunable via `AIW_AUDITOR_ROTATION_THRESHOLD` (60K default).
+
+### T28 — Server-side compaction evaluation (DEFER verdict)
+
+Surface mismatch — Claude Code Task tool does not expose `context_management.edits`; analysis at `design_docs/analysis/server_side_compaction_evaluation.md`; recorded under `nice_to_have.md §24` for re-open if Anthropic / Claude Code surface evolves.
+
+### Manual-verification autopilot baseline
+
+The 6-task autopilot run on 2026-04-28 (timestamp `20260428T153748Z`, branch `workflow_optimization`, `AIW_AUTONOMY_SANDBOX=1`) shipped T06 (d76f93f), T08 (0dd91f4), T09 (8e572dc), T20 (851274f), T23 (b39efbf), T27 (a266996) across 6 autopilot iterations (iter1–iter6 artifacts at `runs/autopilot-20260428T153748Z-iter1-shipped.md` through `iter6-shipped.md`). T01–T05, T21, T22, T28 shipped in earlier iterations or pre-autopilot: T04 (7caecbd), T05 (bd27945), T21 (628b975), T22 (426c7fb), T28 (21c37ba). Total cycles across 6 tasks: T06=5, T08=2, T09=1, T20=3, T23=2, T27=2 (15 total). Total agent invocations: ~70+. Cumulative tokens: ~3.5M.
+
+### Green-gate snapshot (close-out)
+
+`uv run pytest` — 1293 passed, 1 pre-existing environmental fail (`test_design_docs_absence_on_main` on `workflow_optimization` branch; LOW-3, out of ZZ scope). `uv run lint-imports` — 5 contracts kept, 0 broken (no new layer contracts at M20; orchestration infrastructure does not touch the package layer rule). `uv run ruff check` — all checks passed.
+
+---
+
 ## Carry-over from prior milestones
 
 None at draft time. Will land here if any M19 / M12 / M16 audit forward-defers a finding to M20.
@@ -183,13 +233,14 @@ None at draft time. Populated by `/clean-tasks m20` runs.
 
 ## Propagation status
 
-Filled in at audit time. Anticipated forward-deferrals from M20:
+Recorded at M20 close-out (2026-04-28):
 
-- **Multi-orchestrator parallelism** (concurrent `/auto-implement` runs) — `nice_to_have.md` entry with trigger "first time queue depth + per-task wall-clock makes a single-orchestrator drain take > 24h."
-- **Per-task model-tier learning** (build a per-task-kind dispatch table from observed verdicts) — `nice_to_have.md` entry with trigger "T06 study identifies 3+ task-kinds with stable Sonnet-vs-Opus delta patterns."
-- **Builder-side worktree parallelism** (T18 + T19 if deferred from M20) — `nice_to_have.md` entry with trigger "post-M20 measurement shows Builder is the new wall-clock bottleneck after parallel-reviewers + compaction land."
-- **Agent Teams adoption** — `nice_to_have.md` entry with trigger "ai-workflows ever needs adversarial-debate auditing or peer-to-peer agent coordination" (currently no requirement).
-- **Migrate to Opus 4.7 as default `--expert` model** — `nice_to_have.md` entry with trigger "Opus 4.7 settles for ai-workflows' workloads (currently 1.0–1.35× tokenizer overhead vs 4.6 makes it the costlier choice; 4.6 remains safer through Q2 2026)."
+- **M21 agent-prompt-hardening absorbing task** — not yet specced. M21 README at `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` exists; `/clean-tasks m21` is unblocked now that M20 closes. Absorbing scope: Builder return-schema non-conformance (16+ occurrences across 6 tasks in 6 autopilot iterations), Auditor cycle-summary write refusal (multiple cycle boundaries), Builder pre-stamp "Auditor verdict" pattern, Builder pre-stamp "Locked decision" pattern, sr-dev `Write` tool missing from tools list, and the harness write-policy + orchestrator-owned post-spawn summary write reframe (LOW-11). All 10 LOWs from T06 §C4 (LOW-1 through LOW-8 + LOW-10 + LOW-11) plus subsequent task recurrences feed this absorbing task. Priority: HIGH (empirical recurrence data is the smoking gun).
+- **T07 dynamic model dispatch** — carries to M21. Unblocks when operator runs `python scripts/orchestration/run_t06_study.py full-study` outside autopilot AND T06 verdict flips from DEFER to GO/NO-GO.
+- **T06 30-cell empirical study** — operator-resume per `runs/study_t06/A1-m12_t01/methodology_note.json`. Outside autopilot.
+- **T23 cache-verification empirical** — operator-resume per `runs/cache_verification/methodology.md`. Outside autopilot.
+- **T28 nice_to_have §24** — re-open trigger documented at `design_docs/nice_to_have.md §24`; stays deferred. Re-open condition: Claude Code `Task` exposes `context_management.edits` (stable release) AND T22 telemetry shows Auditor sessions still hitting >80K tokens.
+- **No new milestone generated by ZZ.** M21 (Autonomy Loop Continuation) is the next load-bearing milestone; M21's task-out happens via `/clean-tasks m21`.
 
 ---
 
