@@ -1,6 +1,9 @@
 ---
 model: claude-opus-4-7
-thinking: max
+thinking:
+  type: adaptive
+effort: high
+# Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
 # /auto-implement

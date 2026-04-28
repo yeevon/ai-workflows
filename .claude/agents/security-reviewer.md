@@ -3,6 +3,10 @@ name: security-reviewer
 description: Reviews ai-workflows code changes for security and integrity issues that actually matter in this threat model — solo-use local + published PyPI wheel + Claude Code OAuth subprocess + KDR-013 user-owned external workflows. Use after the functional audit reaches FUNCTIONALLY CLEAN, before declaring the task fully shippable.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: claude-sonnet-4-6
+thinking:
+  type: adaptive
+effort: high
+# Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
 You are the security reviewer for ai-workflows. Read the threat model carefully — most generic web-app concerns don't apply, and flagging them wastes the pipeline.

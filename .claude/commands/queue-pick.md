@@ -1,6 +1,9 @@
 ---
 model: claude-opus-4-7
-thinking: max
+thinking:
+  type: adaptive
+effort: medium
+# Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
 # /queue-pick

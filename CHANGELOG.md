@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M20 Task 21: Adaptive-thinking migration (eliminate thinking: max; per-role effort settings; research brief §Lens 3.3; required for T06 + T07) (2026-04-28)
+
+Eliminates every deprecated `thinking: <literal>` shorthand directive (6 × `thinking: max` + 1
+× `thinking: high`) from all 7 slash commands and adds `thinking: { type: adaptive }` + explicit
+`effort:` to all 7 slash command frontmatters and all 9 agent frontmatters. Establishes a new
+canonical reference file `.claude/commands/_common/effort_table.md` listing every per-role effort
+assignment. Required for Opus 4.7 forward compatibility (T06's 6-cell matrix would 400-error on
+Opus 4.7 without this migration) and for T07 (dynamic dispatch would crash on deprecated API).
+
+**Files touched:**
+- `.claude/commands/auto-implement.md` — replace `thinking: max` with `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/commands/audit.md` — same migration, effort: high.
+- `.claude/commands/clean-tasks.md` — same migration, effort: high.
+- `.claude/commands/clean-implement.md` — same migration, effort: high.
+- `.claude/commands/queue-pick.md` — same migration, effort: medium.
+- `.claude/commands/autopilot.md` — same migration, effort: high.
+- `.claude/commands/implement.md` — replace `thinking: high` with `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/builder.md` — add `thinking:\n  type: adaptive\neffort: high` to frontmatter.
+- `.claude/agents/auditor.md` — add `thinking:\n  type: adaptive\neffort: high` to frontmatter.
+- `.claude/agents/security-reviewer.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/dependency-auditor.md` — add `thinking:\n  type: adaptive\neffort: medium` (mechanical role).
+- `.claude/agents/architect.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/sr-dev.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/sr-sdet.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/task-analyzer.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/roadmap-selector.md` — add `thinking:\n  type: adaptive\neffort: medium` (sequential walk).
+- `.claude/commands/_common/effort_table.md` — NEW canonical reference for per-role effort assignments.
+- `tests/orchestrator/test_no_deprecated_thinking_directives.py` — NEW hermetic tests: zero `thinking: <literal>` shorthand, zero `budget_tokens`, adaptive+effort in all 7 commands, adaptive+effort in all 9 agents.
+- `tests/orchestrator/test_effort_table_consistency.py` — NEW hermetic tests: effort_table.md exists + lists all 16 files + every frontmatter matches table assignment.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: zero `thinking: <literal>` shorthand in `.claude/` (grep returns 0).
+- AC-2: zero `budget_tokens` in `.claude/` (grep returns 0).
+- AC-3: all 7 slash command frontmatters have `thinking: { type: adaptive }` + `effort:`.
+- AC-4: all 9 agent frontmatters have `thinking: { type: adaptive }` + `effort:`.
+- AC-5: `.claude/commands/_common/effort_table.md` exists and matches.
+- AC-6: `test_no_deprecated_thinking_directives.py` passes (6 tests).
+- AC-7: `test_effort_table_consistency.py` passes (5 tests).
+- AC-8: this CHANGELOG entry.
+- AC-9: status surfaces flipped (see spec and milestone README).
+
+**Deviations from spec:** none.
+
 ### Changed — M20 Task 05: Unified parallel terminal gate (sr-dev + sr-sdet + security-reviewer in single multi-Task message; fragment files; replaces two-gate Security+Team flow with single TERMINAL CLEAN/BLOCK/FIX precedence rule; research brief §Lens 1.4) (2026-04-28) (cycle 2 follow-up: aligned reviewer verdict templates, updated schema doc, hardened benchmark test)
 
 **Files touched:**
