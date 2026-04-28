@@ -1,6 +1,7 @@
 # Task 21 — Adaptive-thinking migration (eliminate `thinking: max` literals; per-role `effort` settings)
 
 **Status:** 📝 Planned.
+**Kind:** Model-tier / doc + code.
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.3 (adaptive thinking is the new dial)](research_analysis) · audit recommendation M4 (2026-04-27 grep — 6 hits across `.claude/commands/`) · [Anthropic API docs `whats-new-claude-4-7`](https://docs.claude.com/en/api/whats-new-claude-4-7) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) (and 5 sibling slash command files).
 
 ## What to Build
@@ -35,7 +36,7 @@ Per research brief Lens 3.3:
 
 ### Slash command frontmatter — migrate `thinking: max` to adaptive + effort
 
-For each of the 6 confirmed hits (`auto-implement.md`, `audit.md`, `clean-tasks.md`, `clean-implement.md`, `queue-pick.md`, `autopilot.md`), replace:
+For each of the 7 commands (`auto-implement.md`, `audit.md`, `clean-tasks.md`, `clean-implement.md`, `queue-pick.md`, `autopilot.md`, `implement.md` — verified by `grep -nE "^thinking:" .claude/commands/`: 6 × `thinking: max` + 1 × `thinking: high` in `implement.md`), replace:
 
 ```yaml
 ---
@@ -62,6 +63,7 @@ Effort assignment per slash command:
 - `clean-implement` → `effort: high` (Builder→Auditor loop)
 - `queue-pick` → `effort: medium` (sequential walk + 3 filters)
 - `autopilot` → `effort: high` (meta-loop orchestrator)
+- `implement` → `effort: high` (single Builder pass; mirrors `clean-implement`)
 
 ### Agent frontmatter — explicit effort + adaptive
 
@@ -80,7 +82,7 @@ The smoke test below + the test below verify zero `thinking: max` / `budget_toke
 ### `tests/orchestrator/test_no_deprecated_thinking_directives.py` (NEW)
 
 Hermetic test:
-- `grep -rE "thinking:[[:space:]]*max" .claude/` returns zero hits.
+- `grep -rE "thinking:[[:space:]]*(max|high|medium|low)" .claude/` returns zero hits (covers all `thinking: <literal>` shorthand variants — `thinking: high` in `implement.md` is the same deprecated dial as `thinking: max` per research brief §Lens 3.3).
 - `grep -rE "budget_tokens" .claude/` returns zero hits (none expected today; future-proof).
 - Each slash command frontmatter has `thinking:\n  type: adaptive` and a matching `effort:` line.
 - Each agent frontmatter has `thinking:\n  type: adaptive` (or no `thinking:` block at all if the agent runs on Haiku) and a matching `effort:` line where applicable.
@@ -91,9 +93,9 @@ Test that `_common/effort_table.md` lists every agent + slash command, and the a
 
 ## Acceptance criteria
 
-1. Zero `thinking: max` literals in `.claude/`. Verified by grep.
+1. Zero `thinking: <literal>` shorthand directives (max / high / medium / low) in `.claude/`. Verified by grep.
 2. Zero `budget_tokens` literals in `.claude/`. Verified by grep.
-3. All 6 slash command frontmatters use `thinking: { type: adaptive }` + explicit `effort:` per the per-command assignment.
+3. All 7 slash command frontmatters use `thinking: { type: adaptive }` + explicit `effort:` per the per-command assignment.
 4. All 9 agent frontmatters use `thinking: { type: adaptive }` (where applicable) + explicit `effort:` per the per-role table.
 5. `.claude/commands/_common/effort_table.md` exists and matches.
 6. `tests/orchestrator/test_no_deprecated_thinking_directives.py` passes.
@@ -104,12 +106,12 @@ Test that `_common/effort_table.md` lists every agent + slash command, and the a
 ## Smoke test (Auditor runs)
 
 ```bash
-# Verify zero deprecated literals
-test $(grep -rE "thinking:[[:space:]]*max" .claude/ | wc -l) -eq 0 && echo "no thinking:max"
+# Verify zero deprecated literals (all shorthand variants)
+test $(grep -rE "thinking:[[:space:]]*(max|high|medium|low)" .claude/ | wc -l) -eq 0 && echo "no thinking shorthand"
 test $(grep -rE "budget_tokens" .claude/ | wc -l) -eq 0 && echo "no budget_tokens"
 
-# Verify each slash command has adaptive thinking
-for cmd in auto-implement audit clean-tasks clean-implement queue-pick autopilot; do
+# Verify each slash command has adaptive thinking (7 commands per H3)
+for cmd in auto-implement audit clean-tasks clean-implement queue-pick autopilot implement; do
   grep -A 2 "^thinking:" .claude/commands/$cmd.md | grep -q "type: adaptive" \
     && echo "$cmd OK" \
     || { echo "$cmd FAIL"; exit 1; }

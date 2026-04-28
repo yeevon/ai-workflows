@@ -1,15 +1,50 @@
-# Task 05 — Parallel terminal gate (sr-dev + sr-sdet + security-reviewer in one message)
+# Task 05 — Parallel unified terminal gate (sr-dev + sr-sdet + security-reviewer in one message)
 
 **Status:** 📝 Planned.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 1.4 (parallel sub-agent dispatch)](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #14 · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) · [`.claude/agents/sr-dev.md`](../../../.claude/agents/sr-dev.md) · [`.claude/agents/sr-sdet.md`](../../../.claude/agents/sr-sdet.md) · [`.claude/agents/security-reviewer.md`](../../../.claude/agents/security-reviewer.md) · sibling [task_01](task_01_sub_agent_return_value_schema.md) (fragment-file format reuses T01's 3-line schema).
+**Kind:** Performance / doc + code.
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 1.4 (parallel sub-agent dispatch)](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #14 · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) (today's two-gate flow: Security gate at line 121, Team gate at line 149) · [`.claude/agents/sr-dev.md`](../../../.claude/agents/sr-dev.md) · [`.claude/agents/sr-sdet.md`](../../../.claude/agents/sr-sdet.md) · [`.claude/agents/security-reviewer.md`](../../../.claude/agents/security-reviewer.md) · sibling [task_01](task_01_sub_agent_return_value_schema.md) (fragment-file format reuses T01's 3-line schema).
 
 ## What to Build
 
-Replace the **sequential terminal gate** in `/auto-implement` with a **parallel multi-Task spawn**. Today the orchestrator spawns sr-dev → sr-sdet → security-reviewer in series (each invocation waits for the previous to return). T05 spawns all three in a single orchestrator message (the Agent tool doc explicitly endorses concurrent multi-Task spawns), and stitches their outputs via fragment files.
+Replace `/auto-implement`'s **two-gate sequential structure** (Security gate first → Team gate second) with **one unified terminal gate** that spawns sr-dev + sr-sdet + security-reviewer concurrently in a single orchestrator message. Today's flow:
 
-Per the research brief §Lens 1.4: parallel sub-agent dispatch works when (a) ≥ 3 unrelated tasks, (b) no shared state, (c) clear non-overlapping file boundaries, (d) independent verification. The terminal gate satisfies all four — sr-dev grades code quality, sr-sdet grades test quality, security-reviewer grades the threat-model surface; none depend on the others' output.
+- **Security gate** (auto-implement.md line 121): Step S1 spawns `security-reviewer`; Step S2 conditionally spawns `dependency-auditor`. Runs FIRST after FUNCTIONALLY CLEAN.
+- **Team gate** (line 149): Step T1 spawns `sr-dev`; Step T2 spawns `sr-sdet`; Step T3 conditionally spawns `architect`. Runs SECOND after SECURITY CLEAN.
 
-**Wall-clock target: ≥ 2× improvement** vs the current serial gate. Sum-of-three becomes max-of-three.
+T05's design (per user arbitration, audit recommendation H2 Option A) consolidates the security-reviewer's invocation into the same parallel batch as sr-dev + sr-sdet. **Old SECURITY CLEAN → TEAM CLEAN sequencing is replaced by a single TERMINAL CLEAN stop condition.** dependency-auditor and architect retain their conditional + standalone semantics (see §Conditional spawns below).
+
+Per the research brief §Lens 1.4: parallel sub-agent dispatch works when (a) ≥ 3 unrelated tasks, (b) no shared state, (c) clear non-overlapping file boundaries, (d) independent verification. The unified terminal gate satisfies all four — sr-dev grades code quality, sr-sdet grades test quality, security-reviewer grades the threat-model surface; none depend on the others' output.
+
+**Wall-clock target: ≥ 2× improvement** vs today's two-gate serial flow. Sum-of-three becomes max-of-three.
+
+## Stop-condition precedence rule (new — replaces SECURITY CLEAN / TEAM CLEAN)
+
+After all three reviewers return their T01 verdict lines:
+
+| Reviewer combination | Stop condition | Action |
+| --- | --- | --- |
+| All three SHIP | TERMINAL CLEAN | Proceed to pre-commit ceremony (T09) → AUTO-CLEAN stamp |
+| Any reviewer BLOCK | TERMINAL BLOCK | Halt loop; surface the BLOCK finding verbatim. **security-reviewer BLOCK takes precedence over sr-dev/sr-sdet SHIP** when surfacing reason (the threat-model finding is the most user-load-bearing) |
+| Any reviewer FIX-THEN-SHIP (no BLOCK) | TERMINAL FIX | Halt loop; surface all FIX-THEN-SHIP findings for user arbitration |
+
+The precedence rule resolves the question "what happens when security-reviewer says BLOCK while sr-dev says SHIP?" — the orchestrator halts and surfaces the security finding first. (Today's two-gate flow halts at the Security gate boundary before reaching the Team gate, achieving the same precedence implicitly. The unified gate makes precedence explicit.)
+
+## Conditional spawns (preserved)
+
+- **dependency-auditor** stays **conditional + standalone**, not in the parallel batch. It runs only when `pyproject.toml` or `uv.lock` change in the cycle's diff (existing CLAUDE.md non-negotiable). Spawn synchronously after the parallel batch returns; runs in series before the precedence rule evaluates. If dependency-auditor returns BLOCK, surface ahead of any FIX-THEN-SHIP from the parallel batch (dependency-auditor BLOCK is supply-chain-shaped — same precedence weight as security-reviewer BLOCK).
+- **architect** stays **conditional + standalone** (Trigger A or B per its agent file). Not in the parallel batch.
+
+## Mechanism — fragment files (per research brief §Lens 1.4)
+
+Each parallel reviewer writes its verdict to a deterministic fragment path instead of editing the issue file directly:
+
+- sr-dev → `runs/<task>/cycle_<N>/sr-dev-review.md`
+- sr-sdet → `runs/<task>/cycle_<N>/sr-sdet-review.md`
+- security-reviewer → `runs/<task>/cycle_<N>/security-review.md`
+
+(Path convention matches T03's directory layout per audit M11. `<task>` is the zero-padded `m<MM>_t<NN>` shorthand per audit M12.)
+
+This avoids file-write contention on the issue file. The three reviewers run truly concurrently; no Edit-collision races. After all three return, the orchestrator reads the three fragment files in one Read pass and stitches them into the issue file under their respective `## Sr. Dev review`, `## Sr. SDET review`, `## Security review` sections in one Edit pass.
 
 ## Mechanism — fragment files (per research brief §Lens 1.4)
 
@@ -36,28 +71,42 @@ The fragment file's content is identical to today's `## <name> review` section c
 
 ## Deliverables
 
-### `.claude/commands/auto-implement.md` — parallel-spawn block
+### `.claude/commands/auto-implement.md` — replace two-gate flow with unified gate
 
-Locate the terminal-gate section (currently sequential). Replace with a single message that spawns all three Task invocations in parallel:
+**Delete** the existing Security gate section (Step S1 + Step S2 + SECURITY CLEAN stop condition, around line 121) and the existing Team gate section (Step T1 + Step T2 + Step T3 + TEAM CLEAN stop condition, around line 149). **Replace** with a single Terminal gate section:
 
 ```markdown
-### Step <N> — Terminal gate (parallel)
+### Step <N> — Unified terminal gate (parallel)
 
 Spawn sr-dev, sr-sdet, and security-reviewer concurrently in a single
 orchestrator message (three Task tool calls in one assistant turn).
-Each agent writes its review to `runs/<task>/<cycle>/<agent>-review.md`
+Each agent writes its review to `runs/<task>/cycle_<N>/<agent>-review.md`
 per the agent's updated `## Output format`.
 
 Wait for all three Tasks to complete. Then in a follow-up turn:
 
 1. Read the three fragment files in one Read multi-call.
-2. Stitch them into the task issue file under their respective
-   `## Sr. Dev review`, `## Sr. SDET review`, `## Security review`
-   sections in one Edit pass.
-3. Parse each agent's T01 return-schema verdict line.
-4. Stop conditions: all three SHIP → continue. Any FIX-THEN-SHIP →
-   halt for user arbitration. Any BLOCK → halt with reviewer's
-   finding surfaced verbatim.
+2. Parse each agent's T01 return-schema verdict line.
+3. Apply the precedence rule (per T05 spec):
+   - All three SHIP → TERMINAL CLEAN; proceed.
+   - Any BLOCK → TERMINAL BLOCK; halt with security-reviewer BLOCK
+     surfaced first if applicable, else the offending reviewer's
+     BLOCK verbatim.
+   - Any FIX-THEN-SHIP (no BLOCK) → TERMINAL FIX; halt for user
+     arbitration with all FIX findings surfaced.
+4. If TERMINAL CLEAN: stitch the three fragment files into the issue
+   file under `## Sr. Dev review`, `## Sr. SDET review`, `## Security
+   review` sections in one Edit pass.
+5. Conditional dependency-auditor spawn (synchronous, after the
+   parallel batch): only if `pyproject.toml` or `uv.lock` changed in
+   the cycle's diff. dependency-auditor BLOCK has same precedence
+   weight as security-reviewer BLOCK.
+6. Conditional architect spawn (Trigger A / B): existing on-demand
+   flow, unchanged.
+
+Stop conditions for this step replace the prior SECURITY CLEAN /
+TEAM CLEAN stops. The single TERMINAL CLEAN gate hands off to the
+pre-commit ceremony (T09) when satisfied.
 ```
 
 ### `.claude/agents/sr-dev.md`, `sr-sdet.md`, `security-reviewer.md` — output-format update
@@ -88,13 +137,15 @@ Fixture: a frozen issue file from M12 T03 (the most recent multi-reviewer run). 
 
 ## Acceptance criteria
 
-1. `.claude/commands/auto-implement.md` describes the parallel-spawn-with-fragment-files terminal gate.
-2. The 3 reviewer agent files (`sr-dev.md`, `sr-sdet.md`, `security-reviewer.md`) write to `runs/<task>/<cycle>/<agent>-review.md` instead of editing the issue file directly.
-3. `.claude/commands/_common/parallel_spawn_pattern.md` exists.
-4. `tests/orchestrator/test_parallel_terminal_gate.py` passes — single-turn spawn assertion + fragment-file-landing + stitch-pass assertions.
-5. Wall-clock benchmark shows ≥ 1.67× improvement over the serial baseline (frozen M12 T03 fixture). 2× is the goal.
-6. CHANGELOG.md updated under `[Unreleased]` with `### Changed — M20 Task 05: Parallel terminal gate (sr-dev + sr-sdet + security-reviewer in single multi-Task message; fragment files; research brief §Lens 1.4)`.
-7. Status surfaces flip together.
+1. `.claude/commands/auto-implement.md` describes the unified terminal gate replacing the two-gate (Security + Team) flow. The old Security gate + Team gate sections are deleted; the single Terminal gate section lands.
+2. The unified gate's precedence rule (TERMINAL CLEAN / TERMINAL BLOCK with security-reviewer-precedence / TERMINAL FIX) is documented in `auto-implement.md` and matches §Stop-condition precedence rule above.
+3. The 3 reviewer agent files (`sr-dev.md`, `sr-sdet.md`, `security-reviewer.md`) write to `runs/<task>/cycle_<N>/<agent>-review.md` instead of editing the issue file directly.
+4. dependency-auditor stays conditional + standalone (post-parallel-batch); architect stays conditional + standalone (on-demand). Verified in `auto-implement.md`.
+5. `.claude/commands/_common/parallel_spawn_pattern.md` exists.
+6. `tests/orchestrator/test_parallel_terminal_gate.py` passes — single-turn spawn assertion + fragment-file-landing + stitch-pass assertions + precedence-rule-correctness assertions (BLOCK > FIX-THEN-SHIP > SHIP; security-reviewer BLOCK surfaced first).
+7. Wall-clock benchmark shows ≥ 2× improvement over the two-gate serial baseline (frozen M12 T03 fixture).
+8. CHANGELOG.md updated under `[Unreleased]` with `### Changed — M20 Task 05: Unified parallel terminal gate (sr-dev + sr-sdet + security-reviewer in single multi-Task message; fragment files; replaces two-gate Security+Team flow with single TERMINAL CLEAN/BLOCK/FIX precedence rule; research brief §Lens 1.4)`.
+9. Status surfaces flip together.
 
 ## Smoke test (Auditor runs)
 
@@ -126,7 +177,7 @@ uv run pytest tests/orchestrator/bench_terminal_gate.py -v
 
 ## Dependencies
 
-- **T01** (return-value schema) — strongly precedent. T05's stitch step parses each agent's T01 return; the fragment-file format reuses T01's `file:` and `section:` semantics.
+- **T01** (return-value schema) — **blocking**. T05's stitch step parses each agent's T01 return; the fragment-file format reuses T01's `file:` and `section:` semantics. Per audit M2, T01 is content-blocking for T05 (without T01's schema landed, T05 has no definite contract to depend on).
 
 ## Carry-over from prior milestones
 
@@ -134,7 +185,7 @@ uv run pytest tests/orchestrator/bench_terminal_gate.py -v
 
 ## Carry-over from task analysis
 
-(populated by `/clean-tasks m20`)
+- **L4 (round 1, 2026-04-27):** The wall-clock benchmark `bench_terminal_gate.py` lands but is "not in CI" — needs an explicit invocation hook. Add `@pytest.mark.benchmark` decorator + register the `benchmark` marker in `pyproject.toml` `[tool.pytest.ini_options]` markers block. Then `uv run pytest -m benchmark` runs benchmarks on demand. Without a marker the file becomes forgotten.
 
 ## Carry-over from prior audits
 

@@ -1,6 +1,7 @@
 # Task 28 — Evaluate server-side `compact_20260112` strategy
 
-**Status:** 📝 Planned. **Kind:** analysis (no production code; produces a decision document).
+**Status:** 📝 Planned.
+**Kind:** Compaction / analysis (no production code; produces a decision document).
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model)](research_analysis) · audit recommendation M1 (2026-04-27) · sibling [task_03](task_03_in_task_cycle_compaction.md) + [task_04](task_04_cross_task_iteration_compaction.md) (file-based memory primitives that compose with — not replace — server-side compaction).
 
 ## What to Build

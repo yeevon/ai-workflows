@@ -1,6 +1,7 @@
 # Task 06 — Shadow-Audit empirical study (6-cell matrix: Sonnet/Opus 4.6/Opus 4.7 × Builder/Auditor)
 
-**Status:** 📝 Planned. **Kind:** analysis (no production code at T06; produces the study report that gates T07).
+**Status:** 📝 Planned.
+**Kind:** Model-tier / analysis (no production code at T06; produces the study report that gates T07).
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.5](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #7 · sibling [task_21](task_21_adaptive_thinking_migration.md) (must land first — Opus 4.7 cells require adaptive thinking) · sibling [task_22](task_22_per_cycle_telemetry.md) (must land first — study consumes telemetry records).
 
 ## What to Build
@@ -104,8 +105,9 @@ T22's record format (input/output tokens + cache-* + quota-proxy + wall-clock + 
 
 - **`design_docs/analysis/autonomy_model_dispatch_study.md`** — the study report.
 - **`runs/study_t06/`** directory — per-cell-task run artifacts (telemetry records, issue files, recommendation files). Gitignored per `runs/` rule.
-- **`scripts/run_t06_study.py`** (or shell-script equivalent) — reproducible harness that runs the 30 cell-task pairs against the throwaway branch. Optional but useful for re-running if methodology questions surface.
+- **`scripts/orchestration/run_t06_study.py`** (or shell-script equivalent) — reproducible harness that runs the 30 cell-task pairs against the throwaway branch. Optional but useful for re-running if methodology questions surface. (Per audit M10, M20 helpers nest under `scripts/orchestration/`.)
 - **No production code changes.** T06 is analysis-only.
+- **Analysis-index entry** (per audit M17) — verified absent 2026-04-27 (`design_docs/analysis/README.md` does not exist); T06 lands the study report directly without an index update. A future M21 task can add the analysis-index README if `design_docs/analysis/` grows.
 
 ## Tests
 
@@ -170,7 +172,7 @@ test $(ls -d runs/study_t06/A?-* 2>/dev/null | wc -l) -ge 30 \
 
 ## Carry-over from task analysis
 
-(populated by `/clean-tasks m20`)
+- **L5 (round 1, 2026-04-27):** The "1–2 % of weekly Max quota for the study" estimate is a guess without source. Reframe as: "expected to consume 1–2 % of weekly quota based on prior observation; instrument with T22 telemetry from the first cell run and **bail if cost exceeds 5 % projected to study end**." The bail-out makes the study self-limiting.
 
 ## Carry-over from prior audits
 

@@ -1,6 +1,7 @@
 # Task 23 — Cache-breakpoint discipline (pin on last stable block; verify with 2-call telemetry)
 
 **Status:** 📝 Planned.
+**Kind:** Safeguards / code.
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.2 (cache-invalidation footgun)](research_analysis) · anthropics/claude-code issues #27048 / #34629 / #42338 / #43657 (5–20× session-cost blowups from misplaced breakpoints) · sibling [task_22](task_22_per_cycle_telemetry.md) (T23 reads T22's `cache_read_input_tokens` field for verification).
 
 ## What to Build
@@ -42,19 +43,19 @@ If spawn 2's `cache_read_input_tokens` is 0, the breakpoint is wrong (or cache w
 - Tool list is fixed at session start; never modified mid-session (per research brief §Lens 2.2: adding/removing MCP tools mid-session invalidates the entire conversation cache).
 - Agent system prompt (frontmatter + body) is byte-identical between spawns within a session.
 
-### `scripts/cache_verify.py` (NEW)
+### `scripts/orchestration/cache_verify.py` (NEW)
 
 Verification harness. Runs at `/auto-implement` start (or on demand via `/check-cache`) for each agent in the fleet:
 
 ```bash
-python scripts/cache_verify.py --agent auditor --task <task-shorthand>
+python scripts/orchestration/cache_verify.py --agent auditor --task <task-shorthand>
 ```
 
 Spawns the named agent twice with identical inputs, reads T22's telemetry, asserts spawn 2's `cache_read_input_tokens` > 80% of stable-prefix-token-count. If not, halts with the HIGH-finding surface.
 
 ### `.claude/commands/auto-implement.md` — invoke verifier on cycle 1
 
-Cycle 1 of every `/auto-implement` run kicks off `scripts/cache_verify.py` for the agents the run will use (Builder, Auditor, the three reviewers). Verification runs in parallel with cycle 1's Builder spawn; if verification halts, the autopilot loop halts.
+Cycle 1 of every `/auto-implement` run kicks off `scripts/orchestration/cache_verify.py` for the agents the run will use (Builder, Auditor, the three reviewers). Verification runs in parallel with cycle 1's Builder spawn; if verification halts, the autopilot loop halts.
 
 ### Logging — `runs/<task>/cache_verification.txt`
 
@@ -77,7 +78,7 @@ Hermetic test of the verification harness:
 ## Acceptance criteria
 
 1. `.claude/commands/_common/spawn_prompt_template.md` has the stable-prefix discipline section (T23 extends T02's file).
-2. `scripts/cache_verify.py` exists with the 2-call harness.
+2. `scripts/orchestration/cache_verify.py` exists with the 2-call harness.
 3. `.claude/commands/auto-implement.md` invokes the verifier on cycle 1.
 4. Verification halt-surface fires correctly on prefix-instability.
 5. `tests/orchestrator/test_cache_breakpoint_verification.py` passes.
@@ -89,8 +90,8 @@ Hermetic test of the verification harness:
 ## Smoke test (Auditor runs)
 
 ```bash
-# Verify scripts/cache_verify.py exists and runs
-test -x scripts/cache_verify.py || test -f scripts/cache_verify.py && echo "cache_verify exists"
+# Verify scripts/orchestration/cache_verify.py exists and runs
+test -x scripts/orchestration/cache_verify.py || test -f scripts/orchestration/cache_verify.py && echo "cache_verify exists"
 
 # Verify spawn-prompt template has stable-prefix discipline
 grep -q "stable-prefix\|Stable-prefix discipline" .claude/commands/_common/spawn_prompt_template.md \

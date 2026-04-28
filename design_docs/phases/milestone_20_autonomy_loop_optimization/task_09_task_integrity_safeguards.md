@@ -1,6 +1,7 @@
 # Task 09 — Task-integrity safeguards (non-empty-diff + non-empty test-diff + independent gate re-run)
 
 **Status:** 📝 Planned.
+**Kind:** Safeguards / code.
 **Grounding:** [milestone README](README.md) · memory `project_autonomy_optimization_followups.md` thread #11 · sibling [task_08](task_08_gate_output_integrity.md) (gate-level integrity) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md).
 
 ## What to Build
@@ -8,7 +9,7 @@
 Three pre-commit safeguards the orchestrator runs before stamping AUTO-CLEAN, catching the failure mode where Builder + Auditor agree the task is done but no semantically-meaningful work landed:
 
 1. **Non-empty diff check.** `git diff --stat <prev-commit>..HEAD` must show non-zero insertions OR deletions. A 2-cycle AUTO-CLEAN with empty diff is suspicious; halt and surface for user review.
-2. **Non-empty test diff for feature work.** When the task spec marks the kind as `code` or `code + test`, the diff must include changes under `tests/`. A Builder can satisfy "non-empty diff" by editing only a comment in production code; the test-diff check catches that. Doc-only and analysis-only tasks bypass this check.
+2. **Non-empty test diff for feature work.** When the task's kind includes `code` — parsed from the spec's `**Kind:**` line in the Status block (every M20 spec gains this line per audit M3); orchestrator falls back to the milestone README's task-pool "Phase / Kind" column if the spec's Kind line is missing — the diff must include changes under `tests/`. A Builder can satisfy "non-empty diff" by editing only a comment in production code; the test-diff check catches that. Doc-only and analysis-only tasks bypass this check.
 3. **Independent gate re-run.** The orchestrator independently runs `uv run pytest -q` (tail-only) immediately before AUTO-CLEAN stamp. The Auditor's pytest run is not the last word — a regression introduced after the Auditor's run (e.g. by a status-surface flip touching a tracked file with hidden side effects) gets caught here. T08's gate-capture infrastructure is the foundation; T09 adds the *re-run-just-before-stamp* invocation.
 
 ## Mechanism
@@ -16,7 +17,7 @@ Three pre-commit safeguards the orchestrator runs before stamping AUTO-CLEAN, ca
 After Auditor returns PASS and the terminal gate (T05) returns SHIP / SHIP / SHIP:
 
 1. Orchestrator runs `git diff --stat <pre-task-commit>..HEAD` and asserts non-zero (1).
-2. If task-kind includes `code`: orchestrator runs `git diff --stat <pre-task-commit>..HEAD -- tests/` and asserts non-zero (2).
+2. If task-kind includes `code` (parsed from the spec's `**Kind:**` line, falling back to README task-pool Kind column): orchestrator runs `git diff --stat <pre-task-commit>..HEAD -- tests/` and asserts non-zero (2).
 3. Orchestrator runs `uv run pytest -q` and parses the footer per T08 (3).
 4. If any of (1), (2), (3) fails: halt with `🚧 BLOCKED: task-integrity check <which> failed; see runs/<task>/integrity.txt`.
 

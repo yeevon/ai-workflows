@@ -1,130 +1,121 @@
-# Task 27 — Tool-result clearing for long Auditor runs (`clear_tool_uses_20250919`)
+# Task 27 — Auditor input-volume threshold for cycle-rotation (client-side simulation of `clear_tool_uses_20250919`)
 
 **Status:** 📝 Planned.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model — tool-result clearing)](research_analysis) · sibling [task_28](task_28_evaluate_server_side_compaction.md) (T27 is sibling to T28's compaction primitive — both are Anthropic context-edits primitives) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md).
+**Kind:** Safeguards / code.
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model — tool-result clearing)](research_analysis) · audit recommendation H6 (Path A removed: Claude Code's agent frontmatter accepts only `name`/`description`/`tools`/`model`; `context_management.edits` cannot be passed through) · sibling [task_28](task_28_evaluate_server_side_compaction.md) (T28 owns the broader server-side-compaction surface check) · sibling [task_03](task_03_in_task_cycle_compaction.md) (cycle_summary.md is the compacted-input source) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md).
 
 ## What to Build
 
-Adopt Anthropic's `clear_tool_uses_20250919` strategy in `context_management.edits` for the **Auditor's per-cycle run**, which makes heavy use of `Read`, `Grep`, `Glob` for verifying the full task scope. Per the research brief §Lens 2.1, tool-result clearing is the right primitive for this access pattern: the Auditor reads many files per cycle to build its verdict, but **once the verdict is formed, the raw file contents are dead weight** in the conversation context.
+Per audit H6 (user arbitration 2026-04-27 — pick Path B, T28 stays separate): T27 ships the **client-side simulation only**. The Auditor's per-cycle Read-heavy access pattern (research brief §Lens 2.1) means accumulated tool-result content can dominate input-token cost on long-cycle audits. T27 detects when an Auditor spawn's input is climbing toward 60 K tokens and **rotates the next spawn early** — the orchestrator spawns a fresh Auditor at the next cycle boundary with a *compacted input* (T03's `cycle_summary.md` + current diff only), not the full conversation history.
 
-The strategy keeps the metadata (the call happened) while dropping the bulky tool result bodies. Combined with cache-friendly settings (`clear_at_least` set high enough that each clearing event recovers more tokens than the cache rebuild costs — research brief §Lens 2.2):
+This is essentially "spawn a fresh Auditor at cycle N+1 instead of continuing cycle N's context" — the pattern already in the autonomy loop's design (each cycle = fresh spawn). T27 tightens the rotation trigger by making **per-cycle input volume** the threshold, not just cycle count. A long-cycle audit on a multi-file task can exhaust input budget before completing the audit; T27 catches this and forces a cycle boundary early.
 
-```python
-context_management={
-  "edits": [{
-    "type": "clear_tool_uses_20250919",
-    "trigger": {"type": "input_tokens", "value": 60000},
-    "keep": {"type": "tool_uses", "value": 5},
-    "clear_at_least": {"type": "input_tokens", "value": 8000}
-  }]
-}
-```
+**Path A — server-side `clear_tool_uses_20250919` via agent frontmatter — is rejected.** Claude Code's agent frontmatter accepts only `name`, `description`, `tools`, `model` (verified across all 9 existing agents). There is no documented mechanism for Claude Code to read `context_management:` from agent frontmatter and pass it through to the underlying SDK. Same precedent as T01's `outputFormat: json_schema` (Anthropic SDK has it; Claude Code Task wrapper doesn't surface it). T28 owns the broader question of whether any context-engineering primitive is reachable via Task; if T28's surface check returns YES for `context_management`, a follow-up M21 task can revisit T27 to add server-side optimization on top of the client-side simulation. **T27 itself does not ship Path A.**
 
-`keep: 5` retains the 5 most-recent tool results (so the Auditor's *current reasoning chain* isn't disrupted); older Read/Grep results are cleared. `clear_at_least: 8000` ensures each clearing event reclaims enough tokens to amortise the cache invalidation.
+**Critical scope limit:** T27 applies **only to the Auditor's spawn**, not to all sub-agents. Builder spawns benefit less (Builder's tool calls are mostly Edit + Write, where the "result" is just success/failure metadata). Reviewer spawns are short (one read + a verdict). **Auditor is the high-volume Read-heavy agent**; T27 targets it specifically.
 
-**Critical scope limit:** T27 applies **only to the Auditor's spawn**, not to all sub-agents. Builder spawns benefit less (Builder's tool calls are mostly Edit + Write, where the "result" is just success/failure metadata — clearing buys little). Reviewer spawns are short (one read + a verdict); not enough volume to justify clearing. **Auditor is the high-volume Read-heavy agent**; T27 targets it specifically.
+## Mechanism
 
-## Surface check
+T22's per-cycle telemetry captures `input_tokens` for each Auditor spawn. T27 adds a threshold check + rotation trigger to the orchestrator's per-cycle loop:
 
-Same constraint as T28 (server-side compaction): does Claude Code's `Task` tool surface the `context_management.edits` parameter? If not, T27 reduces to a NO-GO sibling of T28 and the actual mechanism is **client-side simulation** — orchestrator detects "Auditor spawn input is approaching 60K tokens" and *re-spawns* the Auditor with a compacted state inputs (a fresh Auditor instance reads from cycle_summary.md instead of the full prior chat).
+1. After Auditor spawn N's `complete` telemetry record lands, orchestrator reads `input_tokens` from the JSON.
+2. If `input_tokens >= 60000` AND the Auditor's verdict was OPEN (loop continues): the orchestrator's next Auditor spawn is given a **compacted input**:
+   - Task spec path (existing).
+   - Issue file path (existing).
+   - Current `git diff` (existing).
+   - **`runs/<task>/cycle_<N>/summary.md`** (T03's structured summary) — replaces the prior cycle's full chat history.
+   - **NOT included:** prior Builder reports, prior Auditor verdict text, prior tool-result content.
+3. If `input_tokens < 60000` (normal case): orchestrator continues with the standard per-cycle spawn input (no compaction).
+4. If the Auditor's verdict was PASS (loop ends), no rotation needed.
 
-If T28's evaluation finds the SDK surface is exposed via Task, T27 ships the server-side strategy. If not, T27 ships the client-side simulation. **T27's deliverable is one or the other — not both.**
+The compacted-input path is already implicit in T03's "read only the latest summary" rule for cycle N+1. T27 tightens the trigger from "cycle boundary always" to "cycle boundary OR input-volume threshold," and clarifies the compacted-input shape when the threshold fires.
+
+## Threshold + tunability
+
+- **Trigger threshold:** `60000 input_tokens` (research-brief default; tunable via `AIW_AUDITOR_ROTATION_THRESHOLD` env var).
+- **Compaction recovery target:** the compacted input should be ≤ 30 K tokens (cycle_summary + current diff + spec). T22's per-spawn measurement validates.
+- **Cache invalidation cost:** rotation creates a fresh sub-agent; cache from the prior spawn is irrelevant. T23 (cache-breakpoint discipline) ensures the fresh spawn's stable prefix is byte-identical, so cache builds cleanly on the new spawn.
 
 ## Deliverables
 
-### Determine surface — verification step
+### `.claude/commands/auto-implement.md` — rotation trigger in the per-cycle loop
 
-Before any code: `python scripts/check_task_tool_surface.py` runs an empirical test. Spawns a Task with `context_management.edits` parameter; if accepted, the surface is exposed and T27 ships server-side. If rejected (or silently ignored), T27 ships client-side simulation.
+Update the cycle-N+1-spawn section. Add a check: read T22's `auditor.usage.json` for cycle N; if `input_tokens >= 60000` AND verdict was OPEN, the cycle-N+1 spawn input is the compacted form (per §Mechanism above). Otherwise standard.
 
-The check script's output writes to `runs/m20_t27_surface_check.txt` for the audit trail.
+### `.claude/commands/clean-implement.md` — same pattern
 
-### Path A — server-side (if surface exposed)
-
-`.claude/agents/auditor.md` adds frontmatter:
-```yaml
-context_management:
-  edits:
-    - type: clear_tool_uses_20250919
-      trigger:
-        type: input_tokens
-        value: 60000
-      keep:
-        type: tool_uses
-        value: 5
-      clear_at_least:
-        type: input_tokens
-        value: 8000
-```
-
-(YAML key syntax may need adjustment depending on Claude Code's frontmatter parser; verify in the empirical surface check.)
-
-### Path B — client-side simulation (if surface not exposed)
-
-Orchestrator-side: monitor T22's `input_tokens` for each Auditor spawn. When a multi-cycle audit's per-spawn input is climbing toward 60K, the orchestrator's next Auditor spawn is given a *compacted input* (cycle_summary.md from T03 + current diff only), not the full conversation history. This is essentially "spawn a fresh Auditor at cycle N+1 instead of continuing cycle N's context" — a pattern already in the autonomy loop's design (each cycle = fresh spawn). T27's client-side path tightens that by making the per-cycle-input-size the trigger, not just cycle boundaries.
+Apply consistently.
 
 ### `.claude/commands/_common/auditor_context_management.md` (NEW)
 
-Single source of truth documenting whichever path landed (A or B) with the trigger thresholds + the rationale.
+Documents the threshold + tunability + the rationale for client-side rotation over server-side `clear_tool_uses_20250919`. Cites audit H6 (Path A rejected; Claude Code Task tool surface limitation).
+
+### Telemetry hook (lightweight)
+
+Each rotation event writes a one-line record to `runs/<task>/cycle_<N>/auditor_rotation.txt`:
+```
+ROTATED: cycle <N> input_tokens=<value>; cycle <N+1> spawn input compacted (cycle_summary + diff only)
+```
+Aggregated by T04's `iter_<N>_shipped.md` if the iteration includes any rotation events.
 
 ## Tests
 
-### `tests/agents/test_auditor_tool_clearing.py` (NEW)
+### `tests/orchestrator/test_auditor_rotation_trigger.py` (NEW)
 
-Path A (if shipped):
-- Synthetic Auditor spawn with > 60K input tokens triggers clearing.
-- Post-clearing input has `keep: 5` retained tool results.
-- `cache_read_input_tokens` after clearing is ≥ 0 (not a regression beyond cache-invalidation cost).
+- Synthetic multi-cycle audit where cycle N's `auditor.usage.json` shows `input_tokens >= 60000` AND verdict OPEN → cycle N+1 spawn input is compacted (cycle_summary.md + current diff, not full chat history).
+- Synthetic case where `input_tokens < 60000` → cycle N+1 spawn uses the standard input (no rotation triggered).
+- Synthetic case where verdict is PASS at cycle N → no rotation regardless of input volume (loop ends).
+- Tunability: `AIW_AUDITOR_ROTATION_THRESHOLD=40000` env var lowers the trigger; verify the trigger fires at the new value.
 
-Path B (if shipped):
-- Synthetic multi-cycle audit where cycle N's input approaches 60K → cycle N+1 spawns with compacted input (cycle_summary.md + current diff, not full chat history).
-- Compacted input is byte-stable across re-spawns at the same cycle boundary (cache-friendly per T23).
+### `tests/orchestrator/test_auditor_rotation_doesnt_break_verdict.py` (NEW)
 
-### `tests/agents/test_auditor_clearing_doesnt_break_verdict.py` (NEW)
-
-Hermetic 5-cycle audit fixture. Run with T27 enabled vs disabled. Assert:
-- Final verdicts are identical (clearing didn't change the audit outcome).
-- T27-enabled run uses ≤ 70 % of the input tokens of T27-disabled run.
+Hermetic 5-cycle audit fixture. Run with T27 rotation enabled vs disabled. Assert:
+- Final verdicts are identical (rotation didn't change audit outcome).
+- T27-enabled run uses ≤ 70 % of the cumulative input tokens of T27-disabled run when the audit triggers ≥ 1 rotation.
 
 ## Acceptance criteria
 
-1. Surface check (Path A vs Path B) is run and the result is recorded at `runs/m20_t27_surface_check.txt`.
-2. Either Path A's frontmatter lands in auditor.md OR Path B's client-side simulation lands in `.claude/commands/auto-implement.md`.
-3. `.claude/commands/_common/auditor_context_management.md` documents the path + thresholds.
-4. `tests/agents/test_auditor_tool_clearing.py` passes (whichever path's tests apply).
-5. `tests/agents/test_auditor_clearing_doesnt_break_verdict.py` passes — clearing doesn't break audit outcome; ≤ 70 % input-token reduction.
-6. CHANGELOG.md updated under `[Unreleased]` with `### Added — M20 Task 27: Auditor tool-result clearing (Path <A | B>; ≤ 70 % input-token reduction; clear_tool_uses_20250919 strategy with keep=5)`.
-7. Status surfaces flip together.
+1. `.claude/commands/auto-implement.md` describes the rotation trigger in the per-cycle Auditor spawn loop (per §Mechanism).
+2. `.claude/commands/clean-implement.md` matches.
+3. `.claude/commands/_common/auditor_context_management.md` exists; documents the threshold (60K default, `AIW_AUDITOR_ROTATION_THRESHOLD` env override), the compaction recovery target (≤ 30K), and the rejection of Path A (Claude Code Task tool surface limitation).
+4. Rotation events log to `runs/<task>/cycle_<N>/auditor_rotation.txt`.
+5. `tests/orchestrator/test_auditor_rotation_trigger.py` passes — threshold-fire + threshold-no-fire + verdict-PASS + tunability cases.
+6. `tests/orchestrator/test_auditor_rotation_doesnt_break_verdict.py` passes — verdicts unchanged; ≤ 70 % cumulative input-token reduction when rotation fires.
+7. CHANGELOG.md updated under `[Unreleased]` with `### Added — M20 Task 27: Auditor input-volume rotation trigger (client-side simulation of clear_tool_uses_20250919; tunable via AIW_AUDITOR_ROTATION_THRESHOLD; ≤ 70 % cumulative input-token reduction on long-cycle audits; Path A rejected per audit H6 — Claude Code Task tool does not expose context_management.edits)`.
+8. Status surfaces flip together.
 
 ## Smoke test (Auditor runs)
 
 ```bash
-# Verify surface-check artifact exists
-test -f runs/m20_t27_surface_check.txt && echo "surface check OK"
+# Verify the canonical reference exists with H6 rationale
+grep -q "Path A.*rejected\|Path A is rejected\|client-side simulation" .claude/commands/_common/auditor_context_management.md \
+  && echo "H6 rationale documented"
 
-# Verify the chosen path landed
-grep -q "context_management\|tool-result clearing" .claude/agents/auditor.md \
-  || grep -q "compacted input\|tool-result clearing" .claude/commands/auto-implement.md \
-  && echo "path A or B landed"
+# Verify auto-implement describes the rotation trigger
+grep -q "AIW_AUDITOR_ROTATION_THRESHOLD\|input_tokens >= 60000\|input volume threshold" .claude/commands/auto-implement.md \
+  && echo "auto-implement integration OK"
 
-# Verify the canonical reference exists
-test -f .claude/commands/_common/auditor_context_management.md && echo "ref OK"
+# Verify rotation log path exists in spec
+grep -q "auditor_rotation.txt" .claude/commands/auto-implement.md && echo "rotation log path OK"
 
 # Run T27 tests
-uv run pytest tests/agents/test_auditor_tool_clearing.py tests/agents/test_auditor_clearing_doesnt_break_verdict.py -v
+uv run pytest tests/orchestrator/test_auditor_rotation_trigger.py tests/orchestrator/test_auditor_rotation_doesnt_break_verdict.py -v
 ```
 
 ## Out of scope
 
+- **Path A — server-side `clear_tool_uses_20250919` via agent frontmatter.** Rejected per audit H6: Claude Code's agent frontmatter accepts only `name`/`description`/`tools`/`model`; there is no mechanism to pass `context_management.edits` through to the underlying SDK. T28's surface check verifies whether *any* context-engineering primitive is reachable via Task; if T28 returns YES for `context_management`, a follow-up M21 task can revisit T27 to layer server-side optimization on top of the client-side simulation. T27 itself ships only Path B.
 - **Tool-result clearing for non-Auditor agents** — Builder, reviewers, task-analyzer don't have the same Read-heavy access pattern. T27 is Auditor-specific.
-- **Adopting `compact_20260112`** — T28's scope. T27 is the *clearing* primitive (drops content of older tool results); T28 is the *compaction* primitive (summarises the conversation). Different primitives, different roles.
-- **Tuning the threshold values empirically** — `60K input_tokens trigger` and `keep: 5` come from research-brief priors. T22's telemetry data could inform tuning, but tuning is a future task; T27 ships the priors.
-- **Cross-cycle clearing** — out of scope. Each Auditor cycle is a fresh spawn; clearing is in-spawn only.
+- **Adopting `compact_20260112`** — T28's evaluation scope. T27 is *cycle rotation triggered by input volume*; T28 evaluates whether a different primitive (server-side compaction) is reachable.
+- **Empirical threshold tuning** — `60K input_tokens` trigger comes from research-brief priors. T22's telemetry data could inform tuning, but T27 ships the prior; tuning is a future productivity task.
+- **Mid-cycle compaction** — out of scope. T27's compaction is at-cycle-boundary, never mid-spawn. Mid-spawn compaction would require server-side primitives (Path A) which is rejected.
 
 ## Dependencies
 
-- **T22** (per-cycle telemetry) — **blocking** for both Path A and Path B. Path A's verification needs `cache_read_input_tokens`; Path B's trigger needs `input_tokens` per spawn.
-- **T28** (server-side compaction evaluation) — non-blocking but informational. T28's surface check (does Task expose `context_management`?) is reused for T27's surface check.
-- **T23** (cache-breakpoint discipline) — non-blocking. T27's clearing must respect T23's stable-prefix discipline so cache invalidation is bounded.
+- **T22** (per-cycle telemetry) — **blocking**. T27's trigger reads `input_tokens` from T22's `auditor.usage.json` records.
+- **T03** (cycle_summary.md per Auditor) — **blocking**. T27's compacted input includes T03's cycle_summary; without T03 there's nothing to compact-to.
+- **T23** (cache-breakpoint discipline) — non-blocking but synergistic. T27 spawns fresh sub-agents at rotation; T23 ensures their stable prefix is byte-identical so cache builds cleanly.
+- **T28** (server-side compaction evaluation) — non-blocking. T28 owns the broader surface-check question; if T28 returns YES for `context_management.edits`, a follow-up task layers Path A on top of T27's Path B.
 
 ## Carry-over from prior milestones
 

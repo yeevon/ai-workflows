@@ -1,6 +1,7 @@
 # Task 08 — Gate-output integrity (raw-stdout parse, fail-closed on missing output)
 
 **Status:** 📝 Planned.
+**Kind:** Safeguards / code.
 **Grounding:** [milestone README](README.md) · memory `project_autonomy_optimization_followups.md` thread #10 · sibling [task_01](task_01_sub_agent_return_value_schema.md) (T08's first defence layer reuses T01's orchestrator parser) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md).
 
 ## What to Build
@@ -98,7 +99,7 @@ uv run pytest tests/orchestrator/test_gate_output_capture.py tests/orchestrator/
 
 ## Dependencies
 
-- **T01** (orchestrator parser) — strongly precedent. T08 reuses T01's "halt with structured BLOCKED surface" pattern.
+- **T01** (orchestrator parser) — **blocking**. T08's first-defence-layer is T01's parser; without T01 landed, T08 has nothing to layer atop. Per audit M2, T01 is content-blocking for T08 (the schema reuse is structural, not optional).
 - **T07** (dynamic dispatch) — T08 becomes more load-bearing if T07 ships. Without T07's default-Sonnet, T08 is still useful but less critical.
 
 ## Carry-over from prior milestones

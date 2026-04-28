@@ -1,6 +1,7 @@
 # Task 02 — Sub-agent input prune (orchestrator-side scope discipline + per-spawn output budget)
 
 **Status:** 📝 Planned.
+**Kind:** Compaction / doc + code.
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.3 / §Lens 2.4](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #8 · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) · [`.claude/commands/clean-tasks.md`](../../../.claude/commands/clean-tasks.md) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) (the Auditor's "load full task scope" invariant — preserved at-the-agent, pruned at-the-orchestrator).
 
 ## What to Build
@@ -18,7 +19,7 @@ Pair this with a **per-spawn output token budget** mandated in the spawn prompt:
 Locate the Builder + Auditor + reviewer Task-spawn invocations. Replace bulk pre-loads with scoped references:
 
 - **Builder spawn:** task spec path + parent milestone README path + project context brief. **Remove:** sibling task issue files, pre-loaded architecture.md, pre-loaded CHANGELOG.
-- **Auditor spawn:** task spec path + issue file path + project context brief + current `git diff` + the **specific KDR sections** the task spec cites (parsed at spawn time, not the whole §9 table). **Remove:** whole-milestone-README pre-load, pre-loaded architecture.md, pre-loaded sibling issue files. The Auditor pulls sibling issues + full architecture via Read on-demand.
+- **Auditor spawn:** task spec path + issue file path + parent milestone README path + project context brief + current `git diff` + the **specific KDR sections** the task spec cites (parsed at spawn time, not the whole §9 table). **Remove from inline content:** whole-milestone-README *content* (path stays; Auditor reads on-demand), pre-loaded architecture.md *content*, pre-loaded sibling issue file *content*. The Auditor pulls all of these via its own Read tool when its phases need them. **Path references stay; content inlining goes.** The Auditor's "load full task scope" invariant (CLAUDE.md non-negotiable) is preserved — it just does the loading itself, on-demand, instead of receiving everything pre-stuffed into the spawn prompt.
 - **Reviewer spawns** (sr-dev, sr-sdet, security-reviewer): task spec + issue file + project context brief + current `git diff` + list of files touched (aggregated from Builder reports). **Remove:** pre-loaded full source files, full test files, full architecture.md.
 
 Each spawn prompt includes the per-agent output budget directive:

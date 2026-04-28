@@ -1,6 +1,7 @@
 # Task 04 — Cross-task iteration compaction (`iter_<N>_shipped.md` at autopilot iteration boundaries)
 
 **Status:** 📝 Planned.
+**Kind:** Compaction / doc + code.
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #13 · [`.claude/commands/autopilot.md`](../../../.claude/commands/autopilot.md) · sibling [task_03](task_03_in_task_cycle_compaction.md) (in-task version of the same pattern).
 
 ## What to Build
@@ -41,6 +42,9 @@ T04 emits a structured **iteration-shipped artifact** (`runs/autopilot-<run-ts>-
 
 ## Carry-over to next iteration
 - *(empty for routine iterations; populated when a finding from this iteration affects the next task)*
+
+## Telemetry summary
+- *(retrofitted by T22 when it lands; T04 ships before T22 in Phase A vs Phase C — leave this section empty at T04 land time, per audit M15)*
 ```
 
 ## Deliverables
@@ -129,7 +133,7 @@ uv run pytest tests/orchestrator/test_iter_shipped_emission.py tests/orchestrato
 
 ## Carry-over from task analysis
 
-(populated by `/clean-tasks m20`)
+- **L3 (round 1, 2026-04-27):** The `(within 10 %)` cross-task test threshold is the same heuristic as T03's L2. Document as heuristic, not empirical bound. T22's actual baseline measurement may revise.
 
 ## Carry-over from prior audits
 

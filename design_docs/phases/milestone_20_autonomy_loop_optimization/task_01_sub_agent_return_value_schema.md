@@ -1,6 +1,7 @@
 # Task 01 — Sub-agent return-value schema (3-line `verdict / file / section`)
 
 **Status:** 📝 Planned.
+**Kind:** Compaction / doc + code.
 **Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 1.3](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #12 · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) · [`.claude/agents/builder.md`](../../../.claude/agents/builder.md) · [other 7 agents under `.claude/agents/`](../../../.claude/agents/) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md).
 
 ## What to Build
@@ -76,7 +77,11 @@ Add a parsing convention under the Task-spawn invocation. The orchestrator, afte
 
 (Same parser pattern in `/clean-tasks.md`, `/clean-implement.md`, `/queue-pick.md`, `/autopilot.md` — each command that spawns agents needs the parser. The parser logic is described in prose in each command file, not as code, since slash commands are markdown procedure documents.)
 
-### `.claude/commands/_common/agent_return_schema.md` (NEW)
+### `.claude/commands/_common/` directory + `agent_return_schema.md` (NEW — T01 lands the first file under `_common/`)
+
+T01 is the first M20 task to introduce `.claude/commands/_common/`. Verified absent 2026-04-27 (`ls .claude/commands/_common/` returns "No such file or directory"). Run `mkdir -p .claude/commands/_common/` (or use Write, which creates parent dirs) before writing the first file there. Subsequent M20 tasks (T02 `spawn_prompt_template.md`, T05 `parallel_spawn_pattern.md`, T07 `dispatch_table.md`, T08 `gate_parse_patterns.md`, T09 `integrity_checks.md`, T21 `effort_table.md`, T23 extends T02's spawn_prompt_template.md, T27 `auditor_context_management.md`) populate additional files into this directory and can assume it exists.
+
+#### `.claude/commands/_common/agent_return_schema.md`
 
 A single canonical reference for the 3-line schema + the per-agent verdict tokens table. Each slash command's parser section links to this file rather than duplicating the table. Reduces drift if a verdict token is added or renamed later.
 
@@ -90,7 +95,7 @@ For each of the 9 agents, parametrize a hermetic spawn-and-validate test:
 - Capture the agent's return text.
 - Assert exactly 3 lines, each matching `^(verdict|file|section): ?(.+)$`.
 - Assert the `verdict` token is in the agent's allowed set.
-- Assert total return length ≤ 100 tokens (using `tiktoken` cl100k_base or equivalent token-counter; install as test-only dep if not already present).
+- Assert total return length ≤ 100 tokens — using a **regex-based proxy** (`len(re.findall(r"\S+", text)) * 1.3`). Accuracy is not load-bearing; magnitude is. Same proxy as T02's spawn-prompt-size measurement and T22's input/output capture; canonical helper defined once in T02 and reused. **No `tiktoken` dependency** — adding a test-only dep would trigger the dependency-auditor on a foundation task; not worth it for a magnitude check.
 
 Each agent gets at least 3 fixture cases — one per verdict-token outcome. Fixtures live under `tests/agents/fixtures/<agent_name>/`.
 
@@ -142,7 +147,7 @@ uv run pytest tests/agents/test_return_schema_compliance.py tests/agents/test_or
 
 ## Out of scope
 
-- **Server-side `outputFormat: json_schema` enforcement via SDK.** The M20 README exit criterion 1 names this as the enforcement mechanism per the research brief; in practice, Claude Code's `Task` tool surface (the orchestrator's spawn primitive) does not expose schema-enforcement parameters. Orchestrator-side parsing is the enforcement mechanism for T01. If Claude Code later exposes `outputFormat`, the parser becomes redundant — but that's a future change, not an M20 dep. **The README's exit criterion 1 should be re-read as "enforced via prompt-mandate + orchestrator-side parsing" instead of "via SDK `outputFormat`."** Surface as a MEDIUM at task-analyzer round 1 if not already in the README at /clean-tasks time.
+- **Server-side `outputFormat: json_schema` enforcement via SDK.** Claude Code's `Task` tool surface (the orchestrator's spawn primitive) does not expose schema-enforcement parameters. Orchestrator-side parsing is the enforcement mechanism for T01. If Claude Code later exposes `outputFormat`, the parser becomes redundant — but that's a future change, not an M20 dep. (README's exit criterion 1 already names "prompt-mandate + orchestrator-side parsing" — no further README edit needed.)
 - **Per-agent context-input pruning** — that's T02. T01 prunes only the *output* side; T02 prunes the *input* side.
 - **Re-spawn-on-malformed retry** — non-conformant returns halt. The autonomy-loop boundary is "halt on sub-agent disagreement," and a malformed return is a kind of disagreement (the agent didn't produce the expected output shape). User investigation is the recovery mechanism.
 - **Per-line token-count validation beyond the ≤ 100 total cap** — finer-grained caps (per-line, per-agent custom limits) would be over-engineering for schema enforcement.
@@ -158,7 +163,8 @@ uv run pytest tests/agents/test_return_schema_compliance.py tests/agents/test_or
 
 ## Carry-over from task analysis
 
-(populated by `/clean-tasks m20`)
+- **L1 (round 1, 2026-04-27):** Make the per-agent fixture-spawn schema-compliance tests opt-in via `AIW_AGENT_SCHEMA_E2E=1` (cite the existing `AIW_E2E=1` pattern). The default test suite uses a stub-spawn that returns canned schema-conformant + canned non-conformant text and asserts the orchestrator-side parser handles each correctly. Live Task spawns consume weekly Max quota and add LLM-output nondeterminism — gate them behind the env var.
+- **L8 (round 1, 2026-04-27):** Use the regex-based proxy (`len(re.findall(r"\S+", text)) * 1.3`) for token-cap assertion. No `tiktoken` dep added; same proxy as T02 / T22 for consistency.
 
 ## Carry-over from prior audits
 

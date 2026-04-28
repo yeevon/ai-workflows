@@ -1,6 +1,7 @@
 # Task 20 — Carry-over checkbox-cargo-cult catch (extended detection)
 
 **Status:** 📝 Planned.
+**Kind:** Safeguards / doc.
 **Grounding:** [milestone README](README.md) · memory `project_autonomy_optimization_followups.md` thread #5 (post-M12-T01 lesson) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) · template equivalent in [`/home/papa-jochy/prj/ai-workflows-template/template/.claude/agents/auditor.md`](../../../../ai-workflows-template/template/.claude/agents/auditor.md).
 
 ## What to Build
@@ -19,33 +20,38 @@ Each detection is a small inspection the Auditor runs as part of its existing pe
 
 1. **(1) Diff-vs-checkbox cross-reference.** Before grading ACs as `met`, the Auditor diffs the spec's carry-over checkbox state against `git log -p` for the cycle's commits. Each newly-checked carry-over item must have a corresponding diff hunk that addresses it. Already in template; T20 ships to live + adds an explicit failure surface (HIGH finding "carry-over <ID> checked without corresponding diff").
 
-2. **(2) Cycle-N-vs-cycle-(N-1) finding-overlap detection.** New Auditor phase: read cycle (N-1)'s issue file (if exists). Compute Jaccard overlap between cycle N's findings and cycle (N-1)'s findings (by finding-title fuzzy match). If overlap > 70 % → new MEDIUM finding "cycle-N findings substantially overlap cycle-(N-1) — loop may be spinning; recommend human review."
+2. **(2) Cycle-N-vs-cycle-(N-1) finding-overlap detection.** Extends Phase 4 (critical sweep). Read cycle (N-1)'s issue file (if exists). For each finding in cycle N, compute the maximum `difflib.SequenceMatcher(<title-N>, <title-N-1>).ratio()` over cycle (N-1)'s finding titles (after stripping the AC-ID prefix and severity tag). If ≥ 50 % of cycle N's findings score > 0.70 against any cycle (N-1) finding → emit MEDIUM finding "cycle-N findings substantially overlap cycle-(N-1) — loop may be spinning; recommend human review." Threshold operator-tunable via `AIW_LOOP_DETECTION_THRESHOLD` (default `0.70`).
 
-3. **(3) Rubber-stamp detection.** New Auditor phase: when verdict is `PASS` and the cycle's diff exceeds N lines (threshold: 50 lines) AND zero HIGH+MEDIUM findings landed → emit a meta-finding (severity: ADVISORY) "Auditor verdict PASS with substantial diff and no findings — verify the Auditor's reasoning on critical sweep."
+3. **(3) Rubber-stamp detection.** Extends Phase 4 (critical sweep). When verdict is `PASS` and the cycle's diff exceeds 50 lines AND zero HIGH+MEDIUM findings landed → emit a meta-finding (severity: **MEDIUM** per audit L6 — reuse existing tier rather than introducing a new ADVISORY tier) "Auditor verdict PASS with substantial diff and no findings — verify reasoning on critical sweep."
 
 ## Deliverables
 
-### `.claude/agents/auditor.md` — three new inspections
+### `.claude/agents/auditor.md` — port the M12-T01 carry-over patch (REQUIRED — verified missing 2026-04-27)
 
-Add a new "Phase 4.5 — Anti-cargo-cult inspections" section between the existing Phase 4 (critical sweep) and Phase 5 (issue-file write). Lists the three inspections with their failure surfaces.
+The carry-over checkbox-cargo-cult patch landed in `template/.claude/agents/auditor.md` (`**Carry-over checkbox-cargo-cult**` paragraph, post-M12-T01 lesson) but did NOT land in the live `.claude/agents/auditor.md` (verified by grep 2026-04-27 — zero matches for `"carry-over.*checkbox\|cargo cult"`). T20 ports the paragraph verbatim from template to live as a definite deliverable, not conditional.
 
-### `.claude/agents/auditor.md` — port the M12-T01 carry-over patch
+### `.claude/agents/auditor.md` — extend Phase 4 (critical sweep) with two more anti-cargo-cult inspections
 
-Verify the M12-T01 patch is in the live auditor file (it was added to the *template* but possibly held back from live during the M12 autopilot session — see memory thread #5: "carry-over checkbox-cargo-cult catch has been added to both projects' auditor.md (post-M12-T01 lesson)"). Confirm by grep; if missing, port from template.
+Per audit M14: instead of inserting a new "Phase 4.5", extend the existing **Phase 4 — Critical sweep** with two new bullet items:
+
+- **Cycle-N-vs-cycle-(N-1) finding overlap** (loop-spinning detection — see §Mechanism above for the diff-ratio + threshold).
+- **Rubber-stamp detection** (PASS verdict + substantial diff + zero HIGH/MEDIUM findings — flag as MEDIUM with note "verify reasoning").
+
+Both inspections live within Phase 4's existing critical-sweep mandate; no new phase is created. Phase 5 / Phase 6 / Phase 7 numbering stays untouched. (T03's cycle-summary emission, per audit M14, similarly extends an existing phase rather than introducing Phase 7.)
 
 ### `tests/agents/test_auditor_anti_cargo_cult.py` (NEW)
 
 Hermetic test fixtures:
 - Carry-over `[x]` without diff hunk → HIGH finding fires.
 - Cycle-N findings 80% overlap with cycle-(N-1) → MEDIUM "loop may be spinning" finding fires.
-- PASS verdict + 100-line diff + zero findings → ADVISORY "verify reasoning" finding fires.
+- PASS verdict + 100-line diff + zero findings → MEDIUM "verify reasoning" finding fires (no new ADVISORY tier — uses existing MEDIUM per audit L6).
 - All three counter-examples (legitimate clean code, novel findings, no overlap) → no false positives.
 
 ## Acceptance criteria
 
-1. `.claude/agents/auditor.md` has Phase 4.5 with the three inspections.
-2. The M12-T01 carry-over patch is confirmed live (not just template).
-3. Each inspection has its failure surface specified (HIGH / MEDIUM / ADVISORY).
+1. `.claude/agents/auditor.md` Phase 4 (critical sweep) is extended with two new bullets — cycle-overlap detection + rubber-stamp detection. No new phase numbering introduced (per audit M14).
+2. The M12-T01 carry-over patch is ported from template to live (verified missing 2026-04-27 grep).
+3. Each inspection has its failure surface specified (HIGH for missing-diff; MEDIUM for cycle-overlap; MEDIUM for rubber-stamp — no new ADVISORY tier per audit L6).
 4. `tests/agents/test_auditor_anti_cargo_cult.py` passes — true-positives + true-negatives.
 5. CHANGELOG.md updated under `[Unreleased]` with `### Changed — M20 Task 20: Auditor anti-cargo-cult inspections (carry-over diff cross-ref + cycle-N overlap + rubber-stamp detection)`.
 6. Status surfaces flip together.
@@ -53,8 +59,8 @@ Hermetic test fixtures:
 ## Smoke test (Auditor runs)
 
 ```bash
-# Verify Phase 4.5 lands
-grep -q "Phase 4.5\|Anti-cargo-cult inspections" .claude/agents/auditor.md && echo "Phase 4.5 OK"
+# Verify Phase 4 was extended (no new phase numbering — per audit M14)
+grep -qE "cycle.overlap|cycle-N.*overlap|rubber.stamp|rubber-stamp" .claude/agents/auditor.md && echo "Phase 4 extensions OK"
 
 # Verify M12-T01 carry-over patch is live
 grep -q "carry-over.*checkbox\|carry-over.*diff" .claude/agents/auditor.md && echo "M12-T01 patch live"
@@ -80,7 +86,7 @@ uv run pytest tests/agents/test_auditor_anti_cargo_cult.py -v
 
 ## Carry-over from task analysis
 
-(populated by `/clean-tasks m20`)
+- **L6 (round 1, 2026-04-27):** Use existing MEDIUM tier for rubber-stamp detection (no new ADVISORY tier). Same severity, same surface — already applied inline in §Mechanism step 3.
 
 ## Carry-over from prior audits
 
