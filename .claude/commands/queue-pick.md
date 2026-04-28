@@ -22,11 +22,16 @@ Resolve `$ARGUMENTS`:
 - **Empty:** roadmap-selector scans all `design_docs/phases/milestone_*/` directories.
 - **"m10 m15" / "m10":** pass the milestone list verbatim to roadmap-selector.
 
-**Compute the project memory path at runtime** — do not hardcode a username or machine path. The Claude Code auto-memory directory is hashed off the current working directory (each `/` in cwd becomes `-`), and lives under `$HOME/.claude/projects/`. Compute via Bash:
+**Compute the project memory path at runtime** — do not hardcode a username or machine path. The Claude Code auto-memory directory is hashed off the current working directory (each `/` in cwd becomes `-`), and lives under `$HOME/.claude/projects/`. **Avoid shell expansion**: `$(pwd | tr / -)` and `${HOME}` substitutions inside a single Bash call trip Claude Code's `Contains expansion` guard and prompt the user, breaking unattended autonomy.
+
+Use **two separate Bash calls** plus orchestrator-side string assembly:
 
 ```bash
-MEMORY_PATH="$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md"
+pwd                # capture working-dir path
+printenv HOME      # capture invoking user's home (no expansion)
 ```
+
+Then in your own thinking: replace every `/` in the captured working-dir path with `-`, and substitute into the form `<HOME>/.claude/projects/<encoded-path>/memory/MEMORY.md`. The resolved string is the `MEMORY_PATH`.
 
 If the resulting path does not exist on disk, that's a pre-condition failure — the orchestrator was invoked from a directory Claude Code has not yet seen. Halt and surface the question (which is unusual; in normal operation the auto-memory dir is created on first conversation in the project).
 

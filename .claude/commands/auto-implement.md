@@ -35,9 +35,11 @@ If at any point the loop attempts to invoke a halted operation, abort the cycle 
 
 ## Pre-flight (before any agent spawn)
 
-1. **Sandbox check.** Verify `AIW_AUTONOMY_SANDBOX=1` is set in the environment (`echo "${AIW_AUTONOMY_SANDBOX:-}"` returns `1`). This var is set in `docker-compose.yml` for the sandbox container only. **HARD HALT** if missing or empty — autonomous mode does not run on the host. The fix is `make shell` (or `docker compose run --rm aiw bash`) and re-invoke from inside the container after `claude /login`.
-2. **Branch check.** `git rev-parse --abbrev-ref HEAD` must return `design_branch`. HARD HALT otherwise — autonomous mode does not switch branches.
-3. **Working tree check.** `git status --short` must be empty. HARD HALT on a dirty tree — the loop would conflate prior changes with this task's diff at commit time.
+**Important — avoid shell expansion in pre-flight Bash calls.** Each step below is a separate Bash invocation; do not assemble status strings via `$(...)` substitution or `${VAR:-default}` in a single Bash call (Claude Code's `Contains expansion` guard prompts the user on those, breaking unattended autonomy).
+
+1. **Sandbox check.** Run `printenv AIW_AUTONOMY_SANDBOX` (no expansion). Output is `1` inside the sandbox container or empty/error on the host. **HARD HALT** if not `1` — autonomous mode does not run on the host. The fix is `make shell` (or `docker compose run --rm aiw bash`) and re-invoke from inside the container after `claude /login`.
+2. **Branch check.** Run `git rev-parse --abbrev-ref HEAD`. Output must be `design_branch`. HARD HALT otherwise — autonomous mode does not switch branches.
+3. **Working tree check.** Run `git status --short`. Output must be empty. HARD HALT on a dirty tree — the loop would conflate prior changes with this task's diff at commit time.
 
 If any pre-flight check fails, surface the failure verbatim and halt before spawning the first subagent.
 

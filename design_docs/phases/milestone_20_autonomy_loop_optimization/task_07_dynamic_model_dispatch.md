@@ -136,11 +136,15 @@ python scripts/orchestration/dispatch.py dependency-auditor --flag cheap
 python scripts/orchestration/dispatch.py auditor --flag cheap 2>&1 | grep -q "not applicable" && echo "reject OK"
 
 # Verify slash commands invoke the helper
-for cmd in auto-implement clean-tasks clean-implement queue-pick autopilot; do
-  grep -q "scripts/orchestration/dispatch.py" .claude/commands/$cmd.md \
-    && echo "$cmd OK" \
-    || { echo "$cmd FAIL"; exit 1; }
-done
+# Explicit file list per CLAUDE.md verification-discipline.
+grep -l "scripts/orchestration/dispatch.py" \
+  .claude/commands/auto-implement.md \
+  .claude/commands/clean-tasks.md \
+  .claude/commands/clean-implement.md \
+  .claude/commands/queue-pick.md \
+  .claude/commands/autopilot.md \
+  | wc -l
+# Expected: 5
 
 # Run dispatch tests
 uv run pytest tests/orchestrator/test_dispatch_helper.py tests/orchestrator/test_dispatch_table_consistency.py tests/orchestrator/test_no_mid_context_switch.py -v

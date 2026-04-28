@@ -124,22 +124,35 @@ Hermetic unit test of the orchestrator-side parser logic (extracted from the sla
 ## Smoke test (Auditor runs)
 
 ```bash
-# Verify 3-line schema landed in every agent file
-for agent in builder auditor security-reviewer dependency-auditor task-analyzer architect sr-dev sr-sdet roadmap-selector; do
-  grep -A 6 "^## Return to invoker" .claude/agents/$agent.md | grep -q "^verdict:" \
-    && echo "$agent OK" \
-    || { echo "$agent FAIL — schema missing"; exit 1; }
-done
+# Verify 3-line schema landed in every agent file (explicit file list — no
+# `for x in ...; do ... $x ...; done` loop; per CLAUDE.md verification-discipline,
+# `$VAR` simple expansion in loop bodies trips Claude Code's `Contains
+# simple_expansion` guard and prompts the user, breaking unattended autonomy).
+grep -l "^verdict:" \
+  .claude/agents/builder.md \
+  .claude/agents/auditor.md \
+  .claude/agents/security-reviewer.md \
+  .claude/agents/dependency-auditor.md \
+  .claude/agents/task-analyzer.md \
+  .claude/agents/architect.md \
+  .claude/agents/sr-dev.md \
+  .claude/agents/sr-sdet.md \
+  .claude/agents/roadmap-selector.md \
+  | wc -l
+# Expected: 9 (one line per agent file with the schema present)
 
 # Verify _common reference exists
 test -f .claude/commands/_common/agent_return_schema.md && echo "common reference OK"
 
-# Verify each slash command links to the common reference
-for cmd in auto-implement clean-tasks clean-implement queue-pick autopilot; do
-  grep -q "_common/agent_return_schema.md" .claude/commands/$cmd.md \
-    && echo "$cmd OK" \
-    || { echo "$cmd FAIL — missing parser convention link"; exit 1; }
-done
+# Verify each slash command links to the common reference (explicit file list)
+grep -l "_common/agent_return_schema.md" \
+  .claude/commands/auto-implement.md \
+  .claude/commands/clean-tasks.md \
+  .claude/commands/clean-implement.md \
+  .claude/commands/queue-pick.md \
+  .claude/commands/autopilot.md \
+  | wc -l
+# Expected: 5 (one line per slash command file with the parser-convention link)
 
 # Run schema-compliance + parser tests
 uv run pytest tests/agents/test_return_schema_compliance.py tests/agents/test_orchestrator_parser.py -v

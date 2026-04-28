@@ -34,14 +34,12 @@ If at any point the loop attempts to invoke a halted operation, abort the iterat
 
 ## Pre-flight (run once, before iteration 1)
 
-1. **Sandbox check.** Verify `AIW_AUTONOMY_SANDBOX=1` (set in `docker-compose.yml`'s `environment` block; absent on the host). `echo "${AIW_AUTONOMY_SANDBOX:-}"` returns `1`. **HARD HALT** if missing — autonomous mode does not run on the host. The fix is `make shell` and re-invoke after `claude /login`.
-2. **Branch check.** `git rev-parse --abbrev-ref HEAD` returns `design_branch`. HARD HALT otherwise.
-3. **Working tree check.** `git status --short` is empty. HARD HALT on a dirty tree.
-4. **Memory path computation.** Compute via Bash:
-   ```bash
-   MEMORY_PATH="$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md"
-   ```
-   Verify the file exists. HARD HALT if missing — the orchestrator was invoked from an unfamiliar directory.
+**Important — avoid shell expansion in pre-flight Bash calls.** Claude Code's `Contains expansion` and `Contains simple_expansion` guards prompt the user on any single Bash call that uses `$(...)`, `${VAR:-default}`, or `$VAR` inside a loop body. Each pre-flight step below is a **separate** Bash invocation; the orchestrator assembles the resulting strings in its own thinking, never via shell substitution.
+
+1. **Sandbox check.** Run `printenv AIW_AUTONOMY_SANDBOX` (no expansion). Output is `1` inside the sandbox or empty/error on the host. **HARD HALT** if not `1` — autonomous mode does not run on the host. The fix is `make shell` and re-invoke after `claude /login`.
+2. **Branch check.** Run `git rev-parse --abbrev-ref HEAD` (no expansion). Output is `design_branch`. HARD HALT otherwise.
+3. **Working tree check.** Run `git status --short` (no expansion). Output is empty. HARD HALT on a dirty tree.
+4. **Memory path computation.** Run `pwd` (no expansion) and capture the working-directory path. Then in your own thinking, replace every `/` with `-` and substitute into the form `$HOME/.claude/projects/<encoded-path>/memory/MEMORY.md` (`$HOME` is the invoking user's home; resolve via a separate `printenv HOME` call if needed). Run `ls -la <fully-resolved-path>` (literal path; no expansion) to verify the file exists. HARD HALT if missing — the orchestrator was invoked from an unfamiliar directory.
 5. **Resolve milestone scope** from `$ARGUMENTS` (empty = all open; otherwise the supplied list).
 
 Surface every pre-flight failure verbatim and halt before iteration 1.

@@ -80,11 +80,12 @@ Single source of truth for the per-gate footer-line regex. Each command's gate-c
 test -f .claude/commands/_common/gate_parse_patterns.md && echo "patterns OK"
 
 # Verify auto-implement and clean-implement reference it
-for cmd in auto-implement clean-implement; do
-  grep -q "gate_parse_patterns.md\|gate_<name>.txt" .claude/commands/$cmd.md \
-    && echo "$cmd OK" \
-    || { echo "$cmd FAIL"; exit 1; }
-done
+# Explicit file list per CLAUDE.md verification-discipline.
+grep -lE "gate_parse_patterns.md|gate_<name>.txt" \
+  .claude/commands/auto-implement.md \
+  .claude/commands/clean-implement.md \
+  | wc -l
+# Expected: 2
 
 # Run gate-output tests
 uv run pytest tests/orchestrator/test_gate_output_capture.py tests/orchestrator/test_auto_clean_stamp_safety.py -v

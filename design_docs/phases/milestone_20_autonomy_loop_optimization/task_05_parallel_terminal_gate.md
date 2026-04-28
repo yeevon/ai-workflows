@@ -142,11 +142,13 @@ Fixture: a frozen issue file from M12 T03 (the most recent multi-reviewer run). 
 grep -q "parallel.*terminal gate\|three Task tool calls" .claude/commands/auto-implement.md && echo "auto-implement OK"
 
 # Verify each reviewer agent writes to fragment path
-for agent in sr-dev sr-sdet security-reviewer; do
-  grep -q "runs/.*cycle_<N>.*review.md\|runs/<task>/cycle_<N>/" .claude/agents/$agent.md \
-    && echo "$agent OK" \
-    || { echo "$agent FAIL"; exit 1; }
-done
+# Explicit file list per CLAUDE.md verification-discipline.
+grep -lE "runs/.*cycle_<N>.*review.md|runs/<task>/cycle_<N>/" \
+  .claude/agents/sr-dev.md \
+  .claude/agents/sr-sdet.md \
+  .claude/agents/security-reviewer.md \
+  | wc -l
+# Expected: 3
 
 # Run parallel-gate test
 uv run pytest tests/orchestrator/test_parallel_terminal_gate.py -v

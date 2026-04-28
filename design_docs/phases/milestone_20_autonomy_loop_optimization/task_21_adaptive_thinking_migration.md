@@ -111,11 +111,16 @@ test $(grep -rE "thinking:[[:space:]]*(max|high|medium|low)" .claude/ | wc -l) -
 test $(grep -rE "budget_tokens" .claude/ | wc -l) -eq 0 && echo "no budget_tokens"
 
 # Verify each slash command has adaptive thinking (7 commands per H3)
-for cmd in auto-implement audit clean-tasks clean-implement queue-pick autopilot implement; do
-  grep -A 2 "^thinking:" .claude/commands/$cmd.md | grep -q "type: adaptive" \
-    && echo "$cmd OK" \
-    || { echo "$cmd FAIL"; exit 1; }
-done
+# Per CLAUDE.md verification-discipline: explicit per-file checks instead of for-loop with $VAR.
+# Each line is one Bash invocation; the orchestrator counts how many succeed.
+grep -A 2 "^thinking:" .claude/commands/auto-implement.md | grep -q "type: adaptive" && echo "auto-implement OK"
+grep -A 2 "^thinking:" .claude/commands/audit.md | grep -q "type: adaptive" && echo "audit OK"
+grep -A 2 "^thinking:" .claude/commands/clean-tasks.md | grep -q "type: adaptive" && echo "clean-tasks OK"
+grep -A 2 "^thinking:" .claude/commands/clean-implement.md | grep -q "type: adaptive" && echo "clean-implement OK"
+grep -A 2 "^thinking:" .claude/commands/queue-pick.md | grep -q "type: adaptive" && echo "queue-pick OK"
+grep -A 2 "^thinking:" .claude/commands/autopilot.md | grep -q "type: adaptive" && echo "autopilot OK"
+grep -A 2 "^thinking:" .claude/commands/implement.md | grep -q "type: adaptive" && echo "implement OK"
+# Expected: 7 lines of "<command> OK" output
 
 # Run tests
 uv run pytest tests/orchestrator/test_no_deprecated_thinking_directives.py tests/orchestrator/test_effort_table_consistency.py -v

@@ -121,11 +121,12 @@ Hermetic test that constructs cycle-N Builder spawn prompts for cycles 1, 2, 3 a
 grep -qE "cycle_<N>/summary.md|cycle_<N>/summary\.md" .claude/agents/auditor.md && echo "auditor cycle-summary in Phase 5 OK"
 
 # Verify orchestrator commands describe the read-only-latest-summary rule
-for cmd in auto-implement clean-implement; do
-  grep -q "cycle_<N>/summary.md" .claude/commands/$cmd.md \
-    && echo "$cmd OK" \
-    || { echo "$cmd FAIL"; exit 1; }
-done
+# Explicit file list per CLAUDE.md verification-discipline.
+grep -l "cycle_<N>/summary.md" \
+  .claude/commands/auto-implement.md \
+  .claude/commands/clean-implement.md \
+  | wc -l
+# Expected: 2
 
 # Run cycle-summary + context-constant tests
 uv run pytest tests/orchestrator/test_cycle_summary_emission.py tests/orchestrator/test_cycle_context_constant.py -v

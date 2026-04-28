@@ -31,11 +31,16 @@ Resolve `$ARGUMENTS` to a milestone directory:
 
 Verify the milestone directory contains a `README.md`. If not, **stop and ask** — the README is the source of truth for task scope.
 
-**Compute the project memory path at runtime** — do not hardcode a username or machine path. Compute via Bash before assembling the brief:
+**Compute the project memory path at runtime** — do not hardcode a username or machine path. **Avoid shell expansion**: `$(pwd | tr / -)` and `${HOME}` substitutions inside a single Bash call trip Claude Code's `Contains expansion` guard and prompt the user, breaking unattended autonomy.
+
+Use **two separate Bash calls** plus orchestrator-side string assembly:
 
 ```bash
-MEMORY_PATH="$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md"
+pwd                # capture working-dir path
+printenv HOME      # capture invoking user's home (no expansion)
 ```
+
+Then in your own thinking: replace every `/` in the captured working-dir path with `-`, and substitute into the form `<HOME>/.claude/projects/<encoded-path>/memory/MEMORY.md`. The resolved string is the `MEMORY_PATH` to use in the project context brief below.
 
 Build the **project context brief** — pass verbatim to every `task-analyzer` spawn (substitute the resolved `MEMORY_PATH` into the line below):
 

@@ -80,18 +80,26 @@ Test the KDR-section parsing logic that extracts only the cited KDRs from archit
 test -f .claude/commands/_common/spawn_prompt_template.md && echo "common template OK"
 
 # Verify each slash command links to it
-for cmd in auto-implement clean-tasks clean-implement queue-pick autopilot; do
-  grep -q "_common/spawn_prompt_template.md" .claude/commands/$cmd.md \
-    && echo "$cmd OK" \
-    || { echo "$cmd FAIL"; exit 1; }
-done
+# Per CLAUDE.md verification-discipline: explicit file list, no `for x in ...; do ... $x ...; done`
+# (`$VAR` simple expansion in loop bodies trips Claude Code's `Contains simple_expansion` guard).
+grep -l "_common/spawn_prompt_template.md" \
+  .claude/commands/auto-implement.md \
+  .claude/commands/clean-tasks.md \
+  .claude/commands/clean-implement.md \
+  .claude/commands/queue-pick.md \
+  .claude/commands/autopilot.md \
+  | wc -l
+# Expected: 5
 
 # Verify each slash command names the output budget directive
-for cmd in auto-implement clean-tasks clean-implement queue-pick autopilot; do
-  grep -q "Output budget:" .claude/commands/$cmd.md \
-    && echo "$cmd budget OK" \
-    || { echo "$cmd FAIL — missing output budget directive"; exit 1; }
-done
+grep -l "Output budget:" \
+  .claude/commands/auto-implement.md \
+  .claude/commands/clean-tasks.md \
+  .claude/commands/clean-implement.md \
+  .claude/commands/queue-pick.md \
+  .claude/commands/autopilot.md \
+  | wc -l
+# Expected: 5
 
 # Run prune + KDR-extractor tests
 uv run pytest tests/orchestrator/test_spawn_prompt_size.py tests/orchestrator/test_kdr_section_extractor.py -v
