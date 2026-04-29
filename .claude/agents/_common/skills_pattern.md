@@ -21,4 +21,4 @@ Every Skill under `.claude/skills/` must satisfy:
 
 The operator-side validation for a new Skill (matching `### T12 — Skills extraction (per-agent capabilities)` in the research brief) is: (1) confirm `SKILL.md` frontmatter has `name:` + `description:` ≤ 200 chars; (2) proxy-check body size via `wc -w SKILL.md` × 1.3 ≤ 5000; (3) run the four T24-rubric checks via `uv run python scripts/audit/md_discoverability.py` against the Skill directory; (4) confirm the source agent prompt contains an `## Operational shortcuts` section pointing to the Skill. The omit-the-Skill regression test (verify Claude underperforms without the Skill loaded) is a useful manual one-shot but is not Auditor-gated.
 
-Live Skills: ai-workflows (legacy), dep-audit (T12), triage (T13), check (T14), sweep (T16).
+Live Skills: ai-workflows (legacy), dep-audit (T12), triage (T13), check (T14), sweep (T16), ship (T15).

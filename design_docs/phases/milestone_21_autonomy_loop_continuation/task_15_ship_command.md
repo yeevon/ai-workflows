@@ -1,6 +1,6 @@
 # Task 15 — `/ship` manual happy-path publish Skill (host-only)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Productivity / code + doc.
 **Grounding:** [milestone README](README.md) · [research brief §T13–T16](../milestone_20_autonomy_loop_optimization/research_analysis.md) — anchor `### T13–T16 — New commands (/triage, /check, /ship, /sweep)` · [T13/T14/T16 specs](task_13_triage_command.md) (✅ Done — Phase F template precedent) · [`scripts/release_smoke.sh`](../../../scripts/release_smoke.sh) (canonical release smoke procedure) · [`tests/release/test_install_smoke.py`](../../../tests/release/test_install_smoke.py) (real-install gate, KDR-discipline). KDR drift checks apply per M21 scope note. **Threat-relevant** because /ship invokes `uv publish` — read carefully against the autonomous-mode boundaries and the project memory `feedback_autonomous_mode_boundaries.md`.
 
