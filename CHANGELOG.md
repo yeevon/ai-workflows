@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M21 Autonomy Loop Continuation] - 2026-04-29
+
+### Added — M21 Task ZZ: Milestone close-out (2026-04-29)
+
+Doc-only milestone close-out. No `ai_workflows/` package changes.
+
+Closes M21 — Autonomy Loop Continuation. Flips all status surfaces, promotes all M21 `[Unreleased]`
+CHANGELOG entries into this dated section, adds M21 row to `roadmap.md` and root `README.md`, appends
+Outcome + Propagation status to the milestone README.
+
+**Shipped tasks (14 of 14 — all tasks complete):**
+- T10 (common-rules extraction — `_common/non_negotiables.md` + `_common/verification_discipline.md`)
+- T11 (CLAUDE.md slim — 39% reduction, 136→83 lines)
+- T12 (Skills extraction — `dep-audit` Skill; `_common/skills_pattern.md` pattern locked)
+- T13 (/triage post-halt diagnosis Skill)
+- T14 (/check on-disk vs pushed-state Skill)
+- T15 (/ship manual happy-path Skill, host-only)
+- T16 (/sweep ad-hoc reviewer Skill)
+- T17 (spec format extension — per-slice `## Slice scope` + `PARALLEL_ELIGIBLE` flag)
+- T18 (worktree-coordinated parallel Builder spawn — operator-authorized stretch)
+- T19 (orchestrator-owned close-out — operator-authorized stretch)
+- T24 (MD-file discoverability rubric + `scripts/audit/md_discoverability.py`)
+- T25 (/audit-skills + `scripts/audit/skills_efficiency.py` + CI hookup)
+- T26 (two-prompt long-running pattern + `agent_docs/long_running_pattern.md`)
+- ZZ (this close-out)
+
+**DEFER verdicts:** None. All tasks including stretch T18 + T19 landed.
+
+**Exit criteria G1–G6:** All ✅ verified.
+
+**Autopilot baseline:**
+- Branch: `workflow_optimization`
+- Total tasks: 14 shipped. Stretch T18 + T19 included (operator authorized 2026-04-29).
+- No runtime (`ai_workflows/`) changes across all M21 tasks.
+- Gates green at close: `uv run pytest` passed; `uv run lint-imports` green; `uv run ruff check` clean.
+
+**Files touched:** `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (Status → ✅ Complete; ZZ row → Done; Outcome + Propagation status appended), `design_docs/roadmap.md` (M21 row added; M21 narrative summary added; header updated to M2–M21), `README.md` (M21 row added; §Next updated to name M22), `CHANGELOG.md` (this entry; all M21 [Unreleased] entries promoted to dated section), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_zz_milestone_closeout.md` (Status → Done; TA-LOW-04 → [x] N/A), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_zz_issue.md` (new — decisions + N/A record for TA-LOW-04).
+
+ACs satisfied: AC-1 (milestone README Status ✅ Complete; Outcome covers all shipped tasks + no DEFER verdicts + autopilot baseline), AC-2 (all 6 exit criteria G1–G6 verified ✅ in README), AC-3 (roadmap.md M21 row ✅ Complete + one-line narrative), AC-4 (CHANGELOG dated M21 section with all Unreleased entries promoted + ZZ entry), AC-5 ([Unreleased] section retained), AC-6 (README.md M21 row Complete + §Next updated to M22), AC-7 (ZZ spec Status → ✅ Done; M21 README ZZ row → ✅ Done; TA-LOW-04 [x]), AC-8 (no ai_workflows/ change), AC-9 (N/A — T18+T19 landed; no nice_to_have.md entries needed), AC-10 (gates green).
+
+Deviations: none. TA-LOW-04 marked N/A per context brief (T18+T19 shipped in M21).
+
 ### Added — M21 Task 19: Orchestrator-owned close-out (post-parallel-Builder merge) (2026-04-29)
 
 Files touched: `.claude/commands/auto-implement.md` (§Functional loop Step 1 extended with post-parallel merge block (T19): apply each worktree's diff in slice order, HARD HALT on conflict, Auditor sees combined diff, terminal gate runs once, status-surface flips once; §Commit ceremony Step C3 extended with Parallel-build: annotation line for parallel-built tasks — single commit, no per-slice commits), `tests/test_t19_closeout.py` (new — 18 test assertions across 4 classes: TC-1 post-parallel merge applies all worktree diffs + TC-3 status-surface single-flip folded in (TA-LOW-03), TC-2 Parallel-build: commit annotation, TC-4 HARD HALT on merge conflict), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_19_issue.md` (new — TA-LOW-03 resolution documented), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_19_orchestrator_closeout.md` (Status → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T19 row → Done), `CHANGELOG.md` (this entry).

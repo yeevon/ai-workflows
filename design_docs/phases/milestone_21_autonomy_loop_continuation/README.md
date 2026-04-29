@@ -1,6 +1,6 @@
 # Milestone 21 — Autonomy Loop Continuation
 
-**Status:** 📝 Drafting (split from M20 2026-04-27 per audit recommendation M3 — M20's 27-task scope was too large for a single milestone). M21 carries Phases E (Slimming), F (Productivity commands), G (Parallel-builders foundation). Branch: continuation work happens on `workflow_optimization` after M20 lands, or on a new branch named at M21 kickoff.
+**Status:** ✅ Complete (2026-04-29)
 
 **Grounding:** Same as M20 — research brief `design_docs/phases/milestone_20_autonomy_loop_optimization/research_analysis.md` (Q1–Q2 2026 best-practices synthesis post-Opus-4.6) and the model-dispatch-specific `design_docs/analysis/autonomy_model_dispatch_study.md` · project memory `project_autonomy_optimization_followups.md` · `architecture.md` §9 KDRs · M20 close-out (post-shipment baseline measurements).
 
@@ -91,7 +91,7 @@ Three load-bearing reasons M21 exists distinct from M20:
 | 17 | Spec format extension — per-slice file/symbol scope (parallel-Builders foundation; benefits serial Builders too via clearer review signatures) | STRONGLY SUPPORT (T17 from #15-X) | Parallelism / doc + code | ✅ Done |
 | 18 | Worktree-coordinated parallel Builder spawn — leans on Claude Code v2.1.49 `--worktree` and `isolation: worktree` frontmatter; concurrency capped at 3–4 | STRONGLY SUPPORT + MODIFY (T18 from #15-Y) | Parallelism / code | ✅ Done |
 | 19 | Orchestrator-owned close-out (CHANGELOG + status-surface flips after parallel-builder merge) | SUPPORT (T19 from #15-Z) | Parallelism / code | ✅ Done |
-| ZZ | Milestone close-out | n/a | Closeout / doc | 📝 Planned |
+| ZZ | Milestone close-out | n/a | Closeout / doc | ✅ Done |
 
 ---
 
@@ -130,11 +130,59 @@ None at draft time. Populated by `/clean-tasks m21` runs.
 
 ## Propagation status
 
-Filled in at audit time. Anticipated forward-deferrals from M21:
+No deferred tasks from M21. All Phase E, F, and G tasks landed. Nothing carries forward.
 
-- **T18 + T19 (parallel Builder spawn + orchestrator close-out)** — explicit `nice_to_have.md` entry with trigger "T17 spec format adopted on ≥ 5 tasks AND user requests parallel-Builder execution" if deferred from M21 to M22.
-- **Multi-orchestrator parallelism** (concurrent `/auto-implement` runs) — same trigger as M20's version: "first time queue depth + per-task wall-clock makes a single-orchestrator drain take > 24h."
-- **Continuous-improvement audit cadence** — if T25 lands as one-shot rather than recurring, document the cadence promotion trigger.
+- **T18 + T19 (parallel Builder spawn + orchestrator close-out)** — both landed in M21 (operator authorized as stretch). No `nice_to_have.md` entry needed.
+- **Multi-orchestrator parallelism** — not triggered; single-orchestrator drain within 24h on current queue depth.
+- **Continuous-improvement audit cadence** — T25 landed as runnable `/audit-skills` command; cadence is operator-driven on demand. No promotion trigger needed.
+
+---
+
+## Outcome
+
+Closed 2026-04-29. All 14 tasks shipped (10 Phase E/F + 3 Phase G + ZZ close-out). No deferred tasks.
+
+### Phase E — Slimming (T10, T11, T12, T24, T25, T26)
+
+- **T10** — `.claude/agents/_common/non_negotiables.md` + `_common/verification_discipline.md` extracted. All 9 agent frontmatter files reference them. Agent-prompt deduplication baseline established.
+- **T11** — CLAUDE.md slimmed from 136 lines to 83 lines (39% reduction). Threat-model → `security-reviewer.md`; seven-KDR table → `auditor.md` + `task-analyzer.md` + `architect.md` + `dependency-auditor.md`. Each removed section retains 1-paragraph summary + section-anchor pointer in CLAUDE.md.
+- **T12** — Skills extraction pattern locked in `_common/skills_pattern.md`; `dep-audit` Skill extracted as the first live Skill; progressive-disclosure frontmatter shape established for T13–T16.
+- **T24** — MD-file discoverability rubric applied to `.claude/agents/` + `_common/`; `scripts/audit/md_discoverability.py` + CI walk; every file has 3-line summary, `##` anchors, ≤500-token sections.
+- **T25** — `/audit-skills` periodic audit command + `scripts/audit/skills_efficiency.py`; CI walks both audit scripts every PR.
+- **T26** — Two-prompt long-running pattern: `runs/<task>/plan.md` (immutable) + `runs/<task>/progress.md` (cumulative); `agent_docs/long_running_pattern.md`; trigger: opt-in via `**Long-running:** yes` or N>=3 cycles.
+
+### Phase F — Productivity commands (T13, T14, T15, T16)
+
+- **T13** — `/triage` post-halt diagnosis Skill; `runs/triage/<timestamp>/report.md`; consolidated issue + recommendation + commit context.
+- **T14** — `/check` on-disk vs pushed-state Skill; four-divergence-surface check (local branch, pushed branch, PyPI if opted in).
+- **T15** — `/ship` manual happy-path Skill; host-only; six-step sequence ending in `uv publish`; autonomy-mode guard.
+- **T16** — `/sweep` ad-hoc reviewer Skill; sr-dev + sr-sdet + security-reviewer in parallel; `runs/sweep/<timestamp>/report.md`.
+
+### Phase G — Parallel-builders foundation (T17, T18, T19)
+
+All three Phase G tasks landed (T18 + T19 approved as stretch by operator).
+
+- **T17** — Spec format extension: `## Slice scope` section template + 5 rules in `clean-tasks.md`; `PARALLEL_ELIGIBLE` flag in `auto-implement.md`; `meta.json` in per-cycle layout. Benefits serial Builders via clearer review signatures.
+- **T18** — Worktree-coordinated parallel Builder spawn in `auto-implement.md`: reads `PARALLEL_ELIGIBLE`, spawns slice-isolated Builders with `isolation: "worktree"`, concurrency cap ≤4 slices, overlap detection, worktree cleanup.
+- **T19** — Orchestrator-owned close-out: post-parallel merge block applies each worktree's diff in slice order, HARD HALT on conflict, Auditor sees combined diff, terminal gate runs once, status-surface flips once. Commit ceremony annotated with `Parallel-build:` line.
+
+### Exit criteria verification
+
+All six G1–G6 exit criteria satisfied at close:
+
+1. ✅ **G1** — CLAUDE.md 39% reduction (83 lines from 136); threat-model + KDR-table + verification-discipline each have pointer+anchor in CLAUDE.md. (satisfied at T11)
+2. ✅ **G2** — MD discoverability rubric applied; `scripts/audit/md_discoverability.py` CI-gated. (satisfied at T24; `agent_docs/` portion at T26)
+3. ✅ **G3** — `/triage` + `/check` + `/ship` + `/sweep` all shipped as Skills. Phase F complete. (satisfied at T13–T16)
+4. ✅ **G4** — Spec format extension + `PARALLEL_ELIGIBLE` flag + parallel-Builder dispatch + orchestrator close-out. T17 + T18 + T19 all landed. (fully satisfied at T17/T18/T19)
+5. ✅ **G5** — `/audit-skills` + `scripts/audit/skills_efficiency.py` CI-gated (T25); two-prompt pattern in `agent_docs/long_running_pattern.md` (T26). (satisfied at T25 + T26)
+6. ✅ **G6** — `dep-audit` Skill extracted; `_common/skills_pattern.md` pattern locked. (satisfied at T12)
+
+### Autopilot baseline
+
+- Branch: `workflow_optimization`
+- Tasks shipped: 14 (T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T24, T25, T26, ZZ)
+- Autopilot cycles: T15 required cycle 2 (host-only smoke fixes); T16 clean cycle 1; T17 clean cycle 1; T18 required cycle 2 (sr-dev + sr-sdet fixes); T19 clean cycle 1; others 1 cycle each.
+- No runtime (`ai_workflows/`) changes across all M21 tasks.
 
 ---
 

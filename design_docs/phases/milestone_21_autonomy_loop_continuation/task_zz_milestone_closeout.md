@@ -1,6 +1,6 @@
 # Task ZZ — Milestone Close-out
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Closeout / doc.
 **Grounding:** [milestone README](README.md) · all M21 task specs · [M20 ZZ spec](../milestone_20_autonomy_loop_optimization/task_zz_milestone_closeout.md) (close-out pattern) · [M14 T02](../milestone_14_mcp_http/task_02_milestone_closeout.md) · [CLAUDE.md](../../../CLAUDE.md) §Status-surface discipline · `architecture.md` §9 KDRs (drift-check anchors).
 
@@ -128,6 +128,6 @@ uv run pytest -q
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-04 — nice_to_have.md slot pre-allocation for T18/T19 deferral** (severity: LOW, source: task_analysis.md round 20)
+- [x] **TA-LOW-04 — nice_to_have.md slot pre-allocation for T18/T19 deferral** (severity: LOW, source: task_analysis.md round 20) — N/A: T18 + T19 shipped in M21 (operator authorized). No nice_to_have.md entry needed.
       ZZ AC-9 + T18/T19 defer-to-M22 condition both reference adding entries to `design_docs/nice_to_have.md`. As of 2026-04-29 (round-20 analysis), the next free slot is `## 25.`
       **Recommendation:** If T18/T19 defer to M22, ZZ Builder targets `nice_to_have.md` slot `## 25. Parallel-Builders foundation (T18/T19 from M21)`. Re-verify the slot number at ZZ time (another task may have claimed it first).

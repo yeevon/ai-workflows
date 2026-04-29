@@ -30,12 +30,13 @@ This roadmap replaces the archived milestone plan at `archive/pre_langgraph_pivo
 | M17 | `scaffold_workflow` meta-workflow | [phases/milestone_17_scaffold_workflow/](phases/milestone_17_scaffold_workflow/README.md) | 📝 planned (drafted 2026-04-23; depends on M15 + M16) |
 | M19 | Declarative authoring surface | [phases/milestone_19_declarative_surface/](phases/milestone_19_declarative_surface/README.md) | ✅ complete (2026-04-26) |
 | M20 | Autonomy loop optimization | [phases/milestone_20_autonomy_loop_optimization/](phases/milestone_20_autonomy_loop_optimization/README.md) | ✅ complete (2026-04-28) |
+| M21 | Autonomy loop continuation | [phases/milestone_21_autonomy_loop_continuation/](phases/milestone_21_autonomy_loop_continuation/README.md) | ✅ Complete (2026-04-29) |
 
 **Deferred (see [nice_to_have.md](nice_to_have.md)):** Langfuse, Instructor/pydantic-ai, LangSmith, Typer swap, Docker Compose, mkdocs, DeepAgents templates, standalone OTel, entry-point workflow discovery (PEP 621), public release-steps playbook, CI on design_branch pushes, MCP-HTTP CircuitOpen-test coverage, dependency lower-bound refresh. **No milestones for these until their trigger fires.**
 
 ---
 
-## M2–M20 summaries
+## M2–M21 summaries
 
 One-liners only; each gets a full `phases/` directory when the prior milestone closes clean.
 
@@ -57,6 +58,7 @@ One-liners only; each gets a full `phases/` directory when the prior milestone c
 - **M17 — `scaffold_workflow` meta-workflow.** The "help users build their own workflows" piece. Ships a LangGraph `StateGraph` that takes a user's goal + target path, synthesises a workflow Python file via a Claude Opus `TieredNode` (overlay-overridable via M15), validates schema ("parseable Python + `register()` shape" — **not** a safety check; user owns the code per [ADR-0008](adr/0008_user_owned_generated_code.md)), surfaces the code preview at a `HumanGate` projected through M11's gate-context, and on approval writes the file atomically to the user-supplied path (rejecting targets inside `ai_workflows/`, existing files without `--force`, unwritable parent dirs). The user then runs the scaffolded workflow via M16's `AIW_WORKFLOWS_PATH`. CS300's `question_generation` workflow is the first external consumer; smoke exercise captured at M17 T02 close-out. Ships `0.4.0`. No KDR change beyond [ADR-0008](adr/0008_user_owned_generated_code.md)'s framing of risk ownership. Depends on M15 + M16.
 - **M19 — Declarative authoring surface (0.3.0).** Shipped 2026-04-26.
 - **M20 — Autonomy loop optimization.** Shipped 2026-04-28. Closed the four token-accumulation leaks (T01–T04 compaction quartet), parallelised the terminal gate (T05), migrated all agents to adaptive thinking (T21), added per-cycle telemetry (T22), shipped defense-in-depth integrity safeguards (T08, T09, T20, T23, T27), and produced the shadow-audit study harness (T06, DEFER verdict) and server-side compaction evaluation (T28, DEFER verdict). T07 (dynamic model dispatch) deferred to M21, blocked on T06 GO/NO-GO operator-resume.
+- **M21 — Autonomy loop continuation.** Shipped 2026-04-29. Phase E: extracted shared `_common/non_negotiables.md` + `_common/verification_discipline.md`, slimmed CLAUDE.md 39% (136→83 lines), extracted the `dep-audit` Skill and locked the Skills-extraction pattern, applied MD-file discoverability rubric + CI audit script, landed `/audit-skills` + `scripts/audit/skills_efficiency.py`, and documented the two-prompt long-running pattern. Phase F: shipped all four productivity Skills — `/triage`, `/check`, `/ship`, `/sweep`. Phase G: T17 spec-format extension (per-slice `## Slice scope` + `PARALLEL_ELIGIBLE` flag), T18 worktree-coordinated parallel Builder spawn, and T19 orchestrator-owned close-out — all three landed (T18+T19 as operator-authorized stretch). No runtime (`ai_workflows/`) changes.
 
 ---
 
