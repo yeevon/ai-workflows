@@ -69,35 +69,20 @@ Look specifically for:
 
 ### Phase 5a — Issue file
 
-At `design_docs/phases/milestone_<M>_<name>/issues/task_<NN>_issue.md`. Update **in place** — never create a `_v2`. Required structure:
+At `design_docs/phases/milestone_<M>_<name>/issues/task_<NN>_issue.md`. Update **in place** — never create a `_v2`. Required top-level sections:
 
 ```markdown
 # Task <NN> — <title> — Audit Issues
+**Source task / Audited on / Audit scope / Status:** ✅ PASS | ⚠️ OPEN | 🚧 BLOCKED
 
-**Source task:** [../task_<NN>_<slug>.md](../task_<NN>_<slug>.md)
-**Audited on:** YYYY-MM-DD
-**Audit scope:** <what was inspected>
-**Status:** ✅ PASS | ⚠️ OPEN | 🚧 BLOCKED
-
-## Design-drift check
-(KDR / architecture.md citations, or "no drift detected")
-
-## AC grading
-| AC | Status | Notes |
-| -- | ------ | ----- |
-
-## 🔴 HIGH — <one issue per subsection>
-## 🟡 MEDIUM — …
-## 🟢 LOW — …
-
+## Design-drift check  (KDR/architecture.md citations, or "no drift detected")
+## AC grading  | AC | Status | Notes |
+## 🔴 HIGH / 🟡 MEDIUM / 🟢 LOW  (one subsection per issue)
 ## Additions beyond spec — audited and justified
-## Gate summary  (table: gate + command + pass/fail)
-## Issue log — cross-task follow-up
-(M<N>-T<NN>-ISS-NN IDs, severity, owner / next touch point, status history on re-audit)
-## Deferred to nice_to_have
-(if applicable — § reference + trigger that would justify promotion)
-## Propagation status
-(if applicable — list each target spec + back-link confirming carry-over was added)
+## Gate summary  (gate | command | pass/fail)
+## Issue log — cross-task follow-up  (M<N>-T<NN>-ISS-NN IDs, severity, owner, status history)
+## Deferred to nice_to_have  (§ reference + trigger — if applicable)
+## Propagation status  (target spec + back-link — if applicable)
 ```
 
 ### Severity

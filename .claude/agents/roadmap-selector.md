@@ -46,50 +46,31 @@ Read in this order. Stop and ask if anything is missing or unclear:
 
 ## Phase 2 — Apply the sequential default rule
 
-The default ordering is: lowest milestone number → lowest open task number within that milestone. Walk the queue in that order, applying three eligibility filters:
+Default ordering: lowest milestone → lowest open task. Apply three eligibility filters.
 
-### Filter 1 — Specs exist AND are hardened
+**Filter 1 (milestone-level — stops the walk):** Specs must exist AND be hardened.
+- 1a: No `task_*.md` specs yet → emit `NEEDS-CLEAN-TASKS` for the milestone; stop.
+- 1b: Specs exist but `task_analysis.md` is missing, verdict is `OPEN`, or carry-over has `🚧 BLOCKED` items → same routing.
 
-Two distinct sub-cases — the orchestrator handles each differently:
+Filter 1 stops the entire walk because the user's roadmap rule is sequential; skipping past an unhardened milestone just delays the same `/clean-tasks` call.
 
-**1a. No task specs exist yet for the milestone** (README-only milestone — e.g. M15 / M17 today). The walk to this milestone produces a `NEEDS-CLEAN-TASKS` finding for the **milestone**, not the task. The orchestrator routes this to `/clean-tasks <milestone>` to generate + harden specs from the README before any task can be picked. Continue the walk past this milestone only if the orchestrator's policy is "skip and try later milestones first" — by default, the milestone with no specs is the queue's bottleneck and the recommendation is to run `/clean-tasks` on it.
+**Filter 2 (task-level):** Trigger fired. If project memory flags the task deferred pending a CS300 need, workflow count, or observability backend, verify the trigger has fired. Not fired → skip to next task.
 
-**1b. Specs exist but are not hardened** — `task_analysis.md` is missing, or the most recent verdict is `OPEN` (HIGH or MEDIUM findings remain), or the carry-over section has unresolved `🚧 BLOCKED` items / contradictory locked decisions. Same routing as 1a: the milestone needs `/clean-tasks` re-run. The recommendation is `NEEDS-CLEAN-TASKS` for that milestone.
+**Filter 3 (task-level):** Prior task dependencies satisfied. If `Dependencies` names a prior task whose spec lacks `**Status:** ✅`, skip to next task.
 
-A task whose milestone specs are at state 1a or 1b is **not eligible** for `/auto-implement` until `/clean-tasks` returns LOW-ONLY or CLEAN.
+## Phase 2 — Walk algorithm
 
-### Filter 2 — Trigger fired (if applicable)
-
-If project memory flags the milestone or task as deferred pending a trigger (a CS300 need, a third-workflow appearance, an observability backend landing, an empirical-tuning data-set accumulating), verify the trigger has fired:
-
-- Search the codebase for the trigger's signal (e.g. third workflow registration, new dependency in `pyproject.toml`).
-- Read the latest project-memory entries about the relevant pivot.
-
-A task whose trigger has not fired is **not eligible**. Move to the next task in sequential order.
-
-### Filter 3 — Dependencies on prior tasks satisfied
-
-If the task's `Dependencies` section names a prior task that has not landed (`**Status:** ✅` not present in that prior spec), the task is **not eligible**. Move to the next task in sequential order.
-
-### Walk the queue (nested-loop form)
-
-Filter 1 is **milestone-level** (stops the walk); Filters 2 and 3 are **task-level** (skip to the next task within the milestone). Read the algorithm as nested loops:
+Read the nested loop and apply filters:
 
 ```
-for each open milestone (lowest number first):
-    if Filter 1 fails (milestone has no specs OR specs unhardened):
-        emit NEEDS-CLEAN-TASKS for this milestone, STOP the walk
-    for each open task within milestone (lowest number first, Status != ✅ Complete):
-        if Filter 2 fails (trigger not fired):
-            continue to next task
-        if Filter 3 fails (a prior task it depends on hasn't landed):
-            continue to next task
-        return this task as the Phase-2 candidate (continue to Phase 3)
-if the walk exhausts every open milestone without returning:
-    emit HALT-AND-ASK
+for each open milestone (lowest first):
+    if Filter 1 fails: emit NEEDS-CLEAN-TASKS, STOP
+    for each open task (lowest first, Status != ✅):
+        if Filter 2 fails: continue
+        if Filter 3 fails: continue
+        return this task → Phase 3
+if walk exhausts: emit HALT-AND-ASK
 ```
-
-**Why milestone-level Filter 1 stops the walk instead of skipping:** the user's roadmap rule is sequential. A README-only milestone is a real piece of work that needs to land before the queue can move past it. Skipping past M15 (no specs) to M17 (also no specs) just delays the same `/clean-tasks` call. Stop at the first unhardened milestone; let the orchestrator decide whether to harden it now or skip it explicitly.
 
 ## Phase 3 — Check for the bug-blocker exception
 
@@ -118,59 +99,25 @@ If both filters in Phase 2 are passed AND the override does not fire, the recomm
 
 ## Phase 4 — Recommendation
 
-Write to the invoker-supplied recommendation-file path:
+Write to the invoker-supplied recommendation-file path. Required sections:
 
 ```markdown
 # Roadmap selection — <YYYY-MM-DD>
-
 **Verdict:** PROCEED | NEEDS-CLEAN-TASKS | HALT-AND-ASK
-**Decision rule:** sequential | bug-blocker-override | n/a (when verdict is NEEDS-CLEAN-TASKS or HALT-AND-ASK)
+**Decision rule:** sequential | bug-blocker-override | n/a
+**Recommendation target:** <milestone/task_NN_slug.md> | <milestone> | n/a
 
-**Recommendation target:**
-- If `PROCEED` — `<milestone>/task_<NN>_<slug>.md` (next action: `/auto-implement <task>`).
-- If `NEEDS-CLEAN-TASKS` — `<milestone>` (next action: `/clean-tasks <milestone>`, then re-run `/queue-pick`).
-- If `HALT-AND-ASK` — n/a; user arbitrates from the surface below.
-
-## Reasoning
-
-<one or two paragraphs naming the sequential walk + filters that
-landed on this verdict. For NEEDS-CLEAN-TASKS, name whether the
-milestone is README-only (no task_*.md specs at all) or has
-unhardened specs (specs exist but task_analysis.md verdict is OPEN
-or missing).>
-
+## Reasoning  (1-2 paragraphs — walk + filters that landed on verdict)
 ## Sequential walk
-
-| Milestone | Has specs? | Specs hardened? | Trigger fired? | Deps satisfied? | Outcome |
+| Milestone | Has specs? | Hardened? | Trigger? | Deps? | Outcome |
 | --- | --- | --- | --- | --- | --- |
-| M10 | Y | Y | <Y/N> | <Y/N> | <picked / skipped — reason / NEEDS-CLEAN-TASKS> |
-| M15 | N | n/a | n/a | n/a | NEEDS-CLEAN-TASKS — README-only |
-
-(One row per milestone walked, in sequential order, until the
-recommendation or the queue exhausts. Tasks within a milestone get
-their own rows only when the milestone passes Filter 1 and the walk
-descends into per-task evaluation.)
+| MXX | Y/N | Y/N/n/a | Y/N/n/a | Y/N/n/a | picked / skipped — reason |
 
 ## Bug-blocker override (if applied)
+**Skipped:** <task> | **Override:** <task> | **Bug:** <citation> | **Impact:** <1 para>
 
-**Skipped-over task:** <milestone/task that the sequential rule pointed at>
-**Override target:** <later milestone/task that is the recommendation>
-**Bug or issue:** <citation — issue file ID, CHANGELOG entry, code site>
-**Impact on skipped task:** <one paragraph naming the test or
-implementation breakage>
-
-(Skip this section if the override did not apply or if the verdict
-is NEEDS-CLEAN-TASKS / HALT-AND-ASK.)
-
-## Decisions the orchestrator should expect during this task
-
-(One bullet per substantial decision the recommended task's spec
-already names — SEMVER bumps, KDR proposals, deferral arbitrations.
-Skip when NEEDS-CLEAN-TASKS or HALT-AND-ASK.)
-
-## Memory entries consulted
-
-(One bullet per memory file read, with the relevant takeaway.)
+## Decisions the orchestrator should expect  (SEMVER bumps, KDR proposals — skip if N/A)
+## Memory entries consulted  (one bullet per file read + takeaway)
 ```
 
 ## Verdict rubric

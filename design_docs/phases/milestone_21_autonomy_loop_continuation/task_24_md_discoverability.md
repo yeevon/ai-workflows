@@ -1,6 +1,6 @@
 # Task 24 — MD-file discoverability audit (`.claude/agents/`)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Slimming / doc.
 **Grounding:** [milestone README](README.md) · [research brief §T24 (NEW)](../milestone_20_autonomy_loop_optimization/research_analysis.md) — line 294, "MD-file discoverability audit (search-by-section)" verdict · existing files under `.claude/agents/*.md` and `.claude/agents/_common/*.md` · [T10 spec](task_10_common_rules_extraction.md) (✅ Done — `_common/` extraction baseline) · [T11 spec](task_11_claude_md_slim.md) (✅ Done — CLAUDE.md slim baseline). KDR drift checks apply per M21 scope note (autonomy-infra task, no direct KDR citation needed).
 
@@ -42,7 +42,7 @@ Run the rubric checks (smoke section below) against each of:
 .claude/agents/_common/verification_discipline.md
 ```
 
-Record per-file per-rule pass/fail in T24's issue file (`issues/task_24_issue.md`) as a baseline table. The baseline is informational; downstream tasks read it to confirm rubric adoption.
+Record per-file per-rule pass/fail in T24's issue file (`issues/task_24_issue.md`) as a baseline table. The baseline is informational; downstream tasks read it to confirm rubric adoption. Rule 5 (one topic per file) is human-judged at audit time; the audit script does not attempt to encode it. Baseline-table column for rule 5 is filled in manually.
 
 ### Step 2 — Refactor each violating file
 
@@ -166,14 +166,14 @@ The `scripts/audit/md_discoverability.py` script is created as part of this task
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Smoke step 8 CHANGELOG grep is loose** (severity: LOW, source: task_analysis.md round 1, carried through round 2)
+- [x] **TA-LOW-01 — Smoke step 8 CHANGELOG grep is loose** (severity: LOW, source: task_analysis.md round 1, carried through round 2)
       `grep -q "M21 Task 24" CHANGELOG.md` matches any mention of the string anywhere — including a body reference inside another task's entry. The established T10/T11 entries use `### Added — M21 Task <NN>:` / `### Changed — M21 Task <NN>:` as the section anchor.
       **Recommendation:** Tighten to `grep -qE '^### (Added|Changed) — M21 Task 24:' CHANGELOG.md`.
 
-- [ ] **TA-LOW-02 — Audit script has no CI hookup; will rot silently** (severity: LOW, source: task_analysis.md round 1, carried through round 2)
+- [x] **TA-LOW-02 — Audit script has no CI hookup; will rot silently** (severity: LOW, source: task_analysis.md round 1, carried through round 2)
       `scripts/audit/md_discoverability.py` is created at T24 and run by the Auditor smoke, but it is not attached to `.github/workflows/ci.yml`. Sections that grow past 500 tokens *after* T24 ships will not regress any gate; only the next person to re-run the smoke notices.
       **Recommendation:** Deferred to T25 (periodic skill / scheduled-task efficiency audit) unless T24 Builder elects to add a CI step in-scope. T25 is the natural home.
 
-- [ ] **TA-LOW-03 — Rule 5 (one-topic-per-file) is not encoded in the audit script — worth saying so** (severity: LOW, source: task_analysis.md round 1, carried through round 2)
+- [x] **TA-LOW-03 — Rule 5 (one-topic-per-file) is not encoded in the audit script — worth saying so** (severity: LOW, source: task_analysis.md round 1, carried through round 2)
       AC2 says rule-5 violations are "recorded in the issue file as flagged candidates; refactor only when a clear destination exists." The audit script's `--check` flags only cover rules 1–4 (`summary|section-budget|code-block-len|section-count`). Rule 5 is purely human-judged. Without an explicit note, a Builder may try to encode rule 5 in the script and burn cycles.
       **Recommendation:** Add one sentence to §Step 1 of T24: "Rule 5 (one topic per file) is human-judged at audit time; the audit script does not attempt to encode it. Baseline-table column for rule 5 is filled in manually."

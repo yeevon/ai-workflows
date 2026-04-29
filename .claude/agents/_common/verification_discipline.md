@@ -1,6 +1,8 @@
 # Verification discipline — shared rules
 
 **Scope:** applies to all subagents. Code-task verification rules for Builders and Auditors; Bash-safety rules for all agents.
+**When loaded:** referenced from every agent's frontmatter; read before first agent action.
+**Origin:** consolidated from CLAUDE.md verification rules at M21 Task 10; Bash-safety rules locked 2026-04-27.
 
 ---
 

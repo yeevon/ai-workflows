@@ -27,51 +27,25 @@ ai-workflows is **single-user, local-machine, MIT-licensed**. There is no hosted
 
 There is **no** auth, no multi-user surface, no untrusted network clients, no TLS for `aiw-mcp --transport http` (loopback default; `--host 0.0.0.0` is a documented foot-gun, not a defect). Per **KDR-013**, externally-registered workflow modules run in-process with full Python privileges — that is a **user-owned risk surface**, not an ai-workflows-side bug to fix. Generic web-app concerns (CSRF, sessions, account lockout, rate limiting) are noise.
 
-## What actually matters
+## What actually matters — wheel and subprocess
 
-### 1. Wheel contents
-`uv build`'s `dist/*.whl` is what users get. Inspect:
-- `unzip -l dist/jmdl_ai_workflows-*-py3-none-any.whl` — must NOT contain `.env*`, `*.local.*`, `runs/`, `*.sqlite3`, `htmlcov/`, `.coverage`, `.pytest_cache/`, `.claude/`, `design_docs/`, `dist/`, `evals/`, `migrations/` (unless the project ships migrations as runtime data — verify intent), `.github/`.
-- `tar tzf dist/jmdl_ai_workflows-*.tar.gz` — sdist has slightly more latitude (often includes `tests/` for downstream packagers) but still no secrets, no `.env*`, no builder-mode artefacts.
-- **`.env`-shape leakage in `long_description`.** `pyproject.toml` reads `README.md` as the long description (PyPI shows it). Any sample `.env` block in README must use placeholders only — no real values.
+**1. Wheel contents.** `unzip -l dist/jmdl_ai_workflows-*-py3-none-any.whl` must NOT contain `.env*`, `*.local.*`, `runs/`, `*.sqlite3`, `htmlcov/`, `.coverage`, `.pytest_cache/`, `.claude/`, `design_docs/`, `dist/`, `evals/`, `.github/`. Sdist (`tar tzf`) has slightly more latitude (often `tests/`) but no secrets. README `.env` blocks must use placeholders only — no real values (leaks into PyPI long description).
 
-### 2. OAuth subprocess integrity (KDR-003)
-Wherever `ClaudeCodeRoute` lives (likely `ai_workflows/primitives/providers/claude_code.py` or similar). Confirm:
-- Prompts go through argv arrays or stdin, never string-concatenated into `shell=True` commands.
-- Subprocess timeout is signal-based (`subprocess.run(timeout=…)` or `asyncio` equivalent), not a watchdog hope.
-- Stderr is captured and surfaced (verify the 0.1.3 fix in `primitives/retry.py:classify()` still wires through — stderr body up to 2000 chars in the warning emit).
-- No `ANTHROPIC_API_KEY` read anywhere in the codebase — `grep -rn "ANTHROPIC_API_KEY" ai_workflows/` should return zero hits. KDR-003 boundary.
+**2. OAuth subprocess integrity (KDR-003).** `ClaudeCodeRoute` (`ai_workflows/primitives/providers/claude_code.py`): prompts via argv arrays or stdin, never `shell=True`; timeout is signal-based; stderr captured up to 2000 chars; `grep -rn "ANTHROPIC_API_KEY" ai_workflows/` must return zero hits.
 
-### 3. External workflow load path (KDR-013)
-`ai_workflows/workflows/loader.py:load_extra_workflow_modules` `importlib.import_module`s user-supplied dotted paths.
-- Confirm: errors wrap into `ExternalWorkflowImportError` preserving the failing path + cause; no swallowed tracebacks.
-- Confirm: register-time collision guard fires (in-package workflows cannot be shadowed). The eager pre-import path runs before externals.
-- **Out of scope by design:** sandboxing user code, linting user code, vetting user-supplied modules. Per KDR-013, the framework does not police imported modules.
+**3. External workflow load path (KDR-013).** `workflows/loader.py:load_extra_workflow_modules`: errors wrap into `ExternalWorkflowImportError`; register-time collision guard fires; no sandboxing of user code (by design — KDR-013).
 
-### 4. MCP HTTP transport bind address
-`aiw-mcp --transport http` defaults to `127.0.0.1`. Verify:
-- The default in code is loopback, not `0.0.0.0`.
-- The `--host 0.0.0.0` foot-gun is documented (per 0.1.3 README §Security notes — verify still present after edits to README).
-- CORS is exact-match opt-in via `--cors-origin`; without the flag, no `Access-Control-Allow-Origin` header is emitted.
+**4. MCP HTTP transport.** Default bind is `127.0.0.1`. `--host 0.0.0.0` foot-gun is documented in README §Security. CORS is exact-match opt-in via `--cors-origin`.
 
-### 5. SQLite paths
-`default_storage_path()` and the checkpointer DB. Confirm:
-- Paths default under `~/.ai-workflows/` (user-owned dir, not `/tmp` or world-writable).
-- File creation does not silently overwrite an attacker-controlled path. Path normalisation when sourced from `AIW_STORAGE_DB` / `AIW_CHECKPOINT_DB` env vars.
-- No SQL injection — Storage layer parameterises via `aiosqlite`'s `?` placeholders. Flag any raw `f"…{value}…"` interpolation against `execute(...)`.
+## What actually matters — storage, env, and CVEs
 
-### 6. Subprocess CWD / env leakage
-Both Claude Code subprocess spawns and any `shell` invocations inherit the parent env. Confirm:
-- `env=` is explicitly passed when sensitive vars (`GEMINI_API_KEY`, etc.) shouldn't propagate to child processes that don't need them. Most providers DO need their key — but flag any unaudited child-process spawn.
-- Subprocess `cwd` is not user-attacker-controlled.
+**5. SQLite paths.** Paths default under `~/.ai-workflows/`. Path normalisation applied when sourced from `AIW_STORAGE_DB` / `AIW_CHECKPOINT_DB` env vars. No raw `f"…{value}…"` interpolation against `execute(...)`.
 
-### 7. Logging hygiene
-`StructuredLogger` calls. Confirm no API keys, OAuth tokens, or `.env` values are emitted in log records. Greps:
-- `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `Bearer `, `Authorization`
-- Any `prompt=` / `messages=` kwargs that might land full LLM prompts in logs (privacy, not security per se, but flag Advisory).
+**6. Subprocess CWD / env leakage.** Both `ClaudeCodeRoute` spawns and any `shell` invocations inherit the parent env. Flag any unaudited child-process spawn where `env=` is not explicitly passed to exclude sensitive vars the child doesn't need. `cwd` must not be user-attacker-controlled.
 
-### 8. Dependency CVEs
-If the `dependency-auditor` agent ran for this task, defer to it — don't duplicate. If not, run `uv tool run pip-audit` (or `pip-audit` directly) and surface High / Critical only. Moderate goes Advisory.
+**7. Logging hygiene.** `StructuredLogger` calls must not emit `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `Bearer`, `Authorization`. Full LLM prompts in logs → Advisory.
+
+**8. Dependency CVEs.** Defer to the `dependency-auditor` agent if it ran. Otherwise `uv tool run pip-audit` — surface High/Critical only; Moderate goes Advisory.
 
 ## What NOT to flag (noise for this project)
 

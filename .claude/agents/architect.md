@@ -80,26 +80,18 @@ Append to the issue file under `## Architect review (YYYY-MM-DD)`:
 
 ```markdown
 ## Architect review (YYYY-MM-DD)
-
 **Trigger:** <new-KDR | external-claim>
-**Scope:** <one line — finding ID or external source URL>
-**Verdict:** <single line per the trigger's rubric above>
+**Scope:** <finding ID or source URL>
+**Verdict:** <ALIGNED | MISALIGNED | OPEN | PROPOSE-NEW-KDR>
 
-<one or two paragraphs of reasoning, citing the KDR / architecture.md
-section / project-memory note that drove the call>
+<1-2 paragraphs — KDR / architecture.md section / project-memory note that drove the call>
 
-### Proposed KDR (if Trigger A and PROPOSE-NEW-KDR)
-- **Number:** KDR-XXX (next available)
-- **Name:** <short name>
-- **Failure mode:** <what goes wrong without the lock>
-- **Locked pattern:** <the rule>
-- **Alternative considered:** <one to three alternatives + why rejected>
-- **ADR skeleton:** Status / Context / Decision / Rationale / Alternatives / Consequences / Related
+### Proposed KDR (if PROPOSE-NEW-KDR)
+**Number/Name/Failure mode/Locked pattern/Alternative considered/ADR skeleton**
+(Status / Context / Decision / Rationale / Alternatives / Consequences / Related)
 
 ### External research (if applicable)
-- Sources read: <URLs + one-line takeaway each>
-- Conflicts with locked decisions: <list, or "none">
-- Recommendation: <one line>
+**Sources / Conflicts with locked decisions / Recommendation**
 ```
 
 ## Return to invoker
