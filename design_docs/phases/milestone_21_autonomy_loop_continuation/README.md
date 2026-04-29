@@ -2,7 +2,7 @@
 
 **Status:** 📝 Drafting (split from M20 2026-04-27 per audit recommendation M3 — M20's 27-task scope was too large for a single milestone). M21 carries Phases E (Slimming), F (Productivity commands), G (Parallel-builders foundation). Branch: continuation work happens on `workflow_optimization` after M20 lands, or on a new branch named at M21 kickoff.
 
-**Grounding:** Same as M20 — research brief `design_docs/analysis/m20_orchestration_research_brief.md` (Q1–Q2 2026 best-practices synthesis post-Opus-4.6) · project memory `project_autonomy_optimization_followups.md` · `architecture.md` §9 KDRs · M20 close-out (post-shipment baseline measurements).
+**Grounding:** Same as M20 — research brief `design_docs/phases/milestone_20_autonomy_loop_optimization/research_analysis.md` (Q1–Q2 2026 best-practices synthesis post-Opus-4.6) and the model-dispatch-specific `design_docs/analysis/autonomy_model_dispatch_study.md` · project memory `project_autonomy_optimization_followups.md` · `architecture.md` §9 KDRs · M20 close-out (post-shipment baseline measurements).
 
 **Scope note.** Same scope-shape as M20: changes the autonomy infrastructure (`.claude/agents/`, `.claude/commands/`, CLAUDE.md), not the runtime (`ai_workflows/`). KDR drift checks still apply. M21 builds on the empirical baseline M20 ships.
 
