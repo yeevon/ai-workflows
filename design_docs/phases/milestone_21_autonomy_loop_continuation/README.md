@@ -39,6 +39,7 @@ Three load-bearing reasons M21 exists distinct from M20:
 3. **(G3)** At least one new productivity command lands as a Skill (`/triage` recommended). Spec covers full set; M21 ships at minimum the highest-value surface.
 4. **(G4)** `/clean-tasks` spec format extension enumerates per-slice file/symbol scope when ACs decompose into file-disjoint slices. Gates the parallel-build flag on this format being present; tasks without it run serial as today. Native `isolation: worktree` frontmatter on the parallel-builder sub-agent. Concurrency capped at 3–4 worktrees. Tasks T18 + T19 stretch — explicit "deferred to M22 if scope-bounded" line in M21 close-out.
 5. **(G5)** Quarterly audit prompt over each Skill and slash-command lands as a runnable command (`/audit-skills` or similar). Two-prompt pattern documented in `agent_docs/long_running_pattern.md` with reference Builder loop.
+6. **(G6)** At least one extraction Skill (e.g. dep-audit) lands in M21; pattern locked for downstream extractions. Test: SKILL.md frontmatter + body ≤5K tokens + helper file present + agent prompt references the Skill. (Satisfied at T12: `dep-audit` Skill extracted from `dependency-auditor.md`; `_common/skills_pattern.md` locks the pattern for T13–T16 and future extractions.)
 
 ---
 
@@ -69,7 +70,7 @@ Three load-bearing reasons M21 exists distinct from M20:
 |---|---|---|---|---|
 | 10 | Common-rules extraction (`.claude/agents/_common/non_negotiables.md` ≤500 tokens, plus `_common/verification_discipline.md`; each agent's frontmatter references them) | SUPPORT + EXTEND (T10 from #4) | Slimming / doc | ✅ Done |
 | 11 | CLAUDE.md slim (threat-model → `security-reviewer.md`; seven-KDR table → `auditor.md` + `task-analyzer.md` + `architect.md` + `dependency-auditor.md`; CLAUDE.md becomes a one-page index with summary+pointer per removed section) | STRONGLY SUPPORT (T11 from #3) | Slimming / doc | ✅ Done |
-| 12 | Skills extraction (per-agent capabilities; canonical SKILL.md frontmatter with tight `description:` for routing; body references helper files rather than inlining) | SUPPORT + MODIFY (T12 from #1) | Slimming / code + doc | 📝 Candidate |
+| 12 | Skills extraction (per-agent capabilities; canonical SKILL.md frontmatter with tight `description:` for routing; body references helper files rather than inlining) | SUPPORT + MODIFY (T12 from #1) | Slimming / code + doc | ✅ Done |
 | 24 | MD-file discoverability audit (one topic per file in `agent_docs/`; ≤500-token sections with `##` anchors; top-of-file 3-line summary; no inline code — links to `src/foo.py:line` instead) | NEW (research-brief T24) | Slimming / doc | ✅ Done |
 | 25 | Periodic skill / scheduled-task efficiency audit (quarterly audit prompt over each Skill and slash-command: redundant tool round-trips? screenshots where text-extraction would do? re-reads of files already in memory? missing tool declarations forcing repeated ToolSearch?) | NEW (research-brief T25, citing Nate Jones / Nicholas Rhodes "automated task bloat" pattern) | Slimming / doc + code | 📝 Candidate |
 | 26 | Two-prompt long-running pattern for multi-cycle Builder runs (initializer prompt produces `iter_<N>_plan.md` and `iter_<N>_progress.md`; subsequent cycles update only progress file) | NEW (research-brief T26) | Slimming / doc + code | 📝 Candidate |

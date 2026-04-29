@@ -99,6 +99,10 @@ section: ## Dependency audit (YYYY-MM-DD)
 The orchestrator reads the durable artifact directly for any detail it needs. A return that includes a chat summary, multi-paragraph body, or any text outside the three-line schema is non-conformant — the orchestrator halts the autonomy loop and surfaces the agent's full raw return for user investigation. Do not narrate, summarise, or contextualise; the schema is the entire output.
 <!-- Verification discipline: see _common/verification_discipline.md -->
 
+## Operational shortcuts
+
+The pre-publish wheel-contents check and dep-manifest change-detection procedure live in the dep-audit Skill at `.claude/skills/dep-audit/SKILL.md`. The Skill is invocable in main context (e.g. during `/autopilot` or future `/check`) without spawning this agent. The agent retains threat-model framing, severity grading, and final-verdict authority; the Skill carries the operational shortcut.
+
 ## Load-bearing KDRs (drift-check anchors)
 
 | KDR | Rule |

@@ -1,8 +1,8 @@
 # Task 12 — Skills extraction (`.claude/skills/dep-audit/`)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Slimming / code + doc.
-**Grounding:** [milestone README](README.md) · [research brief §T12 (SUPPORT + MODIFY, item #1)](../milestone_20_autonomy_loop_optimization/research_analysis.md) — line 269, "Skills extraction (per-agent capabilities — test-quality eval, dep-audit shortcuts)" verdict, plus line 145 ("T12 (Skills extraction) aligns directly with Anthropic's Agent Skills pattern"). · [T24 spec](task_24_md_discoverability.md) (✅ Done — rubric-conformant `.claude/agents/*.md` is the substrate Skills' progressive disclosure depends on) · [existing Skill](../../../.claude/skills/ai-workflows/SKILL.md) (one prior Skill — `ai-workflows` — establishes the SKILL.md frontmatter shape). KDR drift checks apply per M21 scope note (autonomy-infra task; no direct KDR citation needed).
+**Grounding:** [milestone README](README.md) · [research brief §T12 (SUPPORT + MODIFY, item #1)](../milestone_20_autonomy_loop_optimization/research_analysis.md) — (matching `### T12 — Skills extraction (per-agent capabilities)`), "Skills extraction (per-agent capabilities — test-quality eval, dep-audit shortcuts)" verdict, plus (matching `T12 (Skills extraction) aligns directly with Anthropic's Agent Skills pattern`). · [T24 spec](task_24_md_discoverability.md) (✅ Done — rubric-conformant `.claude/agents/*.md` is the substrate Skills' progressive disclosure depends on) · [existing Skill](../../../.claude/skills/ai-workflows/SKILL.md) (one prior Skill — `ai-workflows` — establishes the SKILL.md frontmatter shape). KDR drift checks apply per M21 scope note (autonomy-infra task; no direct KDR citation needed).
 
 ## Why this task exists
 
@@ -215,7 +215,7 @@ grep -qE '^### (Added|Changed) — M21 Task 12:' CHANGELOG.md && echo "CHANGELOG
 - **Extracting more than one capability into a Skill.** T12 establishes the pattern via one concrete extraction (`dep-audit-shortcuts`). Future T12-shaped tasks (`task_<NN>_skills_extraction_<capability>.md`) land separately for test-quality eval, threat-model walk, wheel-contents-only sub-skill, etc.
 - **Phase F productivity commands as Skills.** T13 (`/triage`), T14 (`/check`), T15 (`/ship`), T16 (`/sweep`) are *new* surfaces, not extractions of existing agent capabilities. They have separate specs and follow this Skill pattern but are scoped per their own task spec.
 - **Re-architecting `.claude/skills/ai-workflows/SKILL.md`.** That Skill exists and is correct; T12 leaves it alone.
-- **Validating the extraction by omission.** Research-brief §T12 line 269 suggests testing the Skill by omitting it and confirming Claude underperforms. That's a useful sanity check but not Auditor-runnable in this task's smoke. Captured as a manual one-shot the operator can run; not gated.
+- **Validating the extraction by omission.** Research-brief §T12 (matching `### T12 — Skills extraction (per-agent capabilities)`) suggests testing the Skill by omitting it and confirming Claude underperforms. That's a useful sanity check but not Auditor-runnable in this task's smoke. Captured as a manual one-shot the operator can run; not gated.
 - **Adding a CI gate for Skill discovery / well-formedness.** Deferred to T25 (periodic skill / scheduled-task efficiency audit) — same destination as T24's TA-LOW-02 (audit-script CI hookup).
 - **Changing the agent's behavioral rules.** The Skill carries the operational shortcut; the agent retains the threat-model framing + severity grading. No agent rewrite.
 - **Adopting items from `nice_to_have.md`.**
@@ -236,11 +236,11 @@ grep -qE '^### (Added|Changed) — M21 Task 12:' CHANGELOG.md && echo "CHANGELOG
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Switch grounding-link line numbers to anchor strings (broadened round 5)** (severity: LOW, source: task_analysis.md round 3, re-affirmed round 4, broadened round 5 / T12 round 3)
+- [x] **TA-LOW-01 — Switch grounding-link line numbers to anchor strings (broadened round 5)** (severity: LOW, source: task_analysis.md round 3, re-affirmed round 4, broadened round 5 / T12 round 3)
       Spec §Grounding (line 5) AND §Out of scope "Validating the extraction by omission" both hard-code `line 269` for the research brief. Verified accurate today, but the line numbers will drift with future re-flow.
       **Recommendation:** Replace **each** occurrence of `line 269` → `(matching \`### T12 — Skills extraction (per-agent capabilities)\`)`; replace `line 145` (line 5 only) → `(matching \`T12 (Skills extraction) aligns directly with Anthropic's Agent Skills pattern\`)`. Anchor strings survive re-flow. Builder migrates **both** sites at implement time.
 
-- [ ] **TA-LOW-02 — Mandate the literal phrase "Skill-extraction pattern" in `_common/skills_pattern.md` body** (severity: LOW, source: task_analysis.md round 5 / T12 round 3)
+- [x] **TA-LOW-02 — Mandate the literal phrase "Skill-extraction pattern" in `_common/skills_pattern.md` body** (severity: LOW, source: task_analysis.md round 5 / T12 round 3)
       Smoke step 6 asserts `grep -qF "Skill-extraction pattern" .claude/agents/_common/skills_pattern.md` — a literal case-sensitive substring match. Step 5's body content (sections "When to extract", "The 4-rule Skill structure", "How to validate") does not require the phrase verbatim. A Builder writing freehand could use synonyms ("extraction recipe", "Skill extraction guidance") and pass T24 rubric checks but fail smoke step 6.
       **Recommendation:** Builder includes the literal phrase **Skill-extraction pattern** in the file body (intro paragraph or first section) so smoke step 6's grep is satisfied unambiguously. Two-line edit at implement time, no scope drift.
 
