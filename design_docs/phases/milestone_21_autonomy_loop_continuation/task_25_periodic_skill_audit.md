@@ -1,6 +1,6 @@
 # Task 25 — Periodic skill / scheduled-task efficiency audit (`/audit-skills`)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Slimming / doc + code.
 **Grounding:** [milestone README](README.md) · [research brief §T25 (NEW)](../milestone_20_autonomy_loop_optimization/research_analysis.md) — anchor `### T25 — Periodic skill/scheduled-task efficiency audit (citing Nate Jones / Nicholas Rhodes pattern)` · [Nate Jones "Your Claude Sessions Cost 10x What They Should"](https://research_analysis.md#L135) (cited; "automated task bloat" framing) · [Nicholas Rhodes "I found 350,000 tokens hiding in plain sight"](https://research_analysis.md#L135) (cited; the 11,800-tokens-per-run example) · [T24 spec](task_24_md_discoverability.md) (✅ Done — TA-LOW-02 deferred to T25 for `scripts/audit/md_discoverability.py` CI hookup) · [T12 spec](task_12_skills_extraction.md) (✅ Done — Out of scope says "Adding a CI gate for Skill discovery / well-formedness. Deferred to T25") · [T26 spec](task_26_two_prompt_long_running.md) (✅ Done — agent_docs/ rubric inheritance also lands here for the periodic walk). KDR drift checks apply per M21 scope note.
 
@@ -191,14 +191,14 @@ grep -qE '^## (Inputs|Procedure|Outputs|Return schema)' .claude/commands/audit-s
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Smoke step 8 Bash-safe rewrite (round 9 L1, applied at round 9)** (severity: LOW, source: task_analysis.md round 9, re-verified rounds 10–11)
+- [x] **TA-LOW-01 — Smoke step 8 Bash-safe rewrite (round 9 L1, applied at round 9)** (severity: LOW, source: task_analysis.md round 9, re-verified rounds 10–11)
       Smoke step 8 swapped from `$(wc -l < scripts/audit/skills_efficiency.py)` to `awk 'END { exit !(NR <= 200) }' scripts/audit/skills_efficiency.py` per `_common/verification_discipline.md` §Bash-safety rule (no command substitution / parameter expansion in smoke commands). Reference for future audit-script size gates.
       **Recommendation:** Use the same `awk` pattern when adding new line-budget smoke checks.
 
-- [ ] **TA-LOW-02 — Operator-only heuristics' synthetic-fixture testing (round 9 L2)** (severity: LOW, source: task_analysis.md round 9, carried through round 11)
+- [x] **TA-LOW-02 — Operator-only heuristics' synthetic-fixture testing (round 9 L2)** (severity: LOW, source: task_analysis.md round 9, carried through round 11)
       `tool-roundtrips` and `file-rereads` are operator-only heuristics surfaced via `/audit-skills`. If implemented in `scripts/audit/skills_efficiency.py` (not required), unit tests should drive the rule-fires-on-violation paths via synthetic fixtures (not against live `.claude/skills/`, which is heuristic-clean by Step 1b construction). If they live solely in slash-command procedure prose with no Python implementation, no unit-test coverage is needed.
       **Recommendation:** Builder picks at implement time; either choice is acceptable.
 
-- [ ] **TA-LOW-03 — `screenshot-overuse` Anthropic-tool-name framing (round 9 L3)** (severity: LOW, source: task_analysis.md round 9, carried through round 11)
+- [x] **TA-LOW-03 — `screenshot-overuse` Anthropic-tool-name framing (round 9 L3)** (severity: LOW, source: task_analysis.md round 9, carried through round 11)
       `screenshot-overuse` heuristic uses `get_page_text` (Anthropic Computer Use tool name) verbatim from the Nicholas Rhodes source. ai-workflows is a CLI/MCP project, not Computer Use.
       **Recommendation:** Builder may keep verbatim (deliberate research-brief cite) OR generalize the adjacency regex to local-context terms (e.g. `text-extraction|parse|extract|read.*text`). Either choice is acceptable; document the chosen framing in the audit script's module docstring.

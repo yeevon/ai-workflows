@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M21 Task 25: Periodic skill / scheduled-task efficiency audit (/audit-skills + scripts/audit/skills_efficiency.py + CI hookup) (2026-04-29)
+
+Files touched: `scripts/audit/skills_efficiency.py` (new — two CI-gated heuristics: screenshot-overuse, missing-tool-decl; ≤200 lines), `.claude/commands/audit-skills.md` (new slash command — §Inputs, §Procedure, §Outputs, §Return schema sections), `.claude/skills/ai-workflows/SKILL.md` (added `allowed-tools: Bash` frontmatter — Step 1b clean-tree precondition), `.claude/skills/dep-audit/SKILL.md` (added `allowed-tools: Bash` frontmatter — Step 1b clean-tree precondition), `.github/workflows/ci.yml` (new CI step: md_discoverability + skills_efficiency both run every PR), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_24_issue.md` (M21-T24-ISS-01 marked RESOLVED), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_25_issue.md` (new — T12 + T24 deferrals closed), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_25_periodic_skill_audit.md` (Status → Done; TA-LOW-01/02/03 ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (row 75 → Done; G5 audit-prompt half amended with satisfaction parenthetical), `tests/test_t25_skills_efficiency.py` (new — 18 tests covering both CI-gated rules + all-aggregate + invalid-target + synthetic-violation fixtures + live-repo smoke).
+
+ACs satisfied: AC1 (skills_efficiency.py exists, two CI-gated --check flags + all, exits non-zero on findings, exits 0 on clean, ≤200 lines), AC2 (audit-skills.md exists with four required ## section anchors), AC2b (both existing Skills carry allowed-tools: frontmatter), AC3 (ci.yml wires md_discoverability + skills_efficiency), AC4 (test file exists with all checks + all-aggregate + invalid-target + synthetic violation paths), AC5 (T24 issue TA-LOW-02 marked RESOLVED), AC6 (T10 invariant preserved — smoke step 5), AC7 (T24 invariant preserved — smoke step 6), AC8 (CHANGELOG), AC9a/b/c (status surfaces flipped). TA-LOW-01 (awk pattern in smoke step 8). TA-LOW-02 (operator-only heuristics in slash-command prose only). TA-LOW-03 (screenshot-overuse uses generalized regex; documented in module docstring).
+
+Deviations: none.
+
 ### Changed — M21 Task 26 cycle 2: T26 trigger re-check + bundled wording fixes (auto-implement.md; long_running_pattern.md) (2026-04-29)
 
 Files touched: `.claude/commands/auto-implement.md` (FIX-1: trigger re-check note added to §Functional loop procedure Step 1; ADV-1: initializer step heading updated to "first trigger fire" wording; ADV-2: "No T26 override for the Auditor spawn" appended to §Auditor spawn — read-only-latest-summary rule), `agent_docs/long_running_pattern.md` (ADV-1: "one-shot at cycle 1" updated to "one-shot at first trigger fire (cycle 1 for opt-in tasks; cycle 3 for auto-trigger)").

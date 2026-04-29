@@ -1,6 +1,7 @@
 ---
 name: dep-audit
 description: Run the ai-workflows pre-publish wheel-contents check and dep-manifest change-detection. Use before `uv publish`, when pyproject.toml or uv.lock change, or for wheel-contents audits.
+allowed-tools: Bash
 ---
 
 # dep-audit

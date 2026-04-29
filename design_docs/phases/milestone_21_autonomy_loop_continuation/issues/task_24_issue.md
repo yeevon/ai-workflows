@@ -91,7 +91,7 @@ No drift detected. This task modifies only `.claude/agents/*.md`, `.claude/agent
 
 ## Issue log — cross-task follow-up
 
-- **M21-T24-ISS-01** (LOW) — Audit script CI hookup deferred to T25. Owner: T25 Builder. Status: DEFERRED.
+- **M21-T24-ISS-01** (LOW) — Audit script CI hookup deferred to T25. Owner: T25 Builder. Status: RESOLVED at T25 — `scripts/audit/md_discoverability.py --check section-budget --target .claude/agents/` and `--target agent_docs/` are now wired in `.github/workflows/ci.yml` (M21 Task 25 commit).
 - **M21-T24-ISS-02** (LOW) — Builder report cited 240-line script; on-disk artifact is 149 lines. Auditor re-verified; AC5 satisfied unconditionally. Status: RESOLVED at audit. Trim is unnecessary.
 - **M21-T24-ISS-03** (LOW) — Builder return-text hygiene observation: Builder's AC5 hedge encoded an incorrect line count into the durable issue file, which the Auditor had to correct. Future Builder cycles should `wc -l` the artifact before composing AC notes. Owner: standing Builder discipline reminder; no per-task action.
 
