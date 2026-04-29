@@ -1,8 +1,8 @@
-# M21 Autonomy Loop Continuation — Task Analysis
+# M21 — Task Analysis
 
-**Round:** 3
+**Round:** 5 (T11 round 2)
 **Analyzed on:** 2026-04-29
-**Specs analyzed:** `task_10_common_rules_extraction.md`
+**Specs analyzed:** `task_11_claude_md_slim.md`
 **Analyst:** task-analyzer agent
 
 ## Summary
@@ -11,42 +11,59 @@
 | --- | --- |
 | 🔴 HIGH | 0 |
 | 🟡 MEDIUM | 0 |
-| 🟢 LOW | 1 |
-| Total | 1 |
+| 🟢 LOW | 3 |
+| Total | 3 |
 
 **Stop verdict:** LOW-ONLY
 
-Zero HIGH, zero MEDIUM. One LOW carries over from round 1 (L2 — frontmatter wording precision) that was not absorbed by the round-2 fix application. Orchestrator should push it to the spec's `## Carry-over from task analysis` section and exit the loop.
+Round-1 H1 (line-budget unsatisfiable) is closed: the spec now lists six moves with a -40 arithmetic delta (136 → 96), an explicit fallback ("one-line tightening on §Repo layout") for the 1-line undershoot vs the ≤ 95 smoke threshold, and the smoke verifies the threshold rather than each move's contribution. Round-1 M1 (bash-safety) is closed: smoke steps 1, 5, 6, 7 now use `awk 'END { exit !(...) }'` instead of `$(...)`, and step 4 is unrolled into four explicit greps. Round-1 M2 is closed: the Sr. SDET ADV-1 cosmetic-edit-to-T10 item is dropped; T10 stays TERMINAL CLEAN. Round-1 M3 is closed: AC9 enumerates three actual surfaces — spec status line, README task-pool row 71, README §Exit criteria §G1 prose — with a matching deliverable bullet for the G1 prose edit.
 
 ## Findings
 
+### 🔴 HIGH
+
+*(none)*
+
+### 🟡 MEDIUM
+
+*(none)*
+
 ### 🟢 LOW
 
-#### L1 — "Frontmatter line or top-of-file declaration" wording is loose (round-1 L2 carry-over)
+#### L1 — Move-table line ranges and item counts have minor cosmetic errors
 
-**Task:** `task_10_common_rules_extraction.md`
-**Issue:** §Per-agent frontmatter reference (line 36) says "Each agent's prompt file in `.claude/agents/` … gains a frontmatter line or top-of-file declaration." The example block (lines 38-41) uses Markdown bold-text (`**Non-negotiables:** see [...]`), which is **not** YAML frontmatter — the agent files use YAML frontmatter for `name`/`description`/`tools`/`model`/`thinking`/`effort` (verified against `.claude/agents/builder.md` lines 1-10). The bold-text declaration must land in the prompt body **after** the closing `---`, not inside the YAML block. AC-3's "(or equivalent — two greps must succeed)" gives the Builder flexibility, so this is not blocking, but the wording invites a Builder to attempt YAML-frontmatter insertion that would break the YAML parser.
-**Recommendation:** Tighten line 36 to "Each agent's prompt file in `.claude/agents/` (9 files: …) gains a top-of-body declaration immediately after the YAML frontmatter closing `---` referencing the shared blocks." Drop "frontmatter line or" — there is no YAML field for this content.
-**Push to spec:** yes — append to the spec's `## Carry-over from task analysis` section as: *"Round-3 carry-over: when adding the `**Non-negotiables:**` and `**Verification discipline:**` declarations to each agent prompt, place them in the prompt body immediately after the YAML frontmatter closing `---`, not inside the YAML block. The example at §Per-agent frontmatter reference shows Markdown bold-text, which is body content, not YAML."*
+**Task:** `task_11_claude_md_slim.md`
+**Issue:** Move 1 cites CLAUDE.md "lines 85–97" but the threat-model section ends at line 94 with the `---` divider on line 96 (line 97 is blank). Move 2 cites "lines 39–50"; actual content spans 38–50 (heading at 38). Move 5 says "10 subagent one-liners" then enumerates 9 names (`task-analyzer`, `builder`, `auditor`, `security-reviewer`, `dependency-auditor`, `architect`, `roadmap-selector`, `sr-dev`, `sr-sdet`); the value 10 appears to count the leading "Subagents:" line. None of these blocks the Builder — the smoke verifies the final line-count regardless of which exact source ranges are excised — but the spec's own arithmetic (-9 for Move 5, citing 10 source lines minus 1 replacement) sits on the inflated count.
+**Recommendation:** Builder may correct the cosmetic numbers in Move-table while applying the moves; if not corrected, no functional impact (the smoke verifies the global threshold).
+**Push to spec:** yes — append to `## Carry-over from task analysis` in `task_11_claude_md_slim.md`.
+
+#### L2 — Move 1 instruction sequencing for security-reviewer.md is workable but indirect
+
+**Task:** `task_11_claude_md_slim.md`
+**Issue:** `.claude/agents/security-reviewer.md` line 21 already carries `## Threat model (read first)` (a stub header). The Move 1 instruction says "append as a `## Threat model` section after the agent's existing system-prompt body. Verify the agent's existing prompt does not already duplicate the content; if it does, replace inline with the moved authoritative version." A hostile reading triggers two passes (append → discover dup → replace). The smoke step 3 grep `^## Threat model` matches both forms.
+**Recommendation:** Builder should treat this as "replace the existing `## Threat model (read first)` block (line 21 + body, if any) with the full moved-from-CLAUDE.md threat-model content; rename heading to `## Threat model` (drop the `(read first)` parenthetical) so the section lands once with the canonical title."
+**Push to spec:** yes — append to `## Carry-over from task analysis` in `task_11_claude_md_slim.md` as a clarifying note on Move 1.
+
+#### L3 — AC9c amends G1's tautological grep example as a side effect
+
+**Task:** `task_11_claude_md_slim.md`
+**Issue:** M21 README §Exit criteria §G1 (line 37) currently says "Test: `wc -l CLAUDE.md` shows ≥ 30% reduction; `grep -c "^## " CLAUDE.md` confirms each removed section has a placeholder summary + anchor link." The grep-count test is tautological (a count of `## ` headings doesn't prove anchor links exist). Since AC9c amends this same prose to record satisfaction, the Builder has an opportunity to either (a) leave the test description alone and just append the satisfaction parenthetical, or (b) replace the tautological test with one of the spec's actual smoke greps (e.g. `grep -q "security-reviewer.md#threat-model" CLAUDE.md`).
+**Recommendation:** Builder may either preserve G1 verbatim (minimal-edit) or replace the grep example with one that actually verifies anchor presence — either is acceptable; the satisfaction parenthetical is the load-bearing edit.
+**Push to spec:** yes — append to `## Carry-over from task analysis` as a Builder-discretion note on AC9c.
 
 ## What's structurally sound
 
-Verified on hostile re-read; round-2 fixes held:
-
-- **H1 (round-2) — grounding citations.** Spec line 5 cites `research_analysis.md` §T10. Confirmed file exists and line 263 contains `### T10 — Common-rules extraction (.claude/agents/_common/non_negotiables.md)` with the SUPPORT verdict. Secondary `autonomy_model_dispatch_study.md` confirmed to exist. M21 README line 5 propagates both citations.
-- **M1 (round-2) — verbatim/token-budget conflict resolved.** Line 21 now reads "faithful summary — only the subagent-relevant rules 1/2/3-decision-rule." Verb list ordering matches CLAUDE.md / agent-prompt convention (`git commit, git push, git merge, git rebase, git tag, uv publish`).
-- **M2 (round-2) — smoke step 4 assertion shape.** Lines 86-89 now use `test ... && echo "<pass marker>"` consistent with steps 1-3.
-- **All cited paths resolve.** `.claude/agents/architect.md`, `auditor.md`, `builder.md`, `dependency-auditor.md`, `roadmap-selector.md`, `security-reviewer.md`, `sr-dev.md`, `sr-sdet.md`, `task-analyzer.md` — 9/9 exist. `feedback_autonomous_mode_boundaries.md` in project memory exists. `.claude/commands/_common/gate_parse_patterns.md` exists. `.claude/agents/_common/` does **not** yet exist (correct — T10 creates it).
-- **Smoke step 3 sentinel grep validity.** `grep -lF 'Do not run \`git commit\`' .claude/agents/*.md` currently matches 9/9 agent files (verified). After T10 extraction, those sentences land only in `_common/non_negotiables.md`; the `grep -v _common` filter excludes the new file. Grep returns 0 lines outside `_common/` after correct extraction.
-- **Smoke step 2 grep specificity.** Targets exact filenames `_common/non_negotiables.md` and `_common/verification_discipline.md`. Several agents currently reference `_common/effort_table.md` and `_common/cycle_summary_template.md` (under `.claude/commands/_common/`) but **not** the targeted filenames (verified `grep -c '_common/non_negotiables.md' .claude/agents/builder.md` returns 0 today). No false-positive risk.
-- **AC ↔ smoke coverage.** AC-1 ↔ smoke step 1 (file-exists + token-budget). AC-2 ↔ smoke step 1. AC-3 ↔ smoke step 2. AC-4 ↔ smoke step 3. AC-5 (CHANGELOG) is doc-task-appropriate and verified against `## [Unreleased]` convention in `CHANGELOG.md` line 8. AC-6 (status surfaces) — milestone README task-pool row at line 70 currently reads "📝 Candidate"; T10 close flips to "✅ Done" + per-task spec `**Status:**` line.
-- **Layer / KDR / SEMVER discipline.** Doc-only task. No `ai_workflows/` touches. No public-API surface. No KDR violation surface. M21 scope-note (README line 7) explicitly bars runtime code changes and the spec §Out of scope honors it (line 109).
-- **Cross-task dependencies.** T10 → blocks T11 (correct — T11 needs `_common/` as the destination for moved CLAUDE.md content). README line 109 mirrors this. No circular or out-of-order dependency.
-- **`nice_to_have.md` slot drift.** Spec cites no slot numbers; nothing to drift.
-- **Status-surface alignment.** Spec `**Status:**` = "📝 Planned"; README task-pool Kind = "Slimming / doc"; spec self-describes as "doc-only task" (line 54). Consistent.
+- **Six moves enumerated with line-count math.** -40 net delta closes round-1 H1; ≤ 95 line target is reachable with the explicit `§Repo layout` one-line tightening fallback if the math undershoots by 1–2 lines.
+- **Bash-safety in smoke commands.** Steps 1, 5, 6, 7 use `awk 'END { exit !(NR <= 95) }'` and `awk 'END { exit !(NR == 0) }'` patterns instead of `$(...)` substitution; step 4 is unrolled into four explicit greps; no parameter expansion in loop bodies.
+- **AC9 enumerates three real surfaces.** Spec `**Status:**` line, M21 README task-pool row 71, M21 README §Exit criteria §G1 prose — all three verified to exist at the cited locations.
+- **T10 invariants preserved.** Smoke step 7 verifies the `_common/non_negotiables.md` pointer remains in 9/9 agents after ADV-1 strip + ADV-2 parenthetical restoration. The invariant pointer is currently present in 9/9 (verified inline).
+- **ADV-1 + ADV-2 carry-over absorption is bounded and concrete.** The "9 edits" deliverable (spec line 111) is Builder-actionable; smoke step 5 (preamble removed in 9/9) and step 6 (parenthetical restored in 9/9) verify both invariants. Currently 9/9 agents carry the `**No git mutations or publish.**` preamble (verified inline) and 0/9 carry the `(read-only on source code; smoke tests required)` parenthetical (verified inline) — both deltas are real.
+- **Move 3 source/replacement math holds.** `_common/verification_discipline.md` already covers code-task + wire-level + real-install rules (verified — sections 1, 2, 3 of that file); the Move 3 collapse of CLAUDE.md lines 131 + 132 (two bullets) into one pointer is consistent with the table's `2 → 1 = -1` arithmetic.
+- **No KDR drift, no layer-rule drift, no SEMVER surface change.** T11 is doc-only on `.claude/agents/`, `CLAUDE.md`, M21 README, CHANGELOG; no `ai_workflows/` paths touched, no public-API surface affected, no `nice_to_have.md` adoption.
+- **T10 dependency satisfied.** `_common/non_negotiables.md` and `_common/verification_discipline.md` both exist (`ls .claude/agents/_common/` confirms); T10 commit `2f73143` cited.
 
 ## Cross-cutting context
 
-- **M21 status:** Drafting. T10 is first task in Phase E (Slimming). M20 is closed (commit `8c6e8a6` per README line 3). Project memory `project_m12_autopilot_2026_04_27_checkpoint.md` flags M12 T06+T07 as the in-flight queue, but does not block M21 spec-hardening — M21 specs may be hardened in parallel with M12 implementation, and `/clean-tasks m21` is the right gate before `/auto-implement m21 t10`.
-- **L2 round-1 carry-over:** orchestrator's round-3 brief noted "L2 still pending" (frontmatter wording). This round's L1 finding is that same item, surfaced again because hostile re-read confirms it is real and the round-2 fix did not absorb it. Pushing to spec carry-over closes it cleanly.
-- **No HIGH/MEDIUM means /clean-tasks loop is exit-eligible** at LOW-ONLY. Orchestrator pushes L1 to spec, then exits. Spec is ready for `/clean-implement m21 t10` whenever queue selector reaches it.
+- Per project memory `project_autonomy_optimization_followups.md` and `project_m12_autopilot_2026_04_27_checkpoint.md`, M21 follows M20's autonomy-optimization shipment; M20 close-out shipped recently (commit `8c6e8a6` per `git log`). T11 is round 2 of the m21_clean autonomy run; T10 is shipped TERMINAL CLEAN.
+- Per memory `feedback_autonomous_mode_boundaries.md`, T11 work happens on `design_branch` under autonomous mode; `task-analyzer` does not commit. This run is read-mostly + write-only-to-`task_analysis.md`, conformant.
+- The three LOWs are all Builder-discretion clarifications, not blockers; orchestrator should push them to `## Carry-over from task analysis` per `/clean-tasks` LOW-ONLY exit protocol.
