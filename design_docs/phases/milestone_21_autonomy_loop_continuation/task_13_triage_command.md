@@ -1,6 +1,6 @@
 # Task 13 — `/triage` post-halt diagnosis surface
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Productivity / code + doc.
 **Grounding:** [milestone README](README.md) · [research brief §T13–T16 (SUPPORT + MODIFY)](../milestone_20_autonomy_loop_optimization/research_analysis.md) — anchor `### T13–T16 — New commands (/triage, /check, /ship, /sweep)` · [T12 spec](task_12_skills_extraction.md) (✅ Done — Skills extraction pattern locked at `_common/skills_pattern.md`) · [T26 spec](task_26_two_prompt_long_running.md) (✅ Done — long-running pattern). KDR drift checks apply per M21 scope note.
 
