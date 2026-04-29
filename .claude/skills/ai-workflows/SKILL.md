@@ -93,6 +93,13 @@ row. This is the single cost surface the MCP server exposes.
 Returns `status="cancelled"` if the row was pending, or
 `status="already_terminal"` if the run had already finished.
 
+- **Cascade fixture layout** (M12 T06) — when capturing fixtures from a
+  cascade-enabled run (`AIW_CAPTURE_EVALS=<dataset>` + cascade env-var
+  flipped on), authors land under `evals/<dataset>/<workflow>/<cascade_name>_primary/`
+  and auditors under `<cascade_name>_auditor/`. See `evals/README.md` for
+  the full convention (planner: `<cascade_name>=planner_explorer_audit`;
+  slice_refactor: `<cascade_name>=slice_worker_audit`).
+
 ### `run_audit_cascade(run_id_ref?, artefact_kind?, inline_artefact_ref?, tier_ceiling?)`
 
 Audit a completed run's artefact (or an inline dict you pass directly) via an `auditor-{sonnet,opus}` tier. Useful for:

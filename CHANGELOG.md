@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M12 Task 06: eval-harness fixture convention for cascade author/auditor node pairs (2026-04-29)
+
+Documents and locks the eval-fixture convention for cascade-enabled workflow runs, plus
+one golden test per opt-in workflow (planner + slice_refactor) exercising the convention
+end-to-end (cascade-enabled run → fixtures captured → fixtures loadable as `EvalCase`
+instances).
+
+**Files touched:**
+- `evals/README.md` — NEW: `## Layout reference` section (two-shape coexistence: seed M7 T05
+  vs capture M7 T02) + `## Cascade fixture convention (M12 T06)` section. Documents the
+  `<cascade_name>_primary` / `<cascade_name>_auditor` directory split, the per-workflow
+  cascade-name table (`planner_explorer_audit` / `slice_worker_audit`), the verdict-node
+  no-fixture rule, the `EvalRunner` replay carve-out (validator-pair mismatch with KDR-004),
+  and the `TokenUsage.role` (factory-time; persistent telemetry) vs `state['cascade_role']`
+  (debug-only) distinction with `audit_cascade.py:313, 349` references.
+- `.claude/skills/ai-workflows/SKILL.md` — one-bullet cross-reference added under §Primary
+  surface — MCP for the cascade fixture layout convention; names both opt-in workflows'
+  `<cascade_name>` literals.
+- `tests/evals/test_cascade_fixture_convention.py` — NEW: 4 hermetic tests covering
+  (1) primary+auditor fixture emission, (2) primary fixture provenance + `tracker.by_role`
+  "author" key, (3) auditor fixture provenance + "auditor" key, (4) independent `load_case`
+  loadability of both fixtures with expected `node_name`/`workflow_id`/`captured_from_run_id`.
+- `tests/workflows/test_planner_cascade_fixture_golden.py` — NEW: 1 golden hermetic test;
+  drives `planner_explorer_audit` cascade with `ExplorerReport` schema + stub adapters;
+  asserts fixtures at `planner/planner_explorer_audit_primary/` and `_auditor/`.
+- `tests/workflows/test_slice_refactor_cascade_fixture_golden.py` — NEW: 1 golden hermetic
+  test; drives `slice_worker_audit` cascade with `SliceResult` schema + stub adapters;
+  asserts fixtures at `slice_refactor/slice_worker_audit_primary/` and `_auditor/`.
+
+**KDR cited:** KDR-011 (audit cascade eval-fixture surface documented and tested).
+KDR-004 (constraint carve-out: cascade-fixture replay through `EvalRunner._resolve_node_scope`
+is known-broken — `<cascade_name>_validator` single-segment vs `<node>_validator` lookup
+mismatch — and forward-deferred; T06 scopes verification to `load_case` loading only).
+
+**Note:** documentation + golden tests only. No production code change — the convention
+is realised by T02 (`_primary`/`_auditor` node-name suffixes) and T04 (factory-time
+`role="author"` / `role="auditor"` binding on `tiered_node`) surfaces already shipped.
+
 ### Added — M12 Task 05: run_audit_cascade MCP tool + SKILL.md ad-hoc-audit section (2026-04-28)
 
 Adds a standalone `run_audit_cascade` MCP tool that audits an existing artefact via a
