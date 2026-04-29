@@ -1,6 +1,6 @@
 # Task 16 — `/sweep` ad-hoc reviewer Skill
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Productivity / code + doc.
 **Grounding:** [milestone README](README.md) · [research brief §T13–T16](../milestone_20_autonomy_loop_optimization/research_analysis.md) — anchor `### T13–T16 — New commands (/triage, /check, /ship, /sweep)` · [T13 spec](task_13_triage_command.md) (✅ Done — Phase F template precedent) · [T14 spec](task_14_check_command.md) (✅ Done — second Phase F Skill). KDR drift checks apply per M21 scope note.
 

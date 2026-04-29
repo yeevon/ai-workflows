@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M21 Task 16: /sweep ad-hoc reviewer Skill (2026-04-29)
+
+Files touched: `.claude/skills/sweep/SKILL.md` (new — sweep Skill, ≤5K tokens, four required ## anchors, allowed-tools: Bash), `.claude/skills/sweep/runbook.md` (new — T24-rubric-conformant; spawn-prompt templates per reviewer, precedence rule, two example reports), `tests/test_t16_sweep.py` (new — 6 test cases: frontmatter+char/token budgets, four anchors+helper-file ref, T24 rubric, T25 efficiency gate, T10 invariant, Live Skills count+CHANGELOG), `.claude/agents/_common/skills_pattern.md` (Live Skills line extended: added sweep (T16)), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_16_sweep_command.md` (Status → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T16 row → Done; G3 exit criterion amended with /sweep satisfaction parenthetical), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (SKILL.md exists; frontmatter name=sweep, description ≤200 chars, allowed-tools declared; body ≤5K tokens; four ## anchors Inputs/Procedure/Outputs/Return schema; smoke steps 1-3+5 pass), AC2 (runbook.md exists, T24 rubric summary/section-budget/code-block-len pass; smoke step 4), AC3 (T25 skills_efficiency --check all clean; smoke step 6), AC4 (T10 invariant 9/9 preserved; smoke step 7), AC5 (T24 invariant held on .claude/agents/; smoke step 8), AC6 (tests/test_t16_sweep.py passes; smoke step 9), AC7 (_common/skills_pattern.md Live Skills line extended with sweep (T16); single line; smoke step 11), AC8 (CHANGELOG entry present; smoke step 10), AC9a (T16 spec Status → Done), AC9b (M21 README T16 row → Done), AC9c (M21 README G3 prose extended with /sweep satisfaction parenthetical).
+
+Deviations: none.
+
 ### Added — M21 Task 14: /check on-disk vs pushed-state Skill (2026-04-29)
 
 Files touched: `.claude/skills/check/SKILL.md` (new — check Skill, ≤5K tokens, four required ## anchors, allowed-tools: Bash declared with rationale note per TA-LOW-02), `.claude/skills/check/runbook.md` (new — T24-rubric-conformant; classification matrix six states × next-action, git invocations with example outputs, PyPI version compare section), `tests/test_t14_check.py` (new — frontmatter validity, token budget, four anchors, runbook reference, T24 rubric, T25 efficiency gate, Live Skills count line, CHANGELOG entry), `.claude/agents/_common/skills_pattern.md` (Live Skills line extended: added check (T14)), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_14_check_command.md` (Status → Done; TA-LOW-01/02 ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T14 row → Done; G3 exit criterion amended with satisfaction parenthetical naming /check), `CHANGELOG.md` (this entry).
