@@ -1,8 +1,8 @@
 # M21 Autonomy Loop Continuation — Task Analysis
 
-**Round:** 11 (overall) / Round 3 (T25)
+**Round:** 14 (overall) / Round 3 (T13 — final per /clean-tasks 5-round-per-task limit)
 **Analyzed on:** 2026-04-29
-**Specs analyzed:** task_25 (primary, 📝 Planned) + cross-spec consistency check against task_10 / task_11 / task_12 / task_24 / task_26 (all ✅, locked)
+**Specs analyzed:** task_13 (primary, 📝 Planned) + cross-spec consistency check against task_10 / task_11 / task_12 / task_24 / task_25 / task_26 (all ✅, locked)
 **Analyst:** task-analyzer agent
 
 ## Summary
@@ -11,54 +11,40 @@
 | --- | --- |
 | 🔴 HIGH | 0 |
 | 🟡 MEDIUM | 0 |
-| 🟢 LOW | 3 |
-| Total | 3 |
+| 🟢 LOW | 1 |
+| Total | 1 |
 
 **Stop verdict:** LOW-ONLY
 
-Round-10 M1 fix landed cleanly. T25 §Step 2 line 58 now reads: "Required slash-command body sections (T25 introduces this canonical four-anchor shape for audit-style slash commands; existing sibling commands like `audit.md` / `auto-implement.md` / `clean-tasks.md` use free-form section shapes — future audit-style commands inherit T25's anchor set)". The false sibling-convention citation is gone; the four-anchor requirement, smoke step 9, and AC2 all preserved. Live re-verification confirms the framing is now accurate (clean-tasks.md uses free-form `## Phase 1 / Phase 2 / Phase 3 / Stop conditions / Reporting / Why...`; auto-implement.md uses `## Agent-return parser convention / Cache-breakpoint verification / ...`; audit.md has zero `##` anchors — none match Inputs/Procedure/Outputs/Return-schema, confirming T25 introduces the shape rather than inheriting it).
-
-The three remaining LOWs (L1/L2/L3) are the round-10 carry-overs that were not yet pushed to T25's spec `## Carry-over from task analysis` section (line 192 still reads `*None at draft time. Populated by /clean-tasks m21 runs.*`). Per /clean-tasks Phase 3, the orchestrator pushes these to spec carry-over once the analyzer reaches LOW-ONLY and exits the analyze+fix loop.
+Round 13 H1 fix verified live: the example `description:` string at spec line 37 now reads `Post-halt diagnosis for autopilot/auto-implement runs. Use after a HALT/BLOCKED/cycle-limit return when you need a structured "what failed / why / next move" report.` — measured **165 characters** (`printf '%s' '<value>' | wc -c` = 165). Well under the ≤ 200-char AC1 and smoke step 2 budget. AC1 / smoke step 2 will both pass at Builder time. No new HIGH / MEDIUM findings surface. The single LOW (L1) carries over from rounds 12+13 — the orchestrator notes it's "still pending pushdown" — included again here for visibility but unchanged.
 
 ## Findings
 
 ### 🟢 LOW
 
-#### L1 — Smoke step 8's `awk 'END { exit !(NR <= 200) }'` fix landed; carry-over text still pending pushdown
+#### L1 — `## When to use` / `## When NOT to use` anchors not in T25's mandated four (carry-over from rounds 12+13; still pending pushdown)
 
-**Task:** task_25_periodic_skill_audit.md
-**Issue:** Round-9 L1 recommended swapping smoke step 8 from `$(wc -l < ...)` to `awk 'END { exit !(NR <= 200) }'`. The Bash-safe rewrite landed (verified: line 147 `awk 'END { exit !(NR <= 200) }' scripts/audit/skills_efficiency.py && echo "skills_efficiency.py ≤ 200 lines"`). What did not land is the carry-over text — §Carry-over from task analysis (line 192) still reads `*None at draft time. Populated by /clean-tasks m21 runs.*`. Phase-3 pushdown is the standard path for this LOW.
-**Recommendation:** Append to T25 §Carry-over from task analysis: "Round 9 L1 — smoke step 8 swapped from `$(wc -l < ...)` to `awk 'END { exit !(NR <= 200) }'` per `_common/verification_discipline.md` Bash-safety rule (no command substitution / parameter expansion in smoke commands)."
-**Push to spec:** yes — orchestrator append to T25 carry-over section at /clean-tasks Phase 3.
+**Task:** task_13_triage_command.md
+**Location:** lines 46–55 of the SKILL.md body block (between frontmatter and `## Inputs`).
+**Issue:** T13's SKILL.md adds `## When to use` and `## When NOT to use` anchors before `## Inputs`. These are not forbidden — T25's smoke step 9 only greps for the four required anchors, not for absence of others — and they mirror dep-audit's shape. But the spec doesn't note T25-conformance explicitly, so the Builder may second-guess. Raised in round 12, tagged "pending pushdown" in round 13, still not appended to T13 §Carry-over from task analysis (line 229 still reads `*None at draft time. Populated by /clean-tasks m21 runs.*`).
+**Recommendation:** Push this finding's framing to T13's `## Carry-over from task analysis` section so the Builder gets the explicit "additional sections are permitted; T25 only enforces the four required anchors" affirmation without another analyzer round. Suggested append text:
 
-#### L2 — Operator-only heuristics' synthetic-fixture testing note still pending pushdown
+> *Round-12+13 task-analysis carry-over (LOW):* SKILL.md may add discretionary `##` anchors (e.g. `## When to use`, `## When NOT to use`) before `## Inputs`. T25's smoke step 9 enforces presence of the four required anchors (Inputs, Procedure, Outputs, Return schema) but does not forbid additional sections; the dep-audit Skill is the live precedent.
 
-**Task:** task_25_periodic_skill_audit.md
-**Issue:** Round-9 L2 noted that `tool-roundtrips` and `file-rereads` (operator-only heuristics, surfaced via `/audit-skills`) have no live target on disk; the Builder benefits from a note clarifying whether they need Python implementation + unit-test coverage or live solely in the slash-command procedure prose. Round-9 H2 fix structurally moved both rules to operator-only, which resolves the CI concern; the carry-over note about Python-vs-prose implementation has not been pushed.
-**Recommendation:** Append to T25 §Carry-over from task analysis: "Round 9 L2 — `tool-roundtrips` and `file-rereads` are operator-only heuristics surfaced via `/audit-skills`. If implemented in `scripts/audit/skills_efficiency.py` (not required), unit tests should drive the rule-fires-on-violation paths via synthetic fixtures (not against live `.claude/skills/`, which is heuristic-clean by Step 1b construction). If they live solely in slash-command procedure prose with no Python implementation, no unit-test coverage is needed."
-**Push to spec:** yes — orchestrator append to T25 carry-over section at /clean-tasks Phase 3.
-
-#### L3 — `screenshot-overuse` heuristic Anthropic-tool-name framing note still pending pushdown
-
-**Task:** task_25_periodic_skill_audit.md
-**Issue:** Round-9 L3 noted `screenshot-overuse` heuristic phrasing in the spec mentions `get_page_text` (an Anthropic Computer Use tool name) verbatim from the cited Nicholas Rhodes article. ai-workflows is a CLI/MCP project, not a Computer Use surface. The Builder may want to generalize the regex to local-context terms (`text-extraction|parse|extract|read.*text`) so the rule reads ai-workflows-native, or keep verbatim as a deliberate cite — both are acceptable.
-**Recommendation:** Append to T25 §Carry-over from task analysis: "Round 9 L3 — `screenshot-overuse` heuristic uses `get_page_text` (Anthropic Computer Use tool name) verbatim from the Nicholas Rhodes source. Builder may keep verbatim (deliberate research-brief cite) OR generalize the adjacency regex to local-context terms (e.g. `text-extraction|parse|extract|read.*text`) so the rule reads ai-workflows-native. Either choice is acceptable; document the chosen framing in the audit script's module docstring."
-**Push to spec:** yes — orchestrator append to T25 carry-over section at /clean-tasks Phase 3.
+**Push to spec:** yes — append to T13 §Carry-over from task analysis.
 
 ## What's structurally sound
 
-- **Round-10 M1 fix landed correctly.** §Step 2 line 58 now frames the four anchors (Inputs / Procedure / Outputs / Return schema) as a *new convention T25 introduces* rather than as one inherited from sibling slash commands. Live verification: `audit.md` has zero `##` anchors; `clean-tasks.md` has `## Agent-return parser convention / Project setup / Spawn-prompt scope discipline / Phase 1/2/3 / Stop conditions / Reporting / Why...`; `auto-implement.md` has `## Agent-return parser convention / Cache-breakpoint verification / Spawn-prompt scope discipline / Hard halt boundaries / Pre-flight / Project setup / Two-prompt long-running pattern / ...`. None match Inputs/Procedure/Outputs/Return-schema — the spec's "introduces" framing is now accurate. Smoke step 9 (line 150) correctly greps for the four anchors; AC2 (line 156) correctly enforces them. Clean resolution.
-- **Round-9 H1 fix (heuristic tightening + Step 1b)** still holds. §Step 1 line 37 specifies `missing-tool-decl` counts tool names inside fenced code blocks or at the start of bullets only. §Step 1b authorizes adding `allowed-tools:` frontmatter to both existing Skills (verified: `.claude/skills/ai-workflows/SKILL.md` and `.claude/skills/dep-audit/SKILL.md` both currently lack frontmatter — Step 1b's edits remain necessary for clean-tree precondition). Deliverables list items 3-4 cover both edits; AC2b + smoke step 2b verify them.
-- **Round-9 H2 fix (operator-only split)** still holds. CI-gated heuristics (`screenshot-overuse`, `missing-tool-decl`) vs operator-only heuristics (`tool-roundtrips`, `file-rereads`) remain cleanly separated; `--check` flag list narrowed to `screenshot-overuse | missing-tool-decl | all` (line 30, line 42, line 116-118 + AC1). Slash-command Step 2 owns the operator-only walks.
-- **Round-9 M1/M2/M3 fixes** all hold. Skill count "currently 2: ai-workflows and dep-audit" (line 169) verified against live tree. `/schedule` softening intact (line 170 — "future scheduling Skill (e.g. `/schedule`) can adopt"). Four-anchor enumeration intact at lines 60-63.
-- **Smoke + AC mechanics.** Smoke step 8 (line 147) Bash-safe (`awk 'END { exit !(NR <= 200) }'`, no command substitution). Smoke step 9 (line 150) verifies four `##` anchors. AC1 (CI-gated checks), AC2 (slash-command body shape), AC2b (frontmatter precondition) cleanly distinguish the three classes of verification.
-- **Cross-spec deferral convergence** verified clean: T24 TA-LOW-02, T12 §Out of scope, T26 §Out of scope all correctly absorb at T25 (lines 86, 178-180, 188-190).
-- **Status surface mechanics.** AC9 names "row 75" as the T25 row — re-verified live; line 75 of M21 README is the T25 row (`| 25 | Periodic skill / scheduled-task efficiency audit ...`). G5 amendment guidance correctly differentiates T25's audit-prompt half from T26's already-applied two-prompt half.
-- **Locked specs (T10/T11/T12/T24/T26)** all show ✅ — re-verified at this round. T10 reads `✅ Complete.` while the others read `✅ Done.`; cosmetic-only drift, T10 locked and out of scope.
-- **No KDR drift in T25.** Autonomy-infra only (`.claude/`, `scripts/audit/`, `.github/workflows/ci.yml`, two SKILL.md frontmatter edits). Layer rule, MCP-as-substrate (002), no Anthropic API (003), validator pairing (004), retry-via-RetryingEdge (006), FastMCP schema (008), SqliteSaver checkpoint (009), user-owned external workflow code (013) — all unaffected.
+- **Round-13 H1 (description-length compliance).** Verified live at spec line 37: the example `description:` value is 165 chars (`printf '%s' '<value>' | wc -c` = 165). AC1 (≤ 200 chars) and smoke step 2 (`awk -F': ' '/^description: /{ exit !(length(substr($0, 14)) <= 200) }'`) both pass. Builder pasting this verbatim produces a SKILL.md that satisfies its own rubric. The fix is mechanical, minimal, and preserves the trigger-led phrasing pattern (operative tokens: HALT, BLOCKED, cycle-limit, "what failed / why / next move").
+- **Round-12 H1 / M1 / M2 / M3 fixes.** All re-verified holding (smoke step 2 + 3 are pure-awk Bash-safe; line 93 cites absolute repo-relative `_common/agent_return_schema.md`; AC9(b) anchors by row content not line number; Step 3 lists 6 enumerated test cases mirroring T24/T25 patterns). No regressions introduced by round-13 edit.
+- **T12 / T24 / T25 pattern compliance.** SKILL.md body has all four required `##` anchors (Inputs / Procedure / Outputs / Return schema — lines 57, 69, 84, 91); kebab-case `name: triage`; `allowed-tools: Read, Bash, Grep` matches procedure invocations; helper file `runbook.md` referenced not inlined; body well under 5K tokens. T24 rubric self-check (smoke step 4) re-invokes `scripts/audit/md_discoverability.py` against `.claude/skills/triage/` for summary / section-budget / code-block-len.
+- **T10 + T24 invariants preserved.** Smoke step 7 confirms 9 agent files still reference `_common/non_negotiables.md`; smoke step 8 re-runs section-budget on `.claude/agents/`. No agent file added by T13, so both pass.
+- **No KDR drift.** Pure `.claude/skills/` + `.claude/agents/_common/` + `tests/` + `CHANGELOG.md` + README edits. Layer rule + 002 / 003 / 004 / 006 / 008 / 009 / 013 all unaffected. Per M21 scope note, T13 is in-bounds.
+- **Locked-spec cross-check (T10/T11/T12/T24/T25/T26).** All show ✅; re-verified at this round. No cross-spec scope contention with T13.
+- **Status-surface plan.** AC9 lists three surfaces flipping together at close: T13 spec `**Status:**`, M21 README task-pool T13 row, M21 README §G3 prose amended with satisfaction parenthetical. Anchored by row-content + section-content, not line numbers.
 
 ## Cross-cutting context
 
-- **Project memory unchanged since round 10.** M12 autopilot checkpoint and autonomy-optimization follow-ups still ground T25's purpose. CS300 pivot status remains non-blocking for M21.
-- **Loop trajectory:** Round 9 closed at 2 HIGH + 3 MEDIUM + 3 LOW = 8 findings. Round 10 closed at 0 HIGH + 1 MEDIUM + 3 LOW = 4 findings. Round 11 closes at 0 HIGH + 0 MEDIUM + 3 LOW = 3 findings → **LOW-ONLY**. Orchestrator pushes the three LOWs to T25 §Carry-over from task analysis at /clean-tasks Phase 3 and exits the analyze+fix loop.
-- **Loop limit:** Round 3 of 5 for T25 per /clean-tasks per-task limit. Reached LOW-ONLY with two rounds to spare.
+- **T13 round 3 = LOW-ONLY at the 5-round-per-task ceiling.** Per /clean-tasks orchestrator policy, this is the terminal analyzer round for T13. The single LOW is push-to-carry-over and does not block /clean-implement; the orchestrator should append the L1 framing to T13 §Carry-over from task analysis and exit the loop.
+- **Project memory unchanged since round 13.** Autonomy-optimization follow-ups still ground M21; CS300 pivot status non-blocking; T13 is the first Phase F task and the precedent for T14/T15/T16. Clean-shipped at this round is the right outcome.
+- **Loop trajectory:** T13 round 3 closes at 0 HIGH + 0 MEDIUM + 1 LOW (carry-over) → **LOW-ONLY**. Orchestrator pushes L1 to T13 §Carry-over from task analysis and exits the spec-cleaning loop. Ready for /clean-implement m21 t13.
