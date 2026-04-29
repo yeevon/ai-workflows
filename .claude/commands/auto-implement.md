@@ -405,6 +405,33 @@ Read `runs/<task>/meta.json` (written at project setup). Branch on `PARALLEL_ELI
    - Successfully merged: run `git worktree remove <worktree-path>` after Step 6 merge.
    In both cases, do not leave worktrees on disk after the cycle completes.
 
+#### Post-parallel merge (T19)
+
+After all slice Builders return, overlap check passes, and Step 6–7 (worktree merge +
+cleanup) completes, the combined diff is now in the main working tree. Apply each
+worktree's changes to the main working tree in slice order using:
+
+```bash
+git diff <worktree-path> | git apply --index
+# or: git cherry-pick <worktree-HEAD-commit>
+```
+
+On apply failure (merge conflict): **HARD HALT**:
+```
+🚧 HARD HALT — merge conflict in post-parallel merge; resolve manually.
+```
+
+Once all worktrees are applied:
+
+- Proceed to **Step 2 (Auditor spawn)** exactly as in the serial path. The Auditor sees
+  the full combined diff — not per-slice diffs.
+- After FUNCTIONALLY CLEAN, the **terminal gate** (unified sr-dev + sr-sdet +
+  security-reviewer) runs as today — single pass, not once-per-slice.
+- **Status-surface flips happen once** after the combined-diff Auditor pass, not
+  once-per-slice. The four surfaces (per-task spec `**Status:**` line, milestone README
+  task table row, `tasks/README.md` row if present, milestone README "Done when"
+  checkboxes) all flip together in the commit ceremony — same discipline as serial builds.
+
 8. **Telemetry (T22):** before spawning each parallel slice, run a `spawn` record for each:
    ```bash
    python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
@@ -796,6 +823,18 @@ Files touched:
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ```
+
+**If the task was parallel-built** (T18 path — `PARALLEL_ELIGIBLE=true` in meta.json),
+append a `Parallel-build:` line in the commit message body immediately after the
+`Architect:` line:
+
+```
+Parallel-build: <N> slices dispatched (slice-A: <N> files; slice-B: <N> files; ...)
+```
+
+The commit is still a **single commit** — no per-slice commits. The `Files touched:`
+list covers all slices combined. Status-surface flips happen once (after the
+combined-diff Auditor pass), not once-per-slice.
 
 ### Step C4 — Push
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M21 Task 19: Orchestrator-owned close-out (post-parallel-Builder merge) (2026-04-29)
+
+Files touched: `.claude/commands/auto-implement.md` (§Functional loop Step 1 extended with post-parallel merge block (T19): apply each worktree's diff in slice order, HARD HALT on conflict, Auditor sees combined diff, terminal gate runs once, status-surface flips once; §Commit ceremony Step C3 extended with Parallel-build: annotation line for parallel-built tasks — single commit, no per-slice commits), `tests/test_t19_closeout.py` (new — 18 test assertions across 4 classes: TC-1 post-parallel merge applies all worktree diffs + TC-3 status-surface single-flip folded in (TA-LOW-03), TC-2 Parallel-build: commit annotation, TC-4 HARD HALT on merge conflict), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_19_issue.md` (new — TA-LOW-03 resolution documented), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_19_orchestrator_closeout.md` (Status → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T19 row → Done), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (auto-implement.md has post-parallel merge step (T19 §Post-parallel merge block after Step 7) and commit ceremony annotation (§C3 Parallel-build: line); smoke 1+2 pass), AC2 (tests/test_t19_closeout.py passes — 18 assertions, 4 classes: TC-1+TC-3 merged per TA-LOW-03 decision, TC-2 commit annotation, TC-4 HARD HALT; smoke 3 passes), AC3 (CI gates green; smoke 4 passes), AC4 (CHANGELOG updated; smoke 5 passes), AC5 (status surfaces flipped: T19 spec → Done, M21 README T19 row → Done). TA-LOW-03 resolved: TC-3 folded into TC-1 coverage (documented in issue file).
+
+Deviations: none.
+
 ### Added — M21 Task 18: Worktree-coordinated parallel Builder spawn (2026-04-29)
 
 Files touched: `.claude/commands/auto-implement.md` (§Functional loop Step 1 extended with parallel-Builder dispatch branch: PARALLEL_ELIGIBLE=true path with isolation: "worktree", concurrency cap ≤4 slices, overlap detection via git diff --name-only cross-check, worktree cleanup for empty-diff case (TA-LOW-02), telemetry builder-slice-<N> naming; PARALLEL_ELIGIBLE=false path unchanged), `tests/test_t18_parallel_dispatch.py` (new — 6 test classes covering TC-1 through TC-6), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (G4 prose updated: T18 parallel-Builder dispatch landed; T18 row → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_18_parallel_builder_spawn.md` (Status → Done), `CHANGELOG.md` (this entry).

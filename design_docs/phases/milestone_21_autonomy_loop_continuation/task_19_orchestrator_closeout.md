@@ -1,6 +1,6 @@
 # Task 19 — Orchestrator-owned close-out (post-parallel-Builder merge)
 
-**Status:** 📝 Stretch.
+**Status:** ✅ Done.
 **Kind:** Parallelism / code.
 **Grounding:** [milestone README](README.md) · [T17 spec](task_17_spec_format_extension.md) · [T18 spec](task_18_parallel_builder_spawn.md) (prerequisite) · [`auto-implement.md`](../../../.claude/commands/auto-implement.md) §Commit ceremony · [research brief §T19](../milestone_20_autonomy_loop_optimization/research_analysis.md).
 
@@ -121,6 +121,6 @@ If T18 was deferred to M22, T19 also defers. Same `nice_to_have.md` entry absorb
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-03 — Test 3 (status-surface single-flip) has no dedicated AC** (severity: LOW, source: task_analysis.md round 20)
+- [x] **TA-LOW-03 — Test 3 (status-surface single-flip) has no dedicated AC** (severity: LOW, source: task_analysis.md round 20)
       Test 3 asserts "Status surfaces flip once (not N times)" — AC-1 covers post-parallel merge and commit annotation, but the single-flip discipline is not explicitly named as an AC.
       **Recommendation:** Builder picks: add AC-2-bis "Status-surface single-flip discipline documented in §Step 3" OR fold test 3 assertion into AC-1 coverage. Document the choice in the issue file.
