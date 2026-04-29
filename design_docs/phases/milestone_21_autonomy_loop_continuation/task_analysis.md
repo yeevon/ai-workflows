@@ -1,8 +1,8 @@
-# M21 (autonomy_loop_continuation) — Task Analysis
+# M21 Autonomy Loop Continuation — Task Analysis
 
-**Round:** 5 (overall; T12 round 3)
+**Round:** 8 (overall) / Round 3 (T26)
 **Analyzed on:** 2026-04-29
-**Specs analyzed:** task_10_common_rules_extraction.md (locked ✅), task_11_claude_md_slim.md (locked ✅), task_24_md_discoverability.md (locked ✅), task_12_skills_extraction.md (primary)
+**Specs analyzed:** task_10 (locked), task_11 (locked), task_12 (locked), task_24 (locked), task_26 (primary target)
 **Analyst:** task-analyzer agent
 
 ## Summary
@@ -11,63 +11,61 @@
 | --- | --- |
 | 🔴 HIGH | 0 |
 | 🟡 MEDIUM | 0 |
-| 🟢 LOW | 2 |
-| Total | 2 |
+| 🟢 LOW | 3 |
+| Total | 3 |
 
 **Stop verdict:** LOW-ONLY
 
-Round 4's H1 (SKILL.md template + runbook.md template fail `check_summary`), M1 (Step 5 bullet-shape collides with `##`-anchors claim), M2 (AC4 missing smoke step 8 citation), and L1 (dead `feedback_pyproject_uv_lock_dep_gate.md` pointer pre-emptively removed) all landed correctly and are verified live against the audit script. The two LOWs surfaced this round are both spec-text fragility — neither blocks /clean-implement; both push to spec carry-over.
-
-## Round-4 fix verification
-
-- **H1 (SKILL.md template summary 3 lines + Step 3 runbook.md summary instruction)** ✅ — SKILL.md template at spec lines 51–53 now has three distinct physical prose lines. Step 3 (lines 95–101) gives an explicit 3-line summary instruction with suggested wording. Verified live: wrote both templates to a temp dir, ran `uv run python scripts/audit/md_discoverability.py --check summary --target /tmp/aiw_t12_verify/dep-audit/` → `OK: summary — all 2 file(s) pass`. Section-count check also passes (`OK: section-count — all 2 file(s) pass`). The audit-script gate at smoke step 4 is now reachable.
-- **M1 (Step 5 sections re-shaped to `##` anchors)** ✅ — Lead-in at line 134 reads `Sections (each ≤ 500 tokens, ##  anchors per T24 rule 2):`. Bullets at 136–138 describe each section's heading via inline-code-fenced `## When to extract` / `## The 4-rule Skill structure` / `## How to validate`. Builder reading Step 5 with the lead-in will write the file with three `##` headings — section-count `--min 2` will pass.
-- **M2 (AC4 cites smoke step 6 + step 8)** ✅ — line 207 reads "Smoke step 6 confirms file presence + magic-phrase grep; smoke step 8 confirms T24-rubric conformance via the `_common/` walk (the audit script's `_get_md_files` walks `_common/`, so `skills_pattern.md` is checked transitively)." The gate-set is now explicit; Builder cannot mis-model AC4 as gated only by step 6.
-- **L1 (dead `feedback_pyproject_uv_lock_dep_gate.md` pointer)** ✅ — `grep -n 'feedback_pyproject_uv_lock_dep_gate' task_12_skills_extraction.md` → no matches. Round-3 TA-LOW-01 absorbed; carry-over slot freed (line 243 records the absorption note).
+Round-7 H1 + M1 + M2 fixes all verified applied and structurally correct. No new HIGH or MEDIUM findings surface in round 8. The three LOWs are the same ones carried from round 7 (L1 / L2 / L3) — they remain pending pushdown into the spec's "Carry-over from task analysis" section via the orchestrator's LOW-ONLY exit step. Per /clean-tasks loop semantics, LOW-ONLY exits the loop; the orchestrator pushes LOW carry-over before handoff.
 
 ## Findings
 
 ### 🟢 LOW
 
-#### L1 — Spec line 218 also hard-codes `line 269`; TA-LOW-01 carry-over scope is too narrow
+#### L1 — Pattern section ~580 tokens (carried unchanged from round 7)
 
-**Task:** task_12_skills_extraction.md
-**Issue:** TA-LOW-01 (lines 239–241) recommends replacing `line 269` and `line 145` in the §Grounding line (spec line 5) with anchor strings. But spec line 218 (Out of scope, "Validating the extraction by omission") also reads "Research-brief §T12 line 269 suggests testing the Skill by omitting it…". The same line-number drift hazard applies. Either both references should be migrated, or TA-LOW-01 should explicitly note the second occurrence so the Builder doesn't migrate one and miss the other.
-**Recommendation:** Broaden TA-LOW-01's recommendation to cover both spec line 5 and spec line 218. Suggested edit to lines 240–241:
-```
-Spec §Grounding (line 5) AND §Out of scope "Validating the extraction by omission" (line 218) both hard-code `line 269` for the research brief. Verified accurate today, but the line numbers will drift with future re-flow.
-**Recommendation:** Replace each occurrence of `line 269` → `(matching ### T12 — Skills extraction (per-agent capabilities)`; replace `line 145` (line 5 only) → `(matching T12 (Skills extraction) aligns directly with Anthropic's Agent Skills pattern)`. Anchor strings survive re-flow.
-```
-**Push to spec:** yes — broaden TA-LOW-01 in the carry-over section so the Builder migrates both at implement time.
+**Task:** task_26_two_prompt_long_running.md
+**Issue:** T24 rubric is ≤500 tokens per section. Spec's `## Pattern (locked at T26)` section (lines 13–49) is ~434 words ≈ ~580 tokens. The spec itself isn't enforced by `md_discoverability.py`, but a Builder transposing this section verbatim into `agent_docs/long_running_pattern.md` as a single H2 would fail T24 rubric at smoke step 2.
+**Recommendation:** Builder must promote each H3 (Trigger / File shape / Builder cycle-N spawn / Auditor writes progress.md / Initializer step) to a top-level H2 in `agent_docs/long_running_pattern.md`. The spec's "Sections" list at lines 56–62 already names these as the doc's H2s — Builder just has to follow it transitively.
+**Push to spec:** yes — append to T26 carry-over: "When transposing the spec's '## Pattern (locked at T26)' content into `agent_docs/long_running_pattern.md`, promote each H3 (Trigger / File shape / Builder cycle-N spawn / Auditor writes progress.md / Initializer step / Reference Builder loop) to H2 so each section stays ≤500 tokens per T24 rubric."
 
-#### L2 — Step 5 doesn't explicitly mandate the literal phrase "Skill-extraction pattern" in `_common/skills_pattern.md` body
+#### L2 — AC 8(b) `old_string` uses backslash-escaped backticks (carried from round 7)
 
-**Task:** task_12_skills_extraction.md
-**Location:** §Step 5 (lines 128–140) and smoke step 6 (lines 178–181).
-**Issue:** Smoke step 6 asserts `grep -qF "Skill-extraction pattern" .claude/agents/_common/skills_pattern.md` — a literal case-sensitive substring match. Step 5's body content (sections "When to extract", "The 4-rule Skill structure", "How to validate") does not name "Skill-extraction pattern" verbatim; the phrase appears only in the file's *purpose description* (line 130: "carrying the Skill-extraction pattern documentation"), which is meta-spec, not body content. A Builder writing the file freehand could use synonyms ("extraction recipe", "Skill extraction guidance", "extraction pattern") and pass T24 rubric checks but fail smoke step 6. Reasonable Builder behavior would echo the spec's phrasing, so the risk is low; nonetheless the spec text leaves a gap that a defensive instruction would close.
-**Recommendation:** Add a one-liner to Step 5 body — after line 130, insert: `Include the literal phrase **Skill-extraction pattern** in the file body (intro paragraph or first section) so smoke step 6's grep is satisfied unambiguously.` Two-line edit, no scope drift, hardens the smoke gate.
-**Push to spec:** yes — append to the Carry-over from task analysis section as TA-LOW-02 with the recommendation above.
+**Task:** task_26_two_prompt_long_running.md
+**Location:** AC 8(b), line 146
+**Issue:** AC 8(b) gives the README row 76 fix as a literal `replace X with Y`, but X and Y are written with backslash-escaped backticks (`\``). The README's actual text (line 76) has unescaped backticks. If a Builder copies AC 8(b)'s old_string verbatim into an Edit call, the Edit fails. Builder will hand-correct on first attempt but it costs a round-trip.
+**Recommendation:** Soften AC 8(b) to either (a) name the README line and the desired post-edit content, leaving the exact Edit string-shape to the Builder, or (b) replace `\`` with `` ` `` (unescaped backticks) so the AC 8(b) old_string is copy-paste-able.
+**Push to spec:** yes — append to T26 carry-over: "AC 8(b)'s old_string/new_string fragments are written with backslash-escaped backticks; in `Edit` tool calls use unescaped backticks (the README's actual text has unescaped backticks). Trivial Builder hand-correction."
+
+#### L3 — Builder return-text schema reminder defensive note (carried from round 7)
+
+**Task:** task_26_two_prompt_long_running.md
+**Location:** Step 3 line 74
+**Issue:** Round-7 H1 fix correctly placed the schema-purity reminder in `builder.md` §Hard rules. The bullet text is correct ("3-line return-text schema is unchanged; `progress.md` is owned by the Auditor"). Project memory `feedback_builder_schema_non_conformance.md` shows recurring schema violations under multi-cycle pressure; the reminder is necessary defensive insurance. No change required to the spec — this LOW is a forward-tracking note that the Builder must preserve the schema-purity sentence verbatim when wiring §Hard rules, not soften it.
+**Recommendation:** Builder copies the exact bullet text from spec line 74 into `builder.md` §Hard rules. Do not paraphrase.
+**Push to spec:** yes — append to T26 carry-over: "When wiring the `builder.md` §Hard rules edit (Step 3 second bullet), copy the exact spec text — the schema-purity sentence ('3-line return-text schema is unchanged; `progress.md` is owned by the Auditor (Phase 5b extension), not the Builder') is the explicit anchor against the recurring schema-non-conformance pattern. Do not paraphrase."
 
 ## What's structurally sound
 
-- **All round-4 fixes verified against the live audit script** — temp-dir reproduction with the spec's exact SKILL.md and runbook.md templates passes both `check_summary` and `check_section_count` gates. The H1 / M2 fixes are not just spec-text edits; they cause the gates to be actually reachable.
-- **Description length holds at 182 chars** (line 46) — under the ≤200 cap; smoke step 2's `${#desc} -le 200` will pass.
-- **Step 4 surgical-edit list precise.** Confirmed `## Load-bearing KDRs (drift-check anchors)` exists at `dependency-auditor.md:102`, so "before the `## Load-bearing KDRs` table" placement instruction (line 115) hits a real anchor.
-- **AC4 gate-set explicit.** Line 207 cites both step 6 (presence + grep) and step 8 (transitive `_common/` rubric walk). Builder cannot ship `skills_pattern.md` with structurally non-conformant shape thinking step 6 alone closes AC4.
-- **Sibling-task statuses aligned.** T10 (✅ Complete), T11 (✅ Done), T24 (✅ Done) — all locked; no cross-spec drift candidates.
-- **README row 72 alignment** — verified that row 72 of M21 README is the T12 row with status `📝 Candidate`; AC8(b) transition path is well-formed.
-- **G6 framing internally consistent.** Deliverable bullet 6 (line 149) and AC8(c) (line 211) both forbid amending G3 and both name `dep-audit` as the satisfaction parenthetical. M21 README §Exit criteria currently lists G1–G5; G6 is a clean addition.
-- **KDR drift checks pass.** T12 is autonomy-infra (`.claude/skills/`, `.claude/agents/`); layer rule + KDR-002/003/004/006/008/009/013 unaffected.
-- **`nice_to_have.md` slot drift clean.** Highest current section is §24; T12 claims no slot.
-- **CHANGELOG anchor regex unchanged from round 4** (`^### (Added|Changed) — M21 Task 12:`) — locked to T24 round-2 convention.
-- **Bash safety in smoke** — `${#desc}` length-check is the one harness-eligible exception (necessary for the gate to be meaningful); no `$(...)` substitutions in loops, no simple-expansion-in-loops.
-- **Pre-emptive L1 absorption** — round-3 TA-LOW-01 (dead memory-file pointer) was removed from the SKILL.md template at round-4 close; carry-over checkbox correctly deleted; absorption note left at line 243 for audit trail.
+- **Round-7 H1 fix verified applied:** Step 3 (lines 68–76) split into two surgical edits — `auto-implement.md` line ~126 (cycle-input override on existing §`### Builder spawn — read-only-latest-summary rule`) + `builder.md` §Hard rules (line 37, schema-purity bullet). Both edit targets exist live: `auto-implement.md:126` (`### Builder spawn — read-only-latest-summary rule`), `builder.md:37` (`## Hard rules`). The broken `§Builder cycle inputs` reference from round 7 is gone.
+- **Round-7 M1 fix verified applied:** Deliverables list (lines 88–94) now explicitly includes the auditor.md Phase 5b edit (line 91) and the M21 README row 76 description amend (line 92). Both Step 3b and AC 8(b) are now Deliverables-backed.
+- **Round-7 M2 fix verified applied:** Smoke step 4 (lines 115–119) uses semantic phrase patterns (`grep -qE`) — `T26.*long.running|plan\.md.*progress\.md` for builder.md, `progress\.md.*Phase 5b|Phase 5b.*progress\.md|append.*progress\.md` for auditor.md, `T26.*long.running.*trigger|plan\.md.*progress\.md` for auto-implement.md. Wrong-section drops are no longer pass-through.
+- **T10 invariant (9 agents reference `_common/non_negotiables.md`)** — re-verified live: 9/9. Held.
+- **T24 invariant (`md_discoverability.py` exists and supports all four `--check` flags)** — verified at `scripts/audit/md_discoverability.py:115-119, 135` (`summary`, `section-budget`, `code-block-len`, `section-count`).
+- **`agent_docs/` does not exist on disk yet** — verified absent; T26 correctly claims this is the directory it creates.
+- **Auditor Phase 5b anchor exists at `auditor.md:98`** — Step 3b's "extend Phase 5b" instruction has a real target.
+- **`auto-implement.md` `## Project setup` exists at line 238** — Step 2's "immediately after `## Project setup`" insert point is concrete.
+- **M21 README row 76** — confirmed live at line 76 with the exact `iter_<N>_plan.md` / `iter_<N>_progress.md` phrasing AC 8(b) targets.
+- **T26 still KDR-clean** against the seven load-bearing KDRs: autonomy-infra-only (no `ai_workflows/` runtime touch), no Anthropic SDK, no MCP schema change, no checkpoint-write change, no validator pairing, no retry-loop change, no external-workflow code change. Layer rule N/A.
+- **Sibling specs (T10/T11/T12/T24)** — all ✅ Done. No drift detected after re-read in round 8.
+- **`_common/non_negotiables.md` Rule 1 commit-discipline** — verified at line 8; the round-7 fix's reference pattern (Step 3 line 76: "mirrors the `_common/non_negotiables.md` Rule 1 commit-discipline reminder pattern") is anchored on a real rule.
 
 ## Cross-cutting context
 
-- **M21 status:** active; T10/T11/T24 shipped (commits `2f73143`, `012a9d9`, `ca4397d`); T12 is round 3 of /clean-tasks, round 5 overall. Per the suggested phasing in M21 README (E: T10 → T11 → T24 → T12 → T26 → T25), T12 is the next slimming task.
-- **Round-limit reached.** Round 5 is the cycle limit per /clean-tasks procedure. LOW-ONLY verdict means orchestrator pushes both LOWs to T12's carry-over and exits the loop cleanly — no user-arbitration needed.
-- **CS300-pivot status** unchanged from round 4 — post-0.3.1 live, no return-trigger fired (per `project_m13_shipped_cs300_next.md`); autonomy-infra continues as background priority.
-- **No M20 forward-deferrals carried into M21.** README §Carry-over remains empty.
-- **Locked autonomy boundaries hold.** Per `feedback_autonomous_mode_boundaries.md`, only the orchestrator commits/pushes; T12 deliverables don't touch any release surface (no `pyproject.toml` / `uv.lock` change, no version bump, no PyPI publish path). Dep-audit gate not triggered by T12 itself.
-- **No HARD HALT triggers in this analysis.** Both round-5 findings are LOW spec-text fragility (line-number drift, magic-phrase explicitness). Neither blocks /clean-implement; both push to T12 carry-over for the Builder to absorb at implement time.
+- **Project memory (`project_m12_autopilot_2026_04_27_checkpoint.md`):** M12 autopilot has demonstrated multi-cycle Builder spawns (T01–T08, last commit `8c664f6`). T26's pattern is meta-infra for those flows; T17/T18 (parallel-builders) are the named downstream consumers.
+- **Project memory (`feedback_builder_schema_non_conformance.md`):** drives L3. Builder schema violations recur as LOW; defensive spec language is cheap insurance.
+- **Sibling specs (T10/T11/T12/T24):** all ✅ Done. No drift detected.
+- **CS300 pivot status (memory `project_m13_shipped_cs300_next.md`):** M21 is autonomy-infra; CS300 pivot status does not gate T26.
+- **Status:** M21 is the active autonomy-infra milestone; T26 is the last Phase E pattern wiring task before T25; no cross-milestone block.
+- **Round trajectory:** Round 6 had 1 HIGH + 3 MEDIUM (4 actionable). Round 7 had 1 HIGH + 2 MEDIUM (3 actionable). Round 8 has 0 HIGH + 0 MEDIUM (0 actionable, 3 carry-over LOWs). Convergence pattern: each round closed all prior actionable findings without introducing new ones. Spec is ready to exit /clean-tasks; LOW carry-over goes into the spec's "Carry-over from task analysis" section before /clean-implement consumes it.
+- **Loop limit:** This is round 5 of 5 per /clean-tasks per-task limit. LOW-ONLY verdict exits the loop cleanly without hitting the halt condition.
