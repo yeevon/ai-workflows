@@ -1,6 +1,6 @@
 # Task 18 — Worktree-coordinated parallel Builder spawn
 
-**Status:** 📝 Stretch.
+**Status:** ✅ Done.
 **Kind:** Parallelism / code.
 **Grounding:** [milestone README](README.md) · [T17 spec](task_17_spec_format_extension.md) (prerequisite — per-slice scope format must exist) · [`auto-implement.md`](../../../.claude/commands/auto-implement.md) §Functional loop · Claude Code `isolation: worktree` frontmatter · [research brief §T17-T18](../milestone_20_autonomy_loop_optimization/research_analysis.md). KDR drift checks apply per M21 scope note.
 

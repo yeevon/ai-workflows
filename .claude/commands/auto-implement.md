@@ -358,6 +358,66 @@ at cycle 1, re-evaluate it now: if N >= 3 and `runs/<task>/plan.md` does not yet
 run the initializer step inline before spawning the Builder (write `plan.md` from the spec
 and seed `progress.md` as described in the §Two-prompt long-running pattern (T26) section above).
 
+#### Parallel-Builder dispatch path (T18)
+
+Read `runs/<task>/meta.json` (written at project setup). Branch on `PARALLEL_ELIGIBLE`:
+
+**If `PARALLEL_ELIGIBLE=true`:**
+
+1. Read the task spec's `## Slice scope` table to enumerate slices (slice names + file lists).
+2. **Concurrency cap — ≤4 slices per cycle.** If the spec has more than 4 slices, only the
+   first 4 run in parallel this cycle; slices 5+ run in the next cycle.
+3. For each slice (up to 4), spawn an isolated Builder Agent via `Task` with:
+   - `isolation: "worktree"` — each Builder gets its own git worktree copy.
+   - Same pre-load inputs as the serial Builder spawn rule (spec path, issue path,
+     project context brief, latest cycle summary if N ≥ 2).
+   - Extra constraint in prompt: `"Work ONLY on the files listed in your slice scope:
+     <slice-N files>. Do not touch files outside this list."`
+   - Telemetry: pass `--agent builder-slice-<N>` (1-indexed) so per-slice cost is
+     tracked separately.
+4. Run all slice spawns **in a single orchestrator turn** (parallel Task calls). Wait for
+   all slices to complete. Collect all Builder reports.
+5. **Overlap detection** — after all parallel Builders return, cross-check changed files:
+
+   Cross-check the files-touched lists from each Builder's report. For a git-level
+   check, use `git -C <worktree-path> diff --name-only HEAD` per worktree — not
+   `git diff --name-only` in the main tree (main tree has no pending changes yet
+   when worktrees are isolated).
+
+   If any file appears in multiple slices' Builder reports, surface:
+   ```
+   🚧 BLOCKED: parallel-Builder overlap detected — <file> modified by slice-A and slice-B.
+   Review slice scope in spec ## Slice scope section.
+   ```
+   Do not proceed to the Auditor spawn until the overlap is manually resolved.
+
+6. **Worktree merge** — apply each worktree's changes into the main working tree. The Agent
+   tool with `isolation: worktree` returns the worktree path in its result when changes
+   were made; the orchestrator applies them via cherry-pick or merge.
+   After applying the worktree's changes, run:
+   ```bash
+   git worktree remove <worktree-path>
+   ```
+
+7. **Worktree cleanup** — covers ALL worktrees (both empty-diff and merged):
+   Worktree cleanup covers two cases:
+   - Empty-diff (no changes): run `git worktree remove <worktree-path>` immediately.
+   - Successfully merged: run `git worktree remove <worktree-path>` after Step 6 merge.
+   In both cases, do not leave worktrees on disk after the cycle completes.
+
+8. **Telemetry (T22):** before spawning each parallel slice, run a `spawn` record for each:
+   ```bash
+   python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+     --agent builder-slice-1 --model <model-slug> --effort <effort>
+   python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+     --agent builder-slice-2 --model <model-slug> --effort <effort>
+   # ...repeat for each slice up to 4
+   ```
+   After all Tasks return, run a `complete` record for each using their respective verdicts.
+   Records land at `runs/<task>/cycle_<N>/builder-slice-<N>.usage.json`.
+
+**If `PARALLEL_ELIGIBLE=false`** (no `## Slice scope` section — serial path, unchanged):
+
 Spawn the `builder` subagent via `Task` with the inputs prescribed by the
 "Builder spawn — read-only-latest-summary rule" section above (cycle 1: include
 parent milestone README path; cycle N ≥ 2: replace it with the latest cycle
