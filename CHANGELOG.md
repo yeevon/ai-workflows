@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M21 Task 10: Common-rules extraction (.claude/agents/_common/non_negotiables.md + verification_discipline.md; 9 agent prompts reference shared blocks) (2026-04-29)
+
+Files touched: `.claude/agents/_common/non_negotiables.md` (new — autonomy-boundary rules 1/2/3, ≤500 token proxy), `.claude/agents/_common/verification_discipline.md` (new — 4-section verification rules + Bash-safety rules, ≤400 token proxy), `.claude/agents/architect.md` (reference added, boundary text replaced, inline verification-discipline removed), `.claude/agents/auditor.md` (same), `.claude/agents/builder.md` (same), `.claude/agents/dependency-auditor.md` (same), `.claude/agents/roadmap-selector.md` (same), `.claude/agents/security-reviewer.md` (same), `.claude/agents/sr-dev.md` (same), `.claude/agents/sr-sdet.md` (same), `.claude/agents/task-analyzer.md` (same).
+
+ACs satisfied: AC1 (non_negotiables.md exists, ≤500 token proxy), AC2 (verification_discipline.md exists, 4 sections, ≤400 token proxy), AC3 (all 9 agent prompts reference both shared files), AC4 (no agent prompt re-states autonomy-boundary text), AC5 (CHANGELOG updated), AC6 (status surfaces flipped), TA-LOW-01 (reference lines placed in prompt body immediately after YAML `---`).
+
+Deviations: none.
+
 ## [M20 Autonomy Loop Optimization] - 2026-04-28
 
 ### Added — M20 Task ZZ: Milestone close-out cycle 2 — sr-dev FIX-THEN-SHIP applied (roadmap.md M20 narrative corrected; section header updated to M2–M20; T01/T02/T03 commit SHAs filled in CHANGELOG) (2026-04-28)

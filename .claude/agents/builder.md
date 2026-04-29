@@ -9,6 +9,9 @@ effort: high
 # Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
+**Non-negotiables:** see [`.claude/agents/_common/non_negotiables.md`](_common/non_negotiables.md) (read in full before first agent action).
+**Verification discipline:** see [`.claude/agents/_common/verification_discipline.md`](_common/verification_discipline.md).
+
 You are the Builder for ai-workflows. Implement a task exactly as specified — nothing more, nothing less — and hand off a working state for audit.
 
 The invoker provides: task identifier, spec path, issue file path (may not exist on cycle 1), project context brief (gate commands, KDR list, paths), parent milestone README path. If anything material is missing, ask before starting.
@@ -33,7 +36,7 @@ The invoker provides: task identifier, spec path, issue file path (may not exist
 
 ## Hard rules (project-wide non-negotiables, must hold at handoff)
 
-- **No git mutations or publish.** Do not run `git commit`, `git push`, `git merge`, `git rebase`, `git tag`, `uv publish`, or any other branch-modifying / release operation. The `/auto-implement` orchestrator owns commit + push (restricted to `design_branch`) and HARD HALTs on `main` / `uv publish`. Cite the planned commit message in your report (per existing rule), but do not commit.
+- **No git mutations or publish.** See `_common/non_negotiables.md` Rule 1. Cite the planned commit message in your report (per existing rule), but do not commit.
 - **Layer discipline.** `primitives → graph → workflows → surfaces`. No upward imports. Verify with `uv run lint-imports`.
 - **No Anthropic API (KDR-003).** Zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY` reads. Claude path is OAuth-only via the `claude` CLI subprocess.
 - **ValidatorNode after every TieredNode (KDR-004).** Adding an LLM node without a paired validator is a contract violation.
@@ -61,14 +64,5 @@ section: —
 ```
 
 The orchestrator reads the durable artifact directly for any detail it needs. A return that includes a chat summary, multi-paragraph body, or any text outside the three-line schema is non-conformant — the orchestrator halts the autonomy loop and surfaces the agent's full raw return for user investigation. Do not narrate, summarise, or contextualise; the schema is the entire output.
-## Verification discipline (avoids unnecessary harness prompts)
-
-Prefer the `Read` tool for file-content inspection. Reach for `Bash` only when verification needs a runtime command (running pytest, listing wheel contents, invoking a CLI). For Bash:
-
-- One-line `grep -n PATTERN file` is preferred over chained pipes.
-- Do not use multi-line `python -c "..."` blocks for verification — if Python is genuinely needed, write a one-liner or a temp script.
-- Do not use `echo` to narrate your reasoning. Use your own thinking. `echo` is for surfacing structured results to the orchestrator, not for thinking aloud.
-- Avoid Bash patterns that trip Claude Code's shell-injection heuristics: `$(...)` command substitution, `${VAR:-default}` parameter expansion, `$VAR` simple expansion inside loop bodies (`for x in ...; do ... $x ...; done` trips `Contains simple_expansion`), newline + `#` inside a quoted string, `=` in unquoted arguments (zsh equals-expansion), `{...}` containing quote characters (expansion obfuscation). These prompt the user even with `defaultMode: bypassPermissions` and break unattended autonomy. **Pattern:** for assemblies that need multiple shell-derived values, use multiple separate Bash calls and assemble strings in your own thinking, not via shell substitution in a single call.
-
-These are agent-quality rules, not safety rules. Following them keeps the autonomy loop unblocked.
+<!-- Verification discipline: see _common/verification_discipline.md -->
 

@@ -1,6 +1,6 @@
 # Task 10 — Common-rules extraction (`.claude/agents/_common/`)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Complete.
 **Kind:** Slimming / doc.
 **Grounding:** [milestone README](README.md) · [research brief §T10 (SUPPORT + EXTEND, item #4)](../milestone_20_autonomy_loop_optimization/research_analysis.md) — line 263, "Common-rules extraction" verdict · [CLAUDE.md](../../../CLAUDE.md) §Non-negotiables · existing per-agent prompt files in `.claude/agents/`. Project memory: `feedback_autonomous_mode_boundaries.md` (8 hard rules locked 2026-04-27 — primary content for the autonomous-mode boundary section of `non_negotiables.md`). M20 close-out (commit `8c6e8a6`) is the post-shipment baseline; T10 is the first M21 win measured against that baseline.
 
@@ -40,7 +40,7 @@ Each agent's prompt file in `.claude/agents/` (9 files: `architect.md`, `auditor
 **Verification discipline (read-only on source code; smoke tests required):** see [`.claude/agents/_common/verification_discipline.md`](_common/verification_discipline.md).
 ```
 
-The agent prompt body keeps **only** the agent-specific content (e.g. the auditor's drift-check checklist, the security-reviewer's threat model — those move to dedicated files at T11). Inline duplication of the shared blocks is removed.
+The agent prompt body keeps **only** the agent-specific content (e.g. the auditor's drift-check checklist, the security-reviewer's threat model — those move to dedicated files at T11). **Verbatim inline duplication** of the shared blocks is removed; each agent retains at most a one-line pointer plus an agent-specific specialization tail (e.g. "**No git mutations or publish.** See `_common/non_negotiables.md` Rule 1. <agent-specific tail>"). The shared file is the source of truth; the per-agent tail preserves useful specialization.
 
 ## Deliverables
 
@@ -76,12 +76,17 @@ for f in .claude/agents/architect.md .claude/agents/auditor.md \
 done
 echo "all 9 agents reference shared blocks"
 
-# 3. No duplicated autonomy-boundary text in agent prompts.
-# Sentinel: every agent prompt today inlines "Do not run `git commit`, `git push`..."
-# (literal backticks). After T10, that sentence lives only in _common/non_negotiables.md.
-# Use grep -F (literal) so backticks are not interpreted by the shell.
-inlined=$(grep -lF 'Do not run `git commit`' .claude/agents/*.md | grep -v _common | wc -l)
-test "$inlined" -eq 0 && echo "boundary text not inlined in per-agent prompts"
+# 3. No verbatim autonomy-boundary text inlined in agent prompts.
+# Pre-T10 sentinel: every agent prompt inlined "Do not run `git commit`, `git push`...".
+# Post-T10 final state: each agent has a one-line pointer + agent-specific specialization
+# tail (e.g. "**No git mutations or publish.** See `_common/non_negotiables.md` Rule 1. <tail>").
+# This is the intended pattern (per sr-sdet FIX-1 option b, locked terminal decision 2026-04-29):
+# the shared file is the source of truth; per-agent tails preserve useful specialization.
+# Sentinel: the *pre-T10* literal must be gone; the *post-T10* pointer must be present.
+pre_t10=$(grep -lF 'Do not run `git commit`' .claude/agents/*.md | grep -v _common | wc -l)
+test "$pre_t10" -eq 0 && echo "pre-T10 verbatim boundary text not inlined"
+post_t10=$(grep -lF '_common/non_negotiables.md' .claude/agents/*.md | grep -v _common | wc -l)
+test "$post_t10" -eq 9 && echo "all 9 agents reference _common/non_negotiables.md (pointer+tail pattern)"
 
 # 4. Builder agent prompt declares the shared block at least once (sample-agent guard
 # against a partially-applied edit; step 2 already covers all 9 agents).
@@ -94,7 +99,7 @@ test "$(grep -c '_common/non_negotiables' .claude/agents/builder.md)" -ge 1 \
 1. `.claude/agents/_common/non_negotiables.md` exists, contains the autonomy-boundary section listed above (faithful summary of subagent-relevant rules from project memory `feedback_autonomous_mode_boundaries.md`), ≤ 500 tokens by the proxy `wc -w × 1.3`.
 2. `.claude/agents/_common/verification_discipline.md` exists, contains the four sections listed above, ≤ 400 tokens by the same proxy.
 3. All 9 agent prompts in `.claude/agents/` reference both shared files via the prescribed wording (or equivalent — two greps must succeed per smoke-test step 2).
-4. No agent prompt re-states the autonomy-mode boundary text after extraction (smoke-test step 3 returns 0 matches outside `_common/`).
+4. No agent prompt **re-states the autonomy-mode boundary text verbatim** after extraction; each agent has at most a one-line pointer + agent-specific specialization tail referencing `_common/non_negotiables.md` (smoke-test step 3: pre-T10 literal absent in 9/9, post-T10 pointer present in 9/9).
 5. CHANGELOG.md updated under `[Unreleased]` with `### Added — M21 Task 10: Common-rules extraction (.claude/agents/_common/non_negotiables.md + verification_discipline.md; 9 agent prompts reference shared blocks)`.
 6. Status surfaces flip together (spec `**Status:**` line, M21 README task-pool row, README "Done when" checkbox if any).
 
@@ -119,7 +124,7 @@ test "$(grep -c '_common/non_negotiables' .claude/agents/builder.md)" -ge 1 \
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Frontmatter wording is loose** (severity: LOW, source: task_analysis.md round 3 — also surfaced as round-1 L2)
+- [x] **TA-LOW-01 — Frontmatter wording is loose** (severity: LOW, source: task_analysis.md round 3 — also surfaced as round-1 L2)
       §Per-agent frontmatter reference (line 36) says "frontmatter line or top-of-body declaration." The agent files use YAML frontmatter for `name`/`description`/`tools`/`model`/`thinking`/`effort`; the example shown is Markdown bold-text body content, not YAML.
       **Recommendation:** Place the two `**Non-negotiables:**` and `**Verification discipline:**` reference lines in the prompt body **immediately after** the YAML frontmatter's closing `---`, not inside the YAML block. Drop the "frontmatter line or" phrasing — there is no YAML field for this content.
 

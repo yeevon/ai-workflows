@@ -67,7 +67,7 @@ Three load-bearing reasons M21 exists distinct from M20:
 
 | # | Task | Research-brief verdict | Phase / Kind | Status |
 |---|---|---|---|---|
-| 10 | Common-rules extraction (`.claude/agents/_common/non_negotiables.md` ≤500 tokens, plus `_common/verification_discipline.md`; each agent's frontmatter references them) | SUPPORT + EXTEND (T10 from #4) | Slimming / doc | 📝 Candidate |
+| 10 | Common-rules extraction (`.claude/agents/_common/non_negotiables.md` ≤500 tokens, plus `_common/verification_discipline.md`; each agent's frontmatter references them) | SUPPORT + EXTEND (T10 from #4) | Slimming / doc | ✅ Done |
 | 11 | CLAUDE.md slim (threat-model → `security-reviewer.md`; seven-KDR table → `auditor.md` + `task-analyzer.md` + `architect.md` + `dependency-auditor.md`; CLAUDE.md becomes a one-page index with summary+pointer per removed section) | STRONGLY SUPPORT (T11 from #3) | Slimming / doc | 📝 Candidate |
 | 12 | Skills extraction (per-agent capabilities; canonical SKILL.md frontmatter with tight `description:` for routing; body references helper files rather than inlining) | SUPPORT + MODIFY (T12 from #1) | Slimming / code + doc | 📝 Candidate |
 | 24 | MD-file discoverability audit (one topic per file in `agent_docs/`; ≤500-token sections with `##` anchors; top-of-file 3-line summary; no inline code — links to `src/foo.py:line` instead) | NEW (research-brief T24) | Slimming / doc | 📝 Candidate |
