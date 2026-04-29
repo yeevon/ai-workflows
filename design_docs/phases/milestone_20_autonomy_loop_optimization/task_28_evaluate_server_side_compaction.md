@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28). Verdict: DEFER. See `design_docs/analysis/server_side_compaction_evaluation.md`.
 **Kind:** Compaction / analysis (no production code; produces a decision document).
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model)](research_analysis) · audit recommendation M1 (2026-04-27) · sibling [task_03](task_03_in_task_cycle_compaction.md) + [task_04](task_04_cross_task_iteration_compaction.md) (file-based memory primitives that compose with — not replace — server-side compaction).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model)](research_analysis.md) · audit recommendation M1 (2026-04-27) · sibling [task_03](task_03_in_task_cycle_compaction.md) + [task_04](task_04_cross_task_iteration_compaction.md) (file-based memory primitives that compose with — not replace — server-side compaction).
 
 ## What to Build
 

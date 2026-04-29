@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28).
 **Kind:** Compaction / doc + code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model)](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #9 · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) · [`.claude/commands/clean-implement.md`](../../../.claude/commands/clean-implement.md).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model)](research_analysis.md) · memory `project_autonomy_optimization_followups.md` thread #9 · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) · [`.claude/commands/clean-implement.md`](../../../.claude/commands/clean-implement.md).
 
 ## What to Build
 

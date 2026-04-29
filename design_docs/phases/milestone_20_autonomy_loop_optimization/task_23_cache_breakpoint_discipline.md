@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28).
 **Kind:** Safeguards / code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.2 (cache-invalidation footgun)](research_analysis) · anthropics/claude-code issues #27048 / #34629 / #42338 / #43657 (5–20× session-cost blowups from misplaced breakpoints) · sibling [task_22](task_22_per_cycle_telemetry.md) (T23 reads T22's `cache_read_input_tokens` field for verification).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.2 (cache-invalidation footgun)](research_analysis.md) · anthropics/claude-code issues #27048 / #34629 / #42338 / #43657 (5–20× session-cost blowups from misplaced breakpoints) · sibling [task_22](task_22_per_cycle_telemetry.md) (T23 reads T22's `cache_read_input_tokens` field for verification).
 
 ## What to Build
 

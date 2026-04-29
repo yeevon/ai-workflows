@@ -2,7 +2,7 @@
 
 **Status:** 📝 Planned. **Gated on T06's GO verdict.**
 **Kind:** Model-tier / code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.2 / §Lens 3.4](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #6 · sibling [task_06](task_06_shadow_audit_study.md) (gates T07) · sibling [task_21](task_21_adaptive_thinking_migration.md) (provides per-role effort assignments) · sibling [task_22](task_22_per_cycle_telemetry.md) (defaults calibrated against this telemetry).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.2 / §Lens 3.4](research_analysis.md) · memory `project_autonomy_optimization_followups.md` thread #6 · sibling [task_06](task_06_shadow_audit_study.md) (gates T07) · sibling [task_21](task_21_adaptive_thinking_migration.md) (provides per-role effort assignments) · sibling [task_22](task_22_per_cycle_telemetry.md) (defaults calibrated against this telemetry).
 
 ## What to Build
 

@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28).
 **Kind:** Performance / doc + code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 1.4 (parallel sub-agent dispatch)](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #14 · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) (today's two-gate flow: Security gate at line 121, Team gate at line 149) · [`.claude/agents/sr-dev.md`](../../../.claude/agents/sr-dev.md) · [`.claude/agents/sr-sdet.md`](../../../.claude/agents/sr-sdet.md) · [`.claude/agents/security-reviewer.md`](../../../.claude/agents/security-reviewer.md) · sibling [task_01](task_01_sub_agent_return_value_schema.md) (fragment-file format reuses T01's 3-line schema).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 1.4 (parallel sub-agent dispatch)](research_analysis.md) · memory `project_autonomy_optimization_followups.md` thread #14 · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) (today's two-gate flow: Security gate at line 121, Team gate at line 149) · [`.claude/agents/sr-dev.md`](../../../.claude/agents/sr-dev.md) · [`.claude/agents/sr-sdet.md`](../../../.claude/agents/sr-sdet.md) · [`.claude/agents/security-reviewer.md`](../../../.claude/agents/security-reviewer.md) · sibling [task_01](task_01_sub_agent_return_value_schema.md) (fragment-file format reuses T01's 3-line schema).
 
 ## What to Build
 

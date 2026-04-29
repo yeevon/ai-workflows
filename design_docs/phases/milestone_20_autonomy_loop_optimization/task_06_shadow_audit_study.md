@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28) — harness shipped; study report at DEFER verdict; AC #7 (30 cell-task dirs) deferred to T06-resume (see issue file carry-over).
 **Kind:** Model-tier / analysis (no production code at T06; produces the study report that gates T07).
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.5](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #7 · sibling [task_21](task_21_adaptive_thinking_migration.md) (must land first — Opus 4.7 cells require adaptive thinking) · sibling [task_22](task_22_per_cycle_telemetry.md) (must land first — study consumes telemetry records).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.5](research_analysis.md) · memory `project_autonomy_optimization_followups.md` thread #7 · sibling [task_21](task_21_adaptive_thinking_migration.md) (must land first — Opus 4.7 cells require adaptive thinking) · sibling [task_22](task_22_per_cycle_telemetry.md) (must land first — study consumes telemetry records).
 
 ## What to Build
 

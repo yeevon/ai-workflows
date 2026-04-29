@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done.
 **Kind:** Compaction / doc + code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 1.3](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #12 · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) · [`.claude/agents/builder.md`](../../../.claude/agents/builder.md) · [other 7 agents under `.claude/agents/`](../../../.claude/agents/) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 1.3](research_analysis.md) · memory `project_autonomy_optimization_followups.md` thread #12 · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) · [`.claude/agents/builder.md`](../../../.claude/agents/builder.md) · [other 7 agents under `.claude/agents/`](../../../.claude/agents/) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md).
 
 ## What to Build
 

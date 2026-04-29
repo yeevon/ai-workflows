@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28).
 **Kind:** Safeguards / code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model — tool-result clearing)](research_analysis) · audit recommendation H6 (Path A removed: Claude Code's agent frontmatter accepts only `name`/`description`/`tools`/`model`; `context_management.edits` cannot be passed through) · sibling [task_28](task_28_evaluate_server_side_compaction.md) (T28 owns the broader server-side-compaction surface check) · sibling [task_03](task_03_in_task_cycle_compaction.md) (cycle_summary.md is the compacted-input source) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.1 (Anthropic 3-primitive memory model — tool-result clearing)](research_analysis.md) · audit recommendation H6 (Path A removed: Claude Code's agent frontmatter accepts only `name`/`description`/`tools`/`model`; `context_management.edits` cannot be passed through) · sibling [task_28](task_28_evaluate_server_side_compaction.md) (T28 owns the broader server-side-compaction surface check) · sibling [task_03](task_03_in_task_cycle_compaction.md) (cycle_summary.md is the compacted-input source) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md).
 
 ## What to Build
 

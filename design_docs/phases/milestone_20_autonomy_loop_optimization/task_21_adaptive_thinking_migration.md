@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28).
 **Kind:** Model-tier / doc + code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.3 (adaptive thinking is the new dial)](research_analysis) · audit recommendation M4 (2026-04-27 grep — 6 hits across `.claude/commands/`) · [Anthropic API docs `whats-new-claude-4-7`](https://docs.claude.com/en/api/whats-new-claude-4-7) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) (and 5 sibling slash command files).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.3 (adaptive thinking is the new dial)](research_analysis.md) · audit recommendation M4 (2026-04-27 grep — 6 hits across `.claude/commands/`) · [Anthropic API docs `whats-new-claude-4-7`](https://docs.claude.com/en/api/whats-new-claude-4-7) · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) (and 5 sibling slash command files).
 
 ## What to Build
 

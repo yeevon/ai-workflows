@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28).
 **Kind:** Model-tier / code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.4 (anthropics/claude-code #52502 — metering opacity)](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #22 · sibling [task_06](task_06_shadow_audit_study.md) (study consumes T22's measurements + owns the per-cell proxy aggregation) · [task_07](task_07_dynamic_model_dispatch.md) (defaults calibrated against T22's data) · [task_23](task_23_cache_breakpoint_discipline.md) (verification reads T22's `cache_read_input_tokens`) · [task_27](task_27_tool_result_clearing.md) (rotation trigger reads T22's `input_tokens`).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 3.4 (anthropics/claude-code #52502 — metering opacity)](research_analysis.md) · memory `project_autonomy_optimization_followups.md` thread #22 · sibling [task_06](task_06_shadow_audit_study.md) (study consumes T22's measurements + owns the per-cell proxy aggregation) · [task_07](task_07_dynamic_model_dispatch.md) (defaults calibrated against T22's data) · [task_23](task_23_cache_breakpoint_discipline.md) (verification reads T22's `cache_read_input_tokens`) · [task_27](task_27_tool_result_clearing.md) (rotation trigger reads T22's `input_tokens`).
 
 ## What to Build
 

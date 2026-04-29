@@ -2,7 +2,7 @@
 
 **Status:** ✅ Done (2026-04-28).
 **Kind:** Compaction / doc + code.
-**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.3 / §Lens 2.4](research_analysis) · memory `project_autonomy_optimization_followups.md` thread #8 · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) · [`.claude/commands/clean-tasks.md`](../../../.claude/commands/clean-tasks.md) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) (the Auditor's "load full task scope" invariant — preserved at-the-agent, pruned at-the-orchestrator).
+**Grounding:** [milestone README](README.md) · [research brief `research_analysis` §Lens 2.3 / §Lens 2.4](research_analysis.md) · memory `project_autonomy_optimization_followups.md` thread #8 · [`.claude/commands/auto-implement.md`](../../../.claude/commands/auto-implement.md) · [`.claude/commands/clean-tasks.md`](../../../.claude/commands/clean-tasks.md) · [`.claude/agents/auditor.md`](../../../.claude/agents/auditor.md) (the Auditor's "load full task scope" invariant — preserved at-the-agent, pruned at-the-orchestrator).
 
 ## What to Build
 
