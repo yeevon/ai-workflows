@@ -118,6 +118,7 @@ runs/<task-shorthand>/
   cycle_N/
     ...
   integrity.txt                 ← T09 — pre-commit ceremony (top-level, latest run wins)
+  meta.json                     ← T17 — parallel-build flag + pre-task commit SHA
 ```
 
 See [`.claude/commands/_common/cycle_summary_template.md`](_common/cycle_summary_template.md)
@@ -280,6 +281,21 @@ Autonomy mode: ON — auto-commit + push design_branch only; HARD HALT on main/p
 ```
 
 If anything material is unclear (spec missing, milestone README absent, ambiguous shorthand) — **halt and surface to the user** before spawning agents.
+
+**Parallel-build flag (T18 gate):** At project-setup time, check whether the task spec
+contains a `## Slice scope` section. If present, record `PARALLEL_ELIGIBLE=true` in
+`runs/<task>/meta.json` alongside the pre-task commit SHA. If absent, record
+`PARALLEL_ELIGIBLE=false`. In M21 with T18 not yet shipped, this flag is always `false`
+in practice — the check is a forward-compatible stub. Write the file inline (no separate
+agent spawn needed):
+
+```json
+{
+  "PARALLEL_ELIGIBLE": false,
+  "pre_task_commit": "<pre-task-commit>",
+  "task": "<task-shorthand>"
+}
+```
 
 ---
 

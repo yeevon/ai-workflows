@@ -1,6 +1,6 @@
 # Task 17 — Spec Format Extension (per-slice file/symbol scope)
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Parallelism / doc + code.
 **Grounding:** [milestone README](README.md) · [research brief §T17](../milestone_20_autonomy_loop_optimization/research_analysis.md) — anchor `### T17 — Spec format extension (per-slice file/symbol scope)` · [T16 spec](task_16_sweep_command.md) (✅ Done — most-recent Phase F template) · [`clean-tasks.md`](../../../.claude/commands/clean-tasks.md) (Phase 1 generation + Phase 2 analysis — the primary surface this task extends) · [`auto-implement.md`](../../../.claude/commands/auto-implement.md) §Functional loop (Builder spawn — per-slice routing when parallel flag set). KDR drift checks apply per M21 scope note.
 
@@ -144,6 +144,6 @@ uv run python scripts/audit/md_discoverability.py --check section-budget --targe
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Agent count hard-pin at 9 in smoke step 7** (severity: LOW, source: task_analysis.md round 20)
+- [x] **TA-LOW-01 — Agent count hard-pin at 9 in smoke step 7** (severity: LOW, source: task_analysis.md round 20)
       Smoke step 7 pins the `_common/non_negotiables.md` reference count to exactly 9 — kept for sibling parity with T13–T16. Acceptable as-is.
       **Recommendation:** Future agent-roster changes will need to sweep all sibling smokes that use this 9-pin.

@@ -127,10 +127,32 @@ If none exist:
    - For code tasks: name an explicit smoke test the Auditor will run (CLAUDE.md *Code-task verification is non-inferential*).
    - List explicit Out-of-scope items.
    - Include empty Carry-over sections — they get populated by `/clean-implement`'s audit cycle later, and possibly by Phase 3 below if LOWs need to be pushed down.
+   - **Slice scope (T17):** If the milestone README task row enumerates ≥ 2 file-disjoint acceptance-criterion groups (e.g. "AC-1 touches primitives; AC-2 touches graph"), emit a `## Slice scope` stub with one row per group. Leave the `Files / symbols` column populated with `<TODO — fill at spec-review time>`. If the task row is not explicitly multi-slice or the spec author would need to invent the file boundaries, omit the section.
 
 Do **not** invent scope beyond what the milestone README names. If the README's task row is sparse on a task, write the minimal spec that covers the row + the milestone's exit criteria; do not extrapolate features.
 
 After generation, verify with: `ls <milestone-dir>/task_*.md`. Report the count to the user before entering Phase 2.
+
+### Slice scope section template
+
+When a spec's ACs decompose into file-disjoint slices, append this optional section:
+
+```markdown
+## Slice scope (optional — required for parallel-Builder dispatch)
+
+| Slice | ACs | Files / symbols |
+|-------|-----|-----------------|
+| slice-A | AC-1, AC-2 | `ai_workflows/primitives/foo.py`, `tests/test_foo.py` |
+| slice-B | AC-3 | `ai_workflows/graph/bar.py`, `tests/test_bar.py` |
+```
+
+### Slice scope rules
+
+1. The section is **optional**. Specs without it run serial as today.
+2. When present, every AC must appear in exactly one slice row. ACs that span multiple files may be grouped into one slice if they cannot be executed in isolation.
+3. Slice names are freeform lowercase (e.g. `slice-a`, `primitives-layer`, `tests-only`).
+4. Files must be repo-relative paths. Symbols are optional (e.g. `foo.py::BarClass::baz_method`).
+5. A spec with this section is a **candidate for parallel dispatch** in T18. Tasks without the section always run serial.
 
 ---
 

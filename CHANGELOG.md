@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M21 Task 17: Spec format extension (per-slice file/symbol scope) (2026-04-29)
+
+Files touched: `.claude/commands/clean-tasks.md` (Phase 1 §Generate step 4 extended with Slice scope stub emission rule; `## Slice scope` section template + 5 rules documented), `.claude/commands/auto-implement.md` (§Project setup extended with Parallel-build flag (T18 gate) paragraph; `meta.json` added to per-cycle directory layout), `tests/test_t17_spec_format.py` (new — 6 test classes, 15 test cases covering slice-scope detection, serial path, AC-to-slice mapping, duplicate-AC violation, files-column validation, and meta.json PARALLEL_ELIGIBLE flag), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (G4 marked satisfied at T17; T17 row → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_17_spec_format_extension.md` (Status → Done; TA-LOW-01 ticked), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (clean-tasks.md extended: Slice scope template + 5 rules + Phase 1 generator guidance), AC2 (auto-implement.md extended: PARALLEL_ELIGIBLE flag check at project-setup; meta.json in directory layout), AC3 (tests/test_t17_spec_format.py passes — 15 tests across 6 classes), AC4 (CI gates green), AC5 (CHANGELOG updated), AC6 (M21 README G4 updated with T17 satisfaction note), AC7 (T10 invariant held — no agent files touched), AC8 (T24 invariant held — no agent files touched), AC9 (status surfaces flipped: T17 spec → Done, M21 README T17 row → Done). TA-LOW-01 accepted (agent count 9-pin kept for sibling parity).
+
+Deviation D-1: `tests/test_main_branch_shape.py` updated to skip on worktree-* branches (environmental fix — branch detection incorrectly flagged agent worktree branches as "main").
+
 ### Added — M21 Task 15: /ship manual happy-path publish Skill (host-only) (2026-04-29)
 
 Files touched: `.claude/skills/ship/SKILL.md` (new — ship Skill, host-only, ≤5K tokens, four required ## anchors, allowed-tools: Bash, explicit host-only + autonomy-mode boundary section), `.claude/skills/ship/runbook.md` (new — T24-rubric-conformant; pre-flight check matrix, build+wheel-contents denylist, real-install smoke invocations, operator-approval prompts, publish failure modes), `tests/test_t15_ship.py` (new — mirrors test_t13_triage.py shape; covers frontmatter+char/token budgets, four anchors+helper-file ref, T24 rubric, T25 efficiency gate, T15-specific host-only+autonomy-mode anchors, Live Skills count line, CHANGELOG entry), `.claude/agents/_common/skills_pattern.md` (Live Skills line extended: added ship (T15)), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_15_ship_command.md` (Status → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T15 row → Done; G3 exit criterion amended to mark Phase F complete with all four Skills named), `CHANGELOG.md` (this entry).

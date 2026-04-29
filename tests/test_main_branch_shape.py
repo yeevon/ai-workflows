@@ -67,11 +67,17 @@ def _detect_branch() -> str:
     branch = result.stdout.strip().lower()
     if branch == "design_branch":
         return "design"
+    # Agent worktrees (worktree-agent-* branches) are isolated builder sandboxes
+    # that carry only a subset of the builder tree; neither the main-branch
+    # absence check nor the design-branch presence check applies to them.
+    if branch.startswith("worktree-"):
+        return "worktree"
     return branch or "main"
 
 
 _BRANCH = _detect_branch()
 _ON_DESIGN = _BRANCH == "design"
+_ON_WORKTREE = _BRANCH == "worktree"
 
 _BUILDER_ONLY_PATHS: tuple[str, ...] = (
     "design_docs",
@@ -82,7 +88,10 @@ _BUILDER_ONLY_PATHS: tuple[str, ...] = (
 )
 
 
-@pytest.mark.skipif(_ON_DESIGN, reason="runs on main only")
+@pytest.mark.skipif(
+    _ON_DESIGN or _ON_WORKTREE,
+    reason="runs on main only; skipped on design_branch and agent worktrees",
+)
 def test_design_docs_absence_on_main() -> None:
     """``main`` must not contain any builder-only surface.
 
@@ -98,7 +107,10 @@ def test_design_docs_absence_on_main() -> None:
     )
 
 
-@pytest.mark.skipif(not _ON_DESIGN, reason="runs on design_branch only")
+@pytest.mark.skipif(
+    not _ON_DESIGN or _ON_WORKTREE,
+    reason="runs on design_branch only; skipped on main and agent worktrees",
+)
 def test_design_docs_presence_on_design_branch() -> None:
     """``design_branch`` must contain ``design_docs/``.
 
