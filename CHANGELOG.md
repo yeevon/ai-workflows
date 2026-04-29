@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M21 Task 11: CLAUDE.md slim (threat-model → security-reviewer.md; seven-KDR table → 4 drift-check agents; CLAUDE.md becomes 83-line index; ADV-1/2 absorbed from T10) (2026-04-29)
+
+Files touched: `CLAUDE.md` (136 → 83 lines; 6 moves applied), `.claude/agents/security-reviewer.md` (threat-model stub replaced with full canonical section; heading renamed; ADV-1/ADV-2 applied), `.claude/agents/auditor.md` (KDR table appended; ADV-1/ADV-2), `.claude/agents/task-analyzer.md` (KDR table appended; ADV-1/ADV-2), `.claude/agents/architect.md` (KDR table appended; ADV-1/ADV-2), `.claude/agents/dependency-auditor.md` (KDR table appended; ADV-1/ADV-2), `.claude/agents/builder.md` (ADV-1/ADV-2), `.claude/agents/roadmap-selector.md` (ADV-1/ADV-2), `.claude/agents/sr-dev.md` (ADV-1/ADV-2), `.claude/agents/sr-sdet.md` (ADV-1/ADV-2), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (G1 prose + T11 task row), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_11_claude_md_slim.md` (status → Done; carry-over ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_11_issue.md` (new — per-agent wc -w baseline).
+
+ACs satisfied: AC1 (83 lines ≤ 95), AC2 (anchors for threat model + KDR table + verification discipline), AC3 (security-reviewer.md `## Threat model`), AC4 (KDR table in 4 drift-check agents), AC5 (ADV-1: preamble stripped from 9/9), AC6 (ADV-2: parenthetical in 9/9), AC7 (T10 invariant held 9/9), AC8 (CHANGELOG), AC9a/b/c (status surfaces flipped), TA-LOW-01 (cosmetic), TA-LOW-02 (stub replaced inline), TA-LOW-03 (G1 grep tightened).
+
+Deviations: none.
+
 ### Added — M21 Task 10: Common-rules extraction (.claude/agents/_common/non_negotiables.md + verification_discipline.md; 9 agent prompts reference shared blocks) (2026-04-29)
 
 Files touched: `.claude/agents/_common/non_negotiables.md` (new — autonomy-boundary rules 1/2/3, ≤500 token proxy), `.claude/agents/_common/verification_discipline.md` (new — 4-section verification rules + Bash-safety rules, ≤400 token proxy), `.claude/agents/architect.md` (reference added, boundary text replaced, inline verification-discipline removed), `.claude/agents/auditor.md` (same), `.claude/agents/builder.md` (same), `.claude/agents/dependency-auditor.md` (same), `.claude/agents/roadmap-selector.md` (same), `.claude/agents/security-reviewer.md` (same), `.claude/agents/sr-dev.md` (same), `.claude/agents/sr-sdet.md` (same), `.claude/agents/task-analyzer.md` (same).

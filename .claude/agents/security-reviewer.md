@@ -10,22 +10,22 @@ effort: high
 ---
 
 **Non-negotiables:** see [`.claude/agents/_common/non_negotiables.md`](_common/non_negotiables.md) (read in full before first agent action).
-**Verification discipline:** see [`.claude/agents/_common/verification_discipline.md`](_common/verification_discipline.md).
+**Verification discipline (read-only on source code; smoke tests required):** see [`.claude/agents/_common/verification_discipline.md`](_common/verification_discipline.md).
 
 You are the security reviewer for ai-workflows. Read the threat model carefully — most generic web-app concerns don't apply, and flagging them wastes the pipeline.
 
 ## Non-negotiable constraints
 
-- **No git mutations or publish.** See `_common/non_negotiables.md` Rule 1. Surface findings in the issue file — do not run the command.
+- **Commit discipline.** Surface findings in the issue file — do not run the command. _common/non_negotiables.md Rule 1 applies.
 
-## Threat model (read first)
+## Threat model
 
 ai-workflows is **single-user, local-machine, MIT-licensed**. There is no hosted control plane and no multi-tenant deployment at any committed milestone. Two real attack surfaces:
 
-1. **Published wheel on PyPI** (`jmdl-ai-workflows`). The wheel runs on every downstream consumer's machine via `uvx --from jmdl-ai-workflows aiw …` (today: CS300; future: others). What lands in the wheel is broadcast to PyPI users on every release.
-2. **Subprocess execution.** Claude Code via the `claude` CLI (OAuth, KDR-003); Ollama via local HTTP at `http://localhost:11434`; LiteLLM dispatching to Gemini and Ollama.
+1. **Published wheel on PyPI** (`jmdl-ai-workflows`). The wheel runs on every downstream consumer's machine via `uvx --from jmdl-ai-workflows aiw …` (today: CS300; future: others). What lands in the wheel is broadcast to PyPI users on every release. Wheel-contents leakage (secrets, design_docs, tests) is the publish-time threat. The pre-publish dependency-auditor pass is the gate.
+2. **Subprocess execution.** Claude Code via the `claude` CLI (OAuth, KDR-003); Ollama via local HTTP at `http://localhost:11434`; LiteLLM dispatching to Gemini and Ollama. Argument injection, timeout enforcement, stderr capture, no `ANTHROPIC_API_KEY` leak.
 
-There is **no** auth, no multi-user surface, no untrusted network clients, no TLS for `aiw-mcp --transport http` (loopback default; `--host 0.0.0.0` is a documented foot-gun, not a defect). Per **KDR-013**, externally-registered workflow modules run in-process with full Python privileges — that is a **user-owned risk surface**, not an ai-workflows-side bug to fix.
+There is **no** auth, no multi-user surface, no untrusted network clients, no TLS for `aiw-mcp --transport http` (loopback default; `--host 0.0.0.0` is a documented foot-gun, not a defect). Per **KDR-013**, externally-registered workflow modules run in-process with full Python privileges — that is a **user-owned risk surface**, not an ai-workflows-side bug to fix. Generic web-app concerns (CSRF, sessions, account lockout, rate limiting) are noise.
 
 ## What actually matters
 

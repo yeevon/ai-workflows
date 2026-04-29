@@ -1,6 +1,6 @@
 # Task 11 — CLAUDE.md slim
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Slimming / doc.
 **Grounding:** [milestone README](README.md) · [research brief §T11 (STRONGLY SUPPORT, item #3)](../milestone_20_autonomy_loop_optimization/research_analysis.md) · [CLAUDE.md](../../../CLAUDE.md) (current, 136 lines) · [T10 spec](task_10_common_rules_extraction.md) (T11 absorbs T10's four advisory carry-overs) · [T10 issue file](issues/task_10_issue.md) M21-T10-ISS-03.
 
@@ -188,14 +188,14 @@ awk 'END { exit !(NR == 9) }' /tmp/aiw_t11_t10inv.txt && echo "T10 pointer invar
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Move-table cosmetic numbers** (severity: LOW, source: task_analysis.md round 5 / T11 round 2)
+- [x] **TA-LOW-01 — Move-table cosmetic numbers** (severity: LOW, source: task_analysis.md round 5 / T11 round 2)
       Move 1 cites lines 85–97 (actual 85–94 + divider 96); Move 2 cites lines 39–50 (heading at 38 → spans 38–50); Move 5 says "10 subagent one-liners" but enumerates 9 names (the 10th is the leading "Subagents:" header). Smoke verifies the global threshold so cosmetic.
       **Recommendation:** Builder may correct the cosmetic numbers in the Move-table while applying the moves; if not corrected, no functional impact.
 
-- [ ] **TA-LOW-02 — Move 1 instruction sequencing** (severity: LOW, source: task_analysis.md round 5)
+- [x] **TA-LOW-02 — Move 1 instruction sequencing** (severity: LOW, source: task_analysis.md round 5)
       `.claude/agents/security-reviewer.md` line 21 already carries a `## Threat model (read first)` stub header. The Move 1 instruction reads as "append → discover duplicate → replace," which is workable but indirect.
       **Recommendation:** Builder treats this as "replace the existing `## Threat model (read first)` stub (line 21 + any body) with the full moved-from-CLAUDE.md content; rename heading to `## Threat model` (drop `(read first)`) so the section lands once with the canonical title."
 
-- [ ] **TA-LOW-03 — AC9c may also tighten G1's tautological grep example** (severity: LOW, source: task_analysis.md round 5)
+- [x] **TA-LOW-03 — AC9c may also tighten G1's tautological grep example** (severity: LOW, source: task_analysis.md round 5)
       M21 README §Exit criteria §G1 currently includes `grep -c "^## " CLAUDE.md confirms each removed section has a placeholder summary + anchor link` — a tautological test (a count of `##` headings doesn't prove anchor links exist).
       **Recommendation:** Builder may optionally replace that grep example with one that actually verifies anchor presence (e.g. `grep -q "security-reviewer.md#threat-model" CLAUDE.md`); satisfaction parenthetical is the load-bearing edit.
