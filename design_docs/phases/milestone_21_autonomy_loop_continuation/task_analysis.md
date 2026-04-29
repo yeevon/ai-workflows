@@ -1,9 +1,8 @@
-# M21 Autonomy Loop Continuation — Task Analysis
+# M21 — Task Analysis
 
-**Round:** 19 (T15 round 2; T10/T11/T12/T13/T14/T16/T24/T25/T26 locked from prior rounds)
+**Round:** 20
 **Analyzed on:** 2026-04-29
-**Specs analyzed:** task_15_ship_command.md (primary; round 2)
-**Locked specs (not re-analyzed):** task_10/11/12/13/14/16/24/25/26 — all `✅ Done` per README task pool.
+**Specs analyzed:** task_17_spec_format_extension.md, task_18_parallel_builder_spawn.md, task_19_orchestrator_closeout.md, task_zz_milestone_closeout.md
 **Analyst:** task-analyzer agent
 
 ## Summary
@@ -12,61 +11,58 @@
 | --- | --- |
 | 🔴 HIGH | 0 |
 | 🟡 MEDIUM | 0 |
-| 🟢 LOW | 3 |
-| Total | 3 |
+| 🟢 LOW | 4 |
+| Total | 4 |
 
 **Stop verdict:** LOW-ONLY
-
-## Round 18 fix verification
-
-All four blockers from round 18 are confirmed landed:
-
-- **H1 (Skills can't chain).** §Procedure step 6 (lines 105–107) now reads "Post-publish verification (Bash-native; Skills do not chain)" and uses `curl -s https://pypi.org/pypi/jmdl-ai-workflows/json | python -c "import sys, json; print(json.load(sys.stdin)['info']['version'])"` with an explicit citation to project memory `feedback_skill_chaining_reuse.md`. The wording mirrors the `check` Skill's PyPI-compare logic without invoking it. ✅
-- **M1 (six-check enumeration).** §Procedure step 1 (lines 76–82) now lists six checks explicitly: branch, working-tree, version-string, CHANGELOG, `.env`+`PYPI_TOKEN`, and the new `dist/` clean check. Matches §Outputs (line 113) and §Step 2 runbook (line 134). ✅
-- **M2 (test count framing).** §Step 3 (line 142) now reads "Mirror `tests/test_t13_triage.py` shape (one test function per acceptance-criterion sub-claim — frontmatter parse, char/token budgets, four required anchors, helper-file ref, T24-rubric subprocesses, Live-Skills line, CHANGELOG). **Plus one extra test** specific to T15 …" — drops the "6 / 7" literal counts and references the precedent file. ✅
-- **M3 (`--yes` flag).** §Inputs Optional flags (line 72) now declares `--yes` with explicit precedence rule: `--dry-run` overrides everything; otherwise `--yes` skips the approval prompt; otherwise the typed-token prompt is the default. §Procedure step 4 (line 97) consistent. ✅
 
 ## Findings
 
 ### 🟢 LOW
 
-#### L1 — Smoke step 8 hard-pins agent count to 9 — fragile against future agent additions
+#### L1 — T17 smoke step 7 hard-pin to 9 agent files duplicates T15-style brittleness
 
-**Task:** task_15_ship_command.md
-**Issue:** §Tests/smoke step 8 (lines 196–202) explicit-lists 9 agent files + `awk 'END { exit !(NR == 9) }'`. If a future task lands a 10th agent, every M21 task spec's smoke breaks. Cross-spec fragility, not T15-specific (T13/T14/T16 use the same 9-pin).
-**Recommendation:** Acceptable as-is for T15 (sibling parity is the higher-value invariant). Carry-over note for a future cleanup that swaps the hard-coded 9 for a dynamic count.
-**Push to spec:** yes — append to T15 "Carry-over from task analysis" as a future-cleanup hint.
+**Task:** task_17_spec_format_extension.md
+**Issue:** Smoke step 7 (`wc -l | awk '{ exit !($1 == 9) }'`) hard-pins the agent count to exactly 9. Prior tasks T13/T14/T15/T16 used the same pattern, but the M21 carry-over discipline already absorbed `TA-LOW-01 (accepted: agent count hard-pin at 9 for sibling parity)` for T15. T17 inherits the same trade-off — fine for sibling parity, but worth pre-acknowledging in carry-over so the Builder doesn't re-litigate.
+**Recommendation:** Note in Carry-over from task analysis: "Agent count hard-pin at 9 kept for sibling parity with T13–T16; future agent-roster changes will sweep all sibling smokes."
+**Push to spec:** yes — append to T17 "Carry-over from task analysis" section.
 
-#### L2 — In-prose Skill references use leading-slash form (`/check`, `/ship`)
+#### L2 — T18 worktree-cleanup AC-5 is asserted but no procedure step describes it
 
-**Task:** task_15_ship_command.md
-**Issue:** Skills are NOT slash-commands; they live under `.claude/skills/<name>/SKILL.md`. The spec body (and sibling locked T13/T14/T16 specs) refers to the four Phase F surfaces as `/triage`, `/check`, `/ship`, `/sweep`. After H1 was fixed in round 18, the round-2 step-6 prose correctly uses unprefixed `check` Skill (line 106: "mirrors the `check` Skill's PyPI-comparison logic"), so the worst-case ambiguity at the H1 site is resolved. Remaining slash-prefixed references are stylistic.
-**Recommendation:** Parity with sibling specs takes precedence — no spec-internal change needed. Carry-over reminder for future doc-cleanup pass.
-**Push to spec:** yes — append to T15 "Carry-over from task analysis" as a clarification reminder; not a blocker.
+**Task:** task_18_parallel_builder_spawn.md
+**Issue:** Step 1's procedure documents dispatch + overlap detection + cherry-pick, but does not document worktree cleanup when a slice produces no changes (test case 5). The Builder will need to add the cleanup step to satisfy AC-5; the spec leaves the exact shape (e.g. `git worktree remove`) as an implementation detail. Acceptable for a stretch task but worth flagging.
+**Recommendation:** When T18 leaves stretch and is implemented, the Builder should add an explicit "If worktree diff is empty, run `git worktree remove <path>`" line in Step 1.
+**Push to spec:** yes — append to T18 "Carry-over from task analysis": "Builder: add explicit worktree-cleanup-on-empty-diff procedure step under Step 1 to satisfy AC-5 / test 5."
 
-#### L3 — `curl -s` vs `curl -sf` minor drift with `check` Skill's PyPI-compare runbook
+#### L3 — T19 acceptance-criteria count mismatch with test count
 
-**Task:** task_15_ship_command.md
-**Location:** §Procedure step 6 (line 106): `curl -s https://pypi.org/pypi/jmdl-ai-workflows/json | python -c "..."`. The sibling `check` Skill's runbook (`.claude/skills/check/runbook.md` line 68) uses `curl -sf` (the `-f` flag fails on HTTP error rather than printing the error body to stdout).
-**Issue:** With `curl -s` (no `-f`) and the JSON pipe, an HTTP error response would print the HTML error body to stdin, and `json.load` would raise — so the Builder will see a noisy traceback rather than a clean exit code on transient PyPI 5xx. Minor robustness gap; the spec's "retry once after a short sleep" already covers the propagation-lag case.
-**Recommendation:** Add `-f` to the `curl` invocation for parity with the `check` Skill runbook: `curl -sf https://pypi.org/...`. Builder can apply at implement-time. Not a blocker — `python` will fail visibly either way.
-**Push to spec:** yes — append to T15 "Carry-over from task analysis" with the one-line Builder hint: "in step 6, use `curl -sf` (not `curl -s`) for parity with `.claude/skills/check/runbook.md`".
+**Task:** task_19_orchestrator_closeout.md
+**Issue:** AC-1 covers smoke 1+2 (post-parallel merge + commit annotation). Step 3 (status-surface flips) has no dedicated AC — it is asserted as documentation only. Test 3 ("Status surfaces flip once (not N times)") therefore exercises behavior with no matching AC. Not a bug; a doc-task asymmetry the Auditor may flag at audit time.
+**Recommendation:** Either add AC-2-bis "Status-surface single-flip discipline documented in §Step 3" or mark test 3 as covering AC-1 (status-flip is part of the close-out flow). Builder's choice at implement time.
+**Push to spec:** yes — append to T19 "Carry-over from task analysis": "Test 3 (status-surface single-flip) has no dedicated AC; Builder picks: add an AC or fold the assertion into AC-1's coverage. Document the choice in the issue file."
+
+#### L4 — T17/T18/T19 sibling specs do not pre-allocate `nice_to_have.md` slot numbers
+
+**Task:** task_zz_milestone_closeout.md
+**Issue:** ZZ AC-9 + T18/T19 defer-to-M22 condition both reference adding entries to `design_docs/nice_to_have.md` under heading `## Parallel-Builders (T18/T19 M21 defer)`. Current `nice_to_have.md` ends at `## 24. Server-side compaction via compact_20260112`. The next free slot is `## 25.` — none of the specs name this slot, leaving the ZZ Builder to compute it at close-out time. Low risk (only one milestone defers at a time) but explicit slot-claim avoids the M10-style slot-drift the Analyzer historically flags.
+**Recommendation:** ZZ should claim slot `## 25. Parallel-Builders foundation (T18/T19 from M21)` if the deferral fires; the spec can note this as a target slot rather than a binding allocation.
+**Push to spec:** yes — append to ZZ "Carry-over from task analysis": "If T18/T19 defer to M22, target `nice_to_have.md` slot is `## 25.` (next free as of 2026-04-29 round-20 analysis). Re-verify at ZZ time."
 
 ## What's structurally sound
 
-Verified against the live codebase and held up across both rounds:
-
-- **All cited paths exist** — `scripts/release_smoke.sh`, `tests/release/test_install_smoke.py`, `tests/test_t13_triage.py`, `.claude/skills/{check,triage,sweep}/{SKILL.md,runbook.md}`, `.claude/agents/_common/skills_pattern.md`, `.claude/agents/_common/non_negotiables.md`, `scripts/audit/{md_discoverability,skills_efficiency}.py`.
-- **Project memory citations are live** — `feedback_skill_chaining_reuse.md` (Skills don't chain), `feedback_autonomous_mode_boundaries.md` Rule 1 (host-only `uv publish`), `reference_pypi_token_dotenv.md` (`set -a && . ./.env && set +a && uv publish --token "$PYPI_TOKEN"`).
-- **Autonomy-mode boundary correctly anchored** — leading `## ⚠️ Host-only — autonomy-mode forbidden` SKILL section + smoke step 6 (`grep -qiF 'host-only'` + `grep -qiF 'autonomy-mode'`) + AC3 explicit safety claim. Defense-in-depth on top of `_common/non_negotiables.md` Rule 1.
-- **KDR drift checks: clean.** No runtime code under `ai_workflows/` is touched (per M21 scope note). KDRs 002/003/004/006/008/009/013 unaffected. Pre-publish wheel-contents check correctly delegated to `dep-audit` Skill in step 2.
-- **SEMVER:** doc-only + skill-config — no public-API surface change.
-- **Status-surface plan complete.** AC10 lists three surfaces (spec Status, README task-pool row anchor, README §G3 prose update) — matches the four-surface non-negotiable (the `tasks/README.md` surface is N/A for M21).
-- **Cross-spec consistency.** Template shape, smoke-test structure, T10/T24 invariant checks, and Live-Skills-line update mechanism all parity with sibling locked T13/T14/T16 specs. The `--yes` precedence rule (round-18 M3 fix) is the one place T15 extends the template — and it does so cleanly.
-- **Round-1 → round-2 fix-application is clean.** Each of H1/M1/M2/M3 landed at the cited line with no collateral drift; carry-over section is correctly still empty (L1/L2/L3 to be pushed by orchestrator on this round's exit).
+- **Layer rule + KDR drift:** All four specs explicitly affirm "No runtime code changes in `ai_workflows/`" per M21 scope note. None of them touches the `primitives/graph/workflows/surfaces` boundary, the seven load-bearing KDRs, or any MCP / Anthropic-API / validator-pairing / RetryingEdge / FastMCP / SqliteSaver / external-workflow surface. KDR drift is structurally avoided.
+- **Cross-spec dependency chain:** T17 → T18 → T19 ordering is correctly declared on both sides. T18 names T17 as prerequisite; T19 names T17 + T18 as prerequisites. ZZ depends on "T17 Done or Deferred" and "T18/T19 Done or Deferred" — explicit disposition required, not silent skip.
+- **Stretch-goal defer-to-M22:** Both T18 and T19 carry an explicit `## Defer-to-M22 condition (explicit)` section naming the trigger ("T17 adopted on ≥ 5 tasks AND operator requests parallel dispatch"). ZZ AC-9 hooks the deferral into `nice_to_have.md` correctly.
+- **Status-surface discipline:** Each spec's final AC enumerates the spec Status flip + the M21 README task-pool row flip. ZZ AC-7 covers ZZ's own row + the exit-criteria checkboxes. The M21 README confirms there is no `tasks/README.md` — surface (c) of the four-surface rule is correctly omitted.
+- **Reference verification:** All cited file paths exist (`.claude/commands/clean-tasks.md` Phase 1, `.claude/commands/auto-implement.md` §Functional loop / §Project setup / §Commit ceremony Step C3). No broken cross-references found.
+- **T10 + T24 invariant preservation:** T17 smoke steps 7+8 explicitly check that the 9/9 `_common/non_negotiables.md` reference holds and that `.claude/agents/` still passes the section-budget rubric. Confirmed via dry-run: both pass at HEAD.
+- **CHANGELOG framing:** All three code-touching specs use `### Added — M21 Task NN: …` consistent with the M21 entries already promoted in CHANGELOG (T10–T16, T24–T26 all use `### Added` or `### Changed` per actual scope).
+- **Round 19 fixes held:** Phase E + F specs (T10–T16, T24–T26) that hardened across rounds 1–19 are all `✅ Done` and not in scope for round 20. Their landing rows in the README task-pool match the spec Status lines.
 
 ## Cross-cutting context
 
-- **CS300 pivot active per project memory; M21 runs in parallel**, not blocked. T15 is the last of four Phase F productivity Skills; with T15 landed, Phase F closes and M21 advances toward Phase G (T17 spec format extension; T18+T19 stretch).
-- **`/ship` blast radius is real.** PyPI publishes are non-reversible (yank exists but the version slot is permanently consumed). Primary control is operator-approval at procedure step 4; `## ⚠️ Host-only` anchor + smoke greps are defense-in-depth. The round-18 H1 fix (no Skill-chaining) is what makes the post-publish verification step robust — without it the Skill would silently no-op.
-- **Round-2 verdict: LOW-ONLY.** All four round-1 blockers cleared with no regression. Three remaining LOWs (L1 future cleanup, L2 doc-style parity, L3 `curl -sf` parity) all push to spec carry-over. T15 spec is implementable as written.
+- **Phase G is a foundation phase, not a parallelism rollout.** T17 is the only in-scope task; T18+T19 are explicitly stretch with defer-to-M22 carry-over already wired into ZZ. The specs correctly model this: T17 lands the format and the gate stub; T18+T19 are dormant code paths until the trigger fires.
+- **No `nice_to_have.md` adoption inside M21 scope.** ZZ AC-9 only adds an entry under the deferral condition (T18/T19 not implemented). This matches CLAUDE.md "No `nice_to_have.md` adoption beyond what M20's threads already cover" and the M21 README §Non-goals.
+- **Version impact:** None. All four specs touch `.claude/commands/`, `.claude/agents/_common/`, `tests/`, `design_docs/`, `CHANGELOG.md`. No `pyproject.toml`, no `ai_workflows/__init__.py`, no `__all__` change, no MCP schema change. SEMVER unaffected.
+- **Project memory:** `project_m21_autopilot_2026_04_29_checkpoint.md` notes M21 autopilot paused mid-T15 cycle 1; T15 has since shipped (commit `5639cc5`). No memory note flags T17/T18/T19/ZZ as paused or pending external trigger.
+- **Round-20 disposition:** LOW-ONLY → orchestrator pushes the four LOW carry-overs into the listed spec sections and exits the loop.
