@@ -1,8 +1,12 @@
-# M21 — Task Analysis
+# M21 Autonomy Loop Continuation — Task Analysis
 
-**Round:** 5 (T11 round 2)
+**Round:** 2 (T24 round 2)
 **Analyzed on:** 2026-04-29
-**Specs analyzed:** `task_11_claude_md_slim.md`
+**Specs analyzed:**
+- `task_10_common_rules_extraction.md` (✅ Complete; commit 2f73143; cross-spec consistency only — locked)
+- `task_11_claude_md_slim.md` (✅ Done; commit 012a9d9; cross-spec consistency only — locked)
+- `task_24_md_discoverability.md` (📝 Planned; primary analysis target)
+
 **Analyst:** task-analyzer agent
 
 ## Summary
@@ -16,54 +20,73 @@
 
 **Stop verdict:** LOW-ONLY
 
-Round-1 H1 (line-budget unsatisfiable) is closed: the spec now lists six moves with a -40 arithmetic delta (136 → 96), an explicit fallback ("one-line tightening on §Repo layout") for the 1-line undershoot vs the ≤ 95 smoke threshold, and the smoke verifies the threshold rather than each move's contribution. Round-1 M1 (bash-safety) is closed: smoke steps 1, 5, 6, 7 now use `awk 'END { exit !(...) }'` instead of `$(...)`, and step 4 is unrolled into four explicit greps. Round-1 M2 is closed: the Sr. SDET ADV-1 cosmetic-edit-to-T10 item is dropped; T10 stays TERMINAL CLEAN. Round-1 M3 is closed: AC9 enumerates three actual surfaces — spec status line, README task-pool row 71, README §Exit criteria §G1 prose — with a matching deliverable bullet for the G1 prose edit.
+(Zero HIGH, zero MEDIUM. The three LOWs carry over from round 1 — they remain unfixed in the spec because the orchestrator's policy is to push LOWs to the spec's carry-over section on the LOW-ONLY exit, not to round-fix them. The orchestrator should now (a) push L1/L2/L3 to T24's "Carry-over from task analysis" section as TA-LOW-01 / TA-LOW-02 / TA-LOW-03 and (b) exit the loop.)
+
+## Round 1 fixes — verification
+
+All three round-1 MEDIUM fixes landed correctly:
+
+- **M1 (resolved).** `agent_return_schema.md` reference dropped from `task_24_md_discoverability.md` Step 2 final paragraph. Verified: `grep -n "agent_return_schema" task_24_md_discoverability.md` returns no matches. The behaviour-preservation check now correctly names only `_common/non_negotiables.md` and `_common/verification_discipline.md` (the two T10-delivered files actually present under `.claude/agents/_common/`).
+- **M2 (resolved).** AC8 (c) at line 140 now reads: *"M21 README §Exit criteria §G2 prose is amended in-place with an explicit partial-satisfaction parenthetical, e.g. `(rubric locked at T24; .claude/agents/*.md and _common/*.md portion satisfied; agent_docs/ portion deferred to T26 — audit script reusable there)`. The parenthetical must name both the satisfied portion and the deferred portion so future readers see the partial coverage immediately."* §Out of scope at line 144 mirrors this with: *"The README §G2 satisfaction parenthetical (AC8 c) makes this partial coverage explicit so the deferred portion is auditable."* Both surfaces now agree.
+- **M3 (resolved).** Smoke step 5 (line 106) now opens with `rm -f /tmp/aiw_t24_t10inv.txt`; smoke step 6 (line 115) now opens with `rm -f /tmp/aiw_t24_t11inv.txt`. Stale-artifact false-positive foreclosed for repeated Auditor regression runs.
+
+No regressions introduced by the round-1 edits; cross-spec consistency with the locked T10/T11 specs preserved.
 
 ## Findings
 
 ### 🔴 HIGH
 
-*(none)*
+*None.*
 
 ### 🟡 MEDIUM
 
-*(none)*
+*None.*
 
 ### 🟢 LOW
 
-#### L1 — Move-table line ranges and item counts have minor cosmetic errors
+#### L1 — Smoke step 8 CHANGELOG grep is loose (carried from round 1)
 
-**Task:** `task_11_claude_md_slim.md`
-**Issue:** Move 1 cites CLAUDE.md "lines 85–97" but the threat-model section ends at line 94 with the `---` divider on line 96 (line 97 is blank). Move 2 cites "lines 39–50"; actual content spans 38–50 (heading at 38). Move 5 says "10 subagent one-liners" then enumerates 9 names (`task-analyzer`, `builder`, `auditor`, `security-reviewer`, `dependency-auditor`, `architect`, `roadmap-selector`, `sr-dev`, `sr-sdet`); the value 10 appears to count the leading "Subagents:" line. None of these blocks the Builder — the smoke verifies the final line-count regardless of which exact source ranges are excised — but the spec's own arithmetic (-9 for Move 5, citing 10 source lines minus 1 replacement) sits on the inflated count.
-**Recommendation:** Builder may correct the cosmetic numbers in Move-table while applying the moves; if not corrected, no functional impact (the smoke verifies the global threshold).
-**Push to spec:** yes — append to `## Carry-over from task analysis` in `task_11_claude_md_slim.md`.
+**Task:** `task_24_md_discoverability.md`
+**Issue:** `grep -q "M21 Task 24" CHANGELOG.md` matches any mention of the string anywhere — including a body reference inside another task's entry. The established T10/T11 entries use `### Added — M21 Task <NN>:` / `### Changed — M21 Task <NN>:` as the section anchor.
+**Recommendation:** Tighten to `grep -qE '^### (Added|Changed) — M21 Task 24:' CHANGELOG.md`.
+**Push to spec:** yes — append to T24's "Carry-over from task analysis" section as TA-LOW-01.
 
-#### L2 — Move 1 instruction sequencing for security-reviewer.md is workable but indirect
+#### L2 — Audit script has no CI hookup; will rot silently (carried from round 1)
 
-**Task:** `task_11_claude_md_slim.md`
-**Issue:** `.claude/agents/security-reviewer.md` line 21 already carries `## Threat model (read first)` (a stub header). The Move 1 instruction says "append as a `## Threat model` section after the agent's existing system-prompt body. Verify the agent's existing prompt does not already duplicate the content; if it does, replace inline with the moved authoritative version." A hostile reading triggers two passes (append → discover dup → replace). The smoke step 3 grep `^## Threat model` matches both forms.
-**Recommendation:** Builder should treat this as "replace the existing `## Threat model (read first)` block (line 21 + body, if any) with the full moved-from-CLAUDE.md threat-model content; rename heading to `## Threat model` (drop the `(read first)` parenthetical) so the section lands once with the canonical title."
-**Push to spec:** yes — append to `## Carry-over from task analysis` in `task_11_claude_md_slim.md` as a clarifying note on Move 1.
+**Task:** `task_24_md_discoverability.md`
+**Issue:** `scripts/audit/md_discoverability.py` is created at T24 and run by the Auditor smoke, but it is not attached to `.github/workflows/ci.yml`. Sections that grow past 500 tokens *after* T24 ships will not regress any gate; only the next person to re-run the smoke notices.
+**Recommendation:** Either add a CI step in T24's deliverables (one job invoking `uv run python scripts/audit/md_discoverability.py --check section-budget --target .claude/agents/`) or note the deferral as a forward-deferred follow-up to T25 (periodic skill / scheduled-task efficiency audit). T25 is the natural home.
+**Push to spec:** yes — append to T24's "Carry-over from task analysis" section as TA-LOW-02 with the recommendation "deferred to T25 unless T24 Builder elects to add a CI step in-scope."
 
-#### L3 — AC9c amends G1's tautological grep example as a side effect
+#### L3 — Rule 5 (one-topic-per-file) is not encoded in the audit script — worth saying so (carried from round 1)
 
-**Task:** `task_11_claude_md_slim.md`
-**Issue:** M21 README §Exit criteria §G1 (line 37) currently says "Test: `wc -l CLAUDE.md` shows ≥ 30% reduction; `grep -c "^## " CLAUDE.md` confirms each removed section has a placeholder summary + anchor link." The grep-count test is tautological (a count of `## ` headings doesn't prove anchor links exist). Since AC9c amends this same prose to record satisfaction, the Builder has an opportunity to either (a) leave the test description alone and just append the satisfaction parenthetical, or (b) replace the tautological test with one of the spec's actual smoke greps (e.g. `grep -q "security-reviewer.md#threat-model" CLAUDE.md`).
-**Recommendation:** Builder may either preserve G1 verbatim (minimal-edit) or replace the grep example with one that actually verifies anchor presence — either is acceptable; the satisfaction parenthetical is the load-bearing edit.
-**Push to spec:** yes — append to `## Carry-over from task analysis` as a Builder-discretion note on AC9c.
+**Task:** `task_24_md_discoverability.md`
+**Issue:** AC2 says rule-5 violations are "recorded in the issue file as flagged candidates; refactor only when a clear destination exists." That's fine, but the audit script's `--check` flags only cover rules 1–4 (`summary|section-budget|code-block-len|section-count`). Rule 5 is purely human-judged. Without an explicit note, a Builder may try to encode rule 5 in the script and burn cycles.
+**Recommendation:** Add one sentence to §Step 1: "Rule 5 (one topic per file) is human-judged at audit time; the audit script does not attempt to encode it. Baseline-table column for rule 5 is filled in manually."
+**Push to spec:** yes — append to T24's "Carry-over from task analysis" section as TA-LOW-03.
 
 ## What's structurally sound
 
-- **Six moves enumerated with line-count math.** -40 net delta closes round-1 H1; ≤ 95 line target is reachable with the explicit `§Repo layout` one-line tightening fallback if the math undershoots by 1–2 lines.
-- **Bash-safety in smoke commands.** Steps 1, 5, 6, 7 use `awk 'END { exit !(NR <= 95) }'` and `awk 'END { exit !(NR == 0) }'` patterns instead of `$(...)` substitution; step 4 is unrolled into four explicit greps; no parameter expansion in loop bodies.
-- **AC9 enumerates three real surfaces.** Spec `**Status:**` line, M21 README task-pool row 71, M21 README §Exit criteria §G1 prose — all three verified to exist at the cited locations.
-- **T10 invariants preserved.** Smoke step 7 verifies the `_common/non_negotiables.md` pointer remains in 9/9 agents after ADV-1 strip + ADV-2 parenthetical restoration. The invariant pointer is currently present in 9/9 (verified inline).
-- **ADV-1 + ADV-2 carry-over absorption is bounded and concrete.** The "9 edits" deliverable (spec line 111) is Builder-actionable; smoke step 5 (preamble removed in 9/9) and step 6 (parenthetical restored in 9/9) verify both invariants. Currently 9/9 agents carry the `**No git mutations or publish.**` preamble (verified inline) and 0/9 carry the `(read-only on source code; smoke tests required)` parenthetical (verified inline) — both deltas are real.
-- **Move 3 source/replacement math holds.** `_common/verification_discipline.md` already covers code-task + wire-level + real-install rules (verified — sections 1, 2, 3 of that file); the Move 3 collapse of CLAUDE.md lines 131 + 132 (two bullets) into one pointer is consistent with the table's `2 → 1 = -1` arithmetic.
-- **No KDR drift, no layer-rule drift, no SEMVER surface change.** T11 is doc-only on `.claude/agents/`, `CLAUDE.md`, M21 README, CHANGELOG; no `ai_workflows/` paths touched, no public-API surface affected, no `nice_to_have.md` adoption.
-- **T10 dependency satisfied.** `_common/non_negotiables.md` and `_common/verification_discipline.md` both exist (`ls .claude/agents/_common/` confirms); T10 commit `2f73143` cited.
+- **Round 1 MEDIUMs all resolved cleanly.** Verified inline above; no regressions.
+- **T10 invariant holds.** All 9 top-level `.claude/agents/*.md` reference `_common/non_negotiables.md` (verified — grep returns 9). T24 smoke step 5 will pass.
+- **T11 invariant holds.** `auditor.md`, `task-analyzer.md`, `architect.md`, `dependency-auditor.md` all carry `## Load-bearing KDRs` (verified — grep returns 4). T24 smoke step 6 will pass.
+- **CLAUDE.md slim landed.** Currently 83 lines (T11 satisfaction parenthetical accurate at 39% reduction from 136).
+- **`_common/` directory contents match T24's audit scope.** `ls .claude/agents/_common/` returns exactly `non_negotiables.md` and `verification_discipline.md` — the two files T24 names. No third `_common/` file exists at T24 time, so the AC1 "11 audited MD files (9 + 2)" arithmetic holds.
+- **Sibling slash-command `_common/` correctly excluded.** `.claude/commands/_common/` exists and contains 8 files (`agent_return_schema.md`, `auditor_context_management.md`, `cycle_summary_template.md`, `effort_table.md`, `gate_parse_patterns.md`, `integrity_checks.md`, `parallel_spawn_pattern.md`, `spawn_prompt_template.md`). T24's rubric scope (line 23) explicitly excludes `.claude/commands/*.md` — no scope leak.
+- **Research-brief citation accurate.** T24 spec line 5 cites `research_analysis.md` line 294 — verified, line 294 is exactly `### T24 — MD-file discoverability audit (search-by-section)`.
+- **Task-pool row 73 reference accurate.** README line 73 is the T24 row (Status column = `📝 Candidate`), as AC8 (b) claims.
+- **`agent_docs/` correctly identified as not-yet-existing.** `ls agent_docs/` returns "no such file or directory" — confirms T24's §Out of scope deferral to T26 is materially correct, not just spec-text.
+- **`scripts/audit/` correctly identified as new.** `ls scripts/audit/` returns "no such file or directory" — confirms the script declared in §Deliverables and AC5 is a new-create, not an edit-of-existing.
+- **Bash-safety discipline propagated.** T24 smoke avoids `$(...)` and parameter expansion in loops, matching T11's pattern. `_common/verification_discipline.md` line 29 confirms the `## Bash-safety rules (all agents)` section the spec references.
+- **Layer rule + KDR cleanliness.** T24 only edits `.claude/agents/*.md`, `_common/*.md`, `scripts/audit/md_discoverability.py`, `issues/task_24_issue.md`, `CHANGELOG.md`, and the M21 README. No `ai_workflows/` touches. No KDR drift. SEMVER-neutral.
+- **Status-surface flips enumerated.** AC8 lists three surfaces (spec Status, README task-pool row 73, README §G2 prose) — correct. There is no `tasks/README.md` for M21, so the four-surface checklist applies as three.
+- **Cross-spec consistency with T10 / T11.** T10 + T11 are locked. No T24 claim contradicts a T10 / T11 deliverable; T24 explicitly builds on the destination files T10 created and the slimmed CLAUDE.md T11 produced.
+- **Rubric is non-trivial.** Manual scan still confirms section-budget violations across `task-analyzer.md` (Phase 2 ≈ 1058 words), `auditor.md` (Propagation status ≈ 428 words), `sr-dev.md` + `sr-sdet.md` (six-lenses sections at 690 / 788 words), `architect.md` (Stop and ask ≈ 417 words). T24 has real work to do.
 
 ## Cross-cutting context
 
-- Per project memory `project_autonomy_optimization_followups.md` and `project_m12_autopilot_2026_04_27_checkpoint.md`, M21 follows M20's autonomy-optimization shipment; M20 close-out shipped recently (commit `8c6e8a6` per `git log`). T11 is round 2 of the m21_clean autonomy run; T10 is shipped TERMINAL CLEAN.
-- Per memory `feedback_autonomous_mode_boundaries.md`, T11 work happens on `design_branch` under autonomous mode; `task-analyzer` does not commit. This run is read-mostly + write-only-to-`task_analysis.md`, conformant.
-- The three LOWs are all Builder-discretion clarifications, not blockers; orchestrator should push them to `## Carry-over from task analysis` per `/clean-tasks` LOW-ONLY exit protocol.
+- M21 status per project memory `project_autonomy_optimization_followups.md` is **active under autonomy-optimization follow-ups**. T10 + T11 shipped within the last 24h (commits `2f73143` and `012a9d9`); T24 is the next logical task per README §Suggested phasing (Phase E order: T10 → T11 → T24 → T12).
+- Phase-E ordering matters: T24 strongly precedes T12 (Skills extraction) per README §Cross-phase dependencies. With round-1 M2 resolved, the §G2 satisfaction parenthetical now correctly names the deferred `agent_docs/` portion, so T12 / T26 inherit a non-misleading exit-criterion record.
+- M20 is closed; baseline measurements stable. M21 wins are incremental on top.
+- **Locked specs (T10, T11) are not edited.** Cross-spec checks against T10/T11 produced no inconsistencies in either round.
+- **LOW-ONLY exit semantics.** Per the orchestrator contract, on LOW-ONLY the three LOWs (L1, L2, L3) push down to T24's "Carry-over from task analysis" section as TA-LOW-01 / TA-LOW-02 / TA-LOW-03. No further round needed; the Builder absorbs them at `/clean-implement` time.
