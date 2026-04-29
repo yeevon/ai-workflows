@@ -1,6 +1,9 @@
 ---
 model: claude-opus-4-7
-thinking: max
+thinking:
+  type: adaptive
+effort: high
+# Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
 # /clean-implement
@@ -10,6 +13,20 @@ You are the **Clean Implementation loop controller** for: $ARGUMENTS
 `$ARGUMENTS` is a task identifier — a task ID, spec file path, or shorthand like "m16 t1". You orchestrate a Builder → Auditor loop up to 10 cycles, then run a Security gate (security-reviewer + dependency-auditor when relevant) before declaring the task shippable. **All substantive work runs in dedicated subagents via `Task` spawns** — your job is orchestration and stop-condition evaluation only. Do not implement, do not audit, do not write the issue file yourself.
 
 (This is `Task`-based subagent dispatch, not slash-command chaining. The orchestration loop below stays inlined here so the loop controller never halts after a sub-step returns.)
+
+---
+
+## Agent-return parser convention
+
+After every `Task` spawn, parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/<task>/cycle_<N>/agent_<name>_raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of the agent's allowed tokens (see schema reference); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent <name> returned non-conformant text —
+   see runs/<task>/cycle_<N>/agent_<name>_raw_return.txt`. **Do not auto-retry.**
 
 ---
 
@@ -46,6 +63,127 @@ If anything material is unclear (spec missing, milestone README absent, ambiguou
 
 ---
 
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what each agent will certainly use. Let agents pull the rest on demand via their
+own `Read` tool. Full-document content inlining is wasteful; path references are always safe.
+
+After every `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into
+`runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt` (nested per-cycle directory; no `_<cycle>`
+suffix on the filename).
+
+### runs/<task>/ directory convention
+
+Create `runs/<task-shorthand>/cycle_1/` at the **start of cycle 1**, before spawning the
+first Builder.  Create `runs/<task-shorthand>/cycle_<N>/` at the start of each subsequent
+cycle.  `<task-shorthand>` is `m<MM>_t<NN>` with both M and T zero-padded to two digits
+(e.g. `m20_t03`, `m05_t02`, `m09_t01`).
+
+Per-cycle directory layout (canonical):
+
+```
+runs/<task-shorthand>/
+  cycle_1/
+    summary.md                  ← T03 — cycle-summary (Auditor emits)
+    security-review.md          ← security reviewer fragment
+    spawn_<agent>.tokens.txt    ← T02 — per-spawn token count
+    agent_<name>_raw_return.txt ← T01 — full text return per agent
+    auditor_rotation.txt        ← T27 — rotation event log (present only if rotation fired)
+  cycle_2/
+    ...
+  cycle_N/
+    ...
+  integrity.txt                 ← T09 — pre-commit ceremony (top-level, latest run wins)
+```
+
+See [`.claude/commands/_common/cycle_summary_template.md`](_common/cycle_summary_template.md)
+for the full `cycle_<N>/summary.md` template and the read-only-latest-summary rule.
+
+### Builder spawn — read-only-latest-summary rule
+
+**Cycle 1** — minimal pre-load set:
+- Task spec path
+- Issue file path (may not exist yet)
+- Parent milestone README path
+- Project context brief
+
+**Cycle N (N ≥ 2)** — replace the parent milestone README with the latest cycle summary:
+- Task spec path
+- Issue file path
+- **Most recent `runs/<task>/cycle_{N-1}/summary.md`** (include path + content inline)
+- Project context brief
+
+**Do not include** prior Builder reports' chat content, prior Auditor chat content, or
+prior cycle summaries beyond `cycle_{N-1}/summary.md`.  The summary is the durable
+carry-forward; earlier chat history is ephemeral and must not re-enter the spawn prompt.
+
+**Remove from inline content (all cycles):** sibling task issue files, `architecture.md`
+content, `CHANGELOG.md` content.
+
+Output budget directive (include verbatim in the Builder spawn prompt):
+
+```
+Output budget: 4K tokens. Durable findings live in the file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+### Auditor spawn — read-only-latest-summary rule
+
+**Cycle 1** — minimal pre-load set:
+- Task spec path
+- Issue file path
+- Parent milestone README path
+- Project context brief
+- Current `git diff`
+- Cited KDR identifiers (parsed from the task spec — e.g. "KDR-003, KDR-013")
+
+**Cycle N (N ≥ 2)** — add the latest cycle summary:
+- Task spec path
+- Issue file path
+- Parent milestone README path
+- Project context brief
+- Current `git diff`
+- Cited KDR identifiers (compact pointer)
+- **Most recent `runs/<task>/cycle_{N-1}/summary.md`** (include path + content inline)
+
+**Do not include** prior cycle summaries beyond the most recent one.  The summary is the
+durable carry-forward; full prior-cycle chat history must not re-enter the spawn prompt.
+
+**Remove from inline content (all cycles):** whole `architecture.md` content (Auditor reads
+on-demand), sibling issue file content, whole-milestone-README content. Path references
+stay; content inlining goes.
+
+**KDR pre-load rule:** parse KDR citations from the task spec. Pass only those identifiers
+as a compact list (e.g. "Relevant KDRs: KDR-003, KDR-013 — read §9 of architecture.md
+on-demand for the full text"). When no KDRs are cited, pass the §9 grid header only.
+
+Output budget directive (include verbatim in the Auditor spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the issue file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+### Reviewer spawns (security-reviewer, dependency-auditor)
+
+Minimal pre-load set: task spec path, issue file path, project context brief, current
+`git diff`, list of files touched (aggregated from Builder reports across all cycles).
+
+**Remove from inline content:** full source file content, full test file content,
+`architecture.md` content.
+
+Output budget directive (include verbatim in each reviewer spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the issue file you append;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+---
+
 ## Stop conditions (check after every audit, in priority order)
 
 1. **BLOCKER** — Issue file contains a HIGH issue marked `🚧 BLOCKED` requiring user input. Stop, surface verbatim.
@@ -63,11 +201,73 @@ For cycles 1..10:
 
 ### Step 1 — Builder
 
-Spawn the `builder` subagent via `Task` with: task identifier, spec path, issue file path, project context brief, parent milestone README path. Wait for completion. Capture the Builder's report.
+Spawn the `builder` subagent via `Task` with the inputs prescribed by the
+"Builder spawn — read-only-latest-summary rule" section above (cycle 1: include
+parent milestone README path; cycle N ≥ 2: replace it with the latest cycle
+summary content). Wait for completion. Capture the Builder's report.
+
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent builder --model <model-slug> --effort <effort>
+```
+After the Task returns, run:
+```bash
+python scripts/orchestration/telemetry.py complete --task <task-shorthand> --cycle <N> \
+  --agent builder --input-tokens <n> --output-tokens <n> \
+  [--cache-creation <n>] [--cache-read <n>] --verdict <BUILT|BLOCKED|STOP-AND-ASK> \
+  [--fragment-path <path>] [--section <section>]
+```
+Record lands at `runs/<task>/cycle_<N>/builder.usage.json`.
 
 ### Step 2 — Auditor
 
-Spawn the `auditor` subagent via `Task` with: task identifier, spec path, issue file path, architecture docs + KDR paths, gate commands, project context brief, the Builder's report from Step 1. Wait for completion.
+**Input-volume rotation trigger (T27):** Before spawning the Auditor on cycle N ≥ 2,
+read `runs/<task>/cycle_{N-1}/auditor.usage.json` (T22 record from the previous cycle).
+Run the rotation check:
+
+```bash
+python scripts/orchestration/auditor_rotation.py \
+  --input-tokens <input_tokens from cycle_{N-1} record> \
+  --verdict <verdict from cycle_{N-1} record>
+```
+
+- Output `ROTATE` (exit 1) AND cycle N-1 verdict was `OPEN` → spawn the Auditor with
+  the **compacted input** (spec path + issue file path + project context brief +
+  current `git diff` + `runs/<task>/cycle_{N-1}/summary.md` content only).
+  Write the rotation event log:
+  ```bash
+  # Path: runs/<task>/cycle_{N-1}/auditor_rotation.txt
+  # Content: ROTATED: cycle <N-1> input_tokens=<value>; cycle <N> spawn input
+  #          compacted (cycle_summary + diff only)
+  ```
+  See [`.claude/commands/_common/auditor_context_management.md`](_common/auditor_context_management.md)
+  for the full compacted-input shape and Path A rejection rationale (audit H6).
+- Output `NO-ROTATE` (exit 0) → spawn the Auditor with the **standard input** per
+  the "Auditor spawn — read-only-latest-summary rule" section above.
+- **Cycle 1:** no prior telemetry record exists; always use standard input (no rotation check).
+- **Verdict PASS:** rotation check is moot — the loop ends. No rotation log written.
+
+`AIW_AUDITOR_ROTATION_THRESHOLD` env var lowers/raises the trigger threshold (default
+60 000 input tokens). Pass it through when invoking the helper.
+
+Spawn the `auditor` subagent via `Task` with the inputs selected above (compacted or
+standard). Include cited KDR identifiers (compact pointer per scope-discipline section
+above). Wait for completion.
+
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent auditor --model <model-slug> --effort <effort>
+```
+After the Task returns, run:
+```bash
+python scripts/orchestration/telemetry.py complete --task <task-shorthand> --cycle <N> \
+  --agent auditor --input-tokens <n> --output-tokens <n> \
+  [--cache-creation <n>] [--cache-read <n>] --verdict <PASS|OPEN|BLOCKED> \
+  [--fragment-path <issue-file-path>] [--section <section>]
+```
+Record lands at `runs/<task>/cycle_<N>/auditor.usage.json`.
 
 ### Step 3 — Read issue file and evaluate stop conditions
 
@@ -91,9 +291,17 @@ The functional audit confirmed the task does what the spec says. The security ga
 
 ### Step S1 — Security reviewer (always runs)
 
-Spawn `security-reviewer` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task (aggregate from all Builder reports), architecture docs + KDR paths.
+Spawn `security-reviewer` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task (aggregate from all Builder reports), cited KDR identifiers (compact pointer per scope-discipline section above).
 
 The security-reviewer writes findings into the same issue file under `## Security review`. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent security-reviewer --model <model-slug> --effort <effort>
+```
+After the Task returns, run `complete` with the security verdict. Record lands at
+`runs/<task>/cycle_<N>/security-reviewer.usage.json`.
 
 ### Step S2 — Dependency auditor (conditional)
 
@@ -112,6 +320,55 @@ Re-read the issue file. Evaluate in priority order:
 3. **CLEAN** — All applicable reviewers' verdicts are `SHIP`. Report the task fully CLEAN.
 
 When re-looping from a security verdict, the Builder's next-cycle inputs include the security findings as carry-over ACs (the Auditor grades them as ACs on re-audit — which is what you want; security fixes get the same "re-verify the whole scope" treatment as any other change).
+
+---
+
+## Gate-capture-and-parse convention (required before declaring CLEAN)
+
+**Reference:** [`.claude/commands/_common/gate_parse_patterns.md`](_common/gate_parse_patterns.md)
+
+Before declaring the task fully CLEAN (after the security gate passes), the orchestrator
+independently runs each gate command and captures output to
+`runs/<task>/cycle_<N>/gate_<name>.txt`.
+
+### Capture step
+
+For each gate (`uv run pytest`, `uv run lint-imports`, `uv run ruff check`, plus any
+task-specific smoke test gates named in the spec):
+
+1. Run the gate command via Bash.
+2. Capture stdout + stderr + exit code into `runs/<task>/cycle_<N>/gate_<name>.txt`
+   using the format described in `_common/gate_parse_patterns.md` §Capture format.
+   Gate file names: `gate_pytest.txt`, `gate_lint-imports.txt`, `gate_ruff.txt`
+   (task-specific gates use their command slug, e.g. `gate_smoke.txt`).
+3. Record the exit code in the same file or a companion `gate_<name>.exit` file.
+
+### Parse step
+
+For each captured file, parse the footer line per the regex table in
+`_common/gate_parse_patterns.md`:
+
+- `pytest`:       `^=+ \d+ passed` (and no `failed` on the same line)
+- `ruff`:         `^All checks passed\.$` or `^\d+ files? checked\.$`
+- `lint-imports`: `^Contracts kept$` (exact, trimmed)
+
+### Halt condition
+
+If **any** of the following is true for any gate, halt immediately with:
+
+```
+🚧 BLOCKED: gate <name> output not parseable; see runs/<task>/cycle_<N>/gate_<name>.txt
+```
+
+1. The captured file is empty (zero bytes or whitespace only).
+2. No line in the file matches the gate's footer regex.
+3. Exit code ≠ 0 (even if a footer line is present).
+4. Footer line is present but indicates failures (e.g. `failed` in a pytest footer).
+
+**Do not declare the task CLEAN if any gate halts.**
+
+The captured files become the durable record consulted by the user on their follow-up
+review (per the per-cycle directory layout above).
 
 ---
 

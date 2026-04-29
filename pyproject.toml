@@ -107,6 +107,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
   "e2e: end-to-end test that hits a real API; only runs when AIW_E2E=1",
+  "benchmark: manual wall-clock benchmark; run with uv run pytest -m benchmark",
 ]
 
 [tool.ruff]

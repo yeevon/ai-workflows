@@ -1,6 +1,9 @@
 ---
 model: claude-opus-4-7
-thinking: max
+thinking:
+  type: adaptive
+effort: medium
+# Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
 # /queue-pick
@@ -15,6 +18,49 @@ This is the manual / one-shot version: run `/queue-pick`, get a recommendation, 
 
 ---
 
+## Agent-return parser convention
+
+After the `roadmap-selector` `Task` spawn, parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/queue-pick-<ts>-raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of `PROCEED`, `NEEDS-CLEAN-TASKS`, `HALT-AND-ASK`
+   (roadmap-selector's allowed tokens); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent roadmap-selector returned non-conformant text —
+   see the raw return file`. **Do not auto-retry.**
+
+---
+
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what the `roadmap-selector` will certainly use. Let the agent pull milestone
+README contents and task spec details on demand via its own `Read` tool.
+
+After the `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into
+`runs/queue-pick-<ts>/spawn_roadmap-selector.tokens.txt`.
+
+### roadmap-selector spawn
+
+Minimal pre-load set: recommendation file path, project context brief, milestone scope
+(from `$ARGUMENTS`, or "all open").
+
+**Remove from inline content:** full milestone README content, full task spec content,
+`architecture.md` content.
+
+Output budget directive (include verbatim in the roadmap-selector spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the recommendation file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+---
+
 ## Project setup
 
 Resolve `$ARGUMENTS`:
@@ -22,11 +68,16 @@ Resolve `$ARGUMENTS`:
 - **Empty:** roadmap-selector scans all `design_docs/phases/milestone_*/` directories.
 - **"m10 m15" / "m10":** pass the milestone list verbatim to roadmap-selector.
 
-**Compute the project memory path at runtime** — do not hardcode a username or machine path. The Claude Code auto-memory directory is hashed off the current working directory (each `/` in cwd becomes `-`), and lives under `$HOME/.claude/projects/`. Compute via Bash:
+**Compute the project memory path at runtime** — do not hardcode a username or machine path. The Claude Code auto-memory directory is hashed off the current working directory (each `/` in cwd becomes `-`), and lives under `$HOME/.claude/projects/`. **Avoid shell expansion**: `$(pwd | tr / -)` and `${HOME}` substitutions inside a single Bash call trip Claude Code's `Contains expansion` guard and prompt the user, breaking unattended autonomy.
+
+Use **two separate Bash calls** plus orchestrator-side string assembly:
 
 ```bash
-MEMORY_PATH="$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md"
+pwd                # capture working-dir path
+printenv HOME      # capture invoking user's home (no expansion)
 ```
+
+Then in your own thinking: replace every `/` in the captured working-dir path with `-`, and substitute into the form `<HOME>/.claude/projects/<encoded-path>/memory/MEMORY.md`. The resolved string is the `MEMORY_PATH`.
 
 If the resulting path does not exist on disk, that's a pre-condition failure — the orchestrator was invoked from a directory Claude Code has not yet seen. Halt and surface the question (which is unusual; in normal operation the auto-memory dir is created on first conversation in the project).
 
@@ -50,6 +101,15 @@ Recommendation file path: `runs/queue-pick-<YYYYMMDD-HHMMSS>.md` (under the giti
 ### Step 1 — Spawn roadmap-selector
 
 Spawn the `roadmap-selector` subagent via `Task` with: the recommendation-file path, the project context brief, the milestone list (if any). Wait for completion.
+
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn \
+  --task queue_pick --cycle 1 \
+  --agent roadmap-selector --model <model-slug> --effort medium
+```
+After the Task returns, run `complete` with the verdict (PROCEED/NEEDS-CLEAN-TASKS/HALT-AND-ASK).
+Record lands at `runs/queue_pick/cycle_1/roadmap-selector.usage.json`.
 
 ### Step 2 — Read recommendation file
 

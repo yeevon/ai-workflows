@@ -1,6 +1,9 @@
 ---
 model: claude-opus-4-7
-thinking: max
+thinking:
+  type: adaptive
+effort: high
+# Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
 # /auto-implement
@@ -12,6 +15,202 @@ You are the **Autonomous Implementation loop controller** for: $ARGUMENTS
 **All substantive work runs in dedicated subagents via `Task` spawns.** Your job is orchestration, stop-condition evaluation, and the terminal commit ceremony — never implement, never audit, never write reviews yourself.
 
 (This is `Task`-based subagent dispatch, not slash-command chaining. The orchestration loop stays inlined here so the loop controller never halts after a sub-step returns. See memory note `feedback_skill_chaining_reuse.md`.)
+
+---
+
+## Agent-return parser convention
+
+After every `Task` spawn, parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/<task>/cycle_<N>/agent_<name>_raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of the agent's allowed tokens (see schema reference); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent <name> returned non-conformant text —
+   see runs/<task>/cycle_<N>/agent_<name>_raw_return.txt`. **Do not auto-retry.**
+
+---
+
+## Cache-breakpoint verification (T23)
+
+**Reference:** [`scripts/orchestration/cache_verify.py`](../../scripts/orchestration/cache_verify.py) · [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md) §Stable-prefix discipline
+
+After the pre-flight checks and before spawning the first Builder, the operator
+may run the cache-breakpoint verifier to confirm the stable-prefix discipline
+is in effect for the agents this run will use:
+
+```bash
+python scripts/orchestration/cache_verify.py --agent builder  --task <task-shorthand> \
+    --dry-run \
+    --spawn1-record runs/<task>/cycle_1/builder.usage.json \
+    --spawn2-record runs/<task>/cycle_2/builder.usage.json
+python scripts/orchestration/cache_verify.py --agent auditor  --task <task-shorthand> \
+    --dry-run \
+    --spawn1-record runs/<task>/cycle_1/auditor.usage.json \
+    --spawn2-record runs/<task>/cycle_2/auditor.usage.json
+```
+
+Output lands at `runs/<task>/cache_verification.txt` (one file per task, last
+run wins — the task shorthand in the filename is the same as the current task).
+
+**Halt surface:** if the verifier exits with code 2 (FAIL), the orchestrator
+surfaces:
+
+```
+🚧 Cache breakpoint regression — see runs/<task>/cache_verification.txt
+```
+
+and halts.  The fix is to locate and remove any per-request timestamp, UUID, or
+hostname string from the agent's stable prefix (see
+`.claude/commands/_common/spawn_prompt_template.md` §Stable-prefix discipline).
+
+**When the verifier fires per-cycle vs. operator-resume:**
+The verification requires two consecutive telemetry records for the same agent,
+which are only available after at least 2 cycles have run.  The verifier is
+therefore an **operator-resume step** (run after a task completes to confirm
+cache discipline held) rather than a per-cycle gate.  The AC-7 empirical
+validation (re-running M12 T01 audit cycle with T23 in place) is explicitly
+deferred to operator-resume — see `runs/cache_verification/methodology.md`
+and the T23 issue file §Carry-over for the full rationale (parallel to T06 L5
+deferral).
+
+---
+
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what each agent will certainly use. Let agents pull the rest on demand via their
+own `Read` tool. Full-document content inlining is wasteful; path references are always safe.
+
+After every `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into
+`runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt` (nested per-cycle directory; no `_<cycle>`
+suffix on the filename).
+
+### runs/<task>/ directory convention
+
+Create `runs/<task-shorthand>/cycle_1/` at the **start of cycle 1**, before spawning the
+first Builder.  Create `runs/<task-shorthand>/cycle_<N>/` at the start of each subsequent
+cycle.  `<task-shorthand>` is `m<MM>_t<NN>` with both M and T zero-padded to two digits
+(e.g. `m20_t03`, `m05_t02`, `m09_t01`).
+
+Per-cycle directory layout (canonical — shared with T05, T08, T22, T27):
+
+```
+runs/<task-shorthand>/
+  cycle_1/
+    summary.md                  ← T03 — cycle-summary (Auditor emits)
+    sr-dev-review.md            ← T05 — reviewer fragment
+    sr-sdet-review.md           ← T05 — reviewer fragment
+    security-review.md          ← T05 — reviewer fragment
+    builder.usage.json          ← T22 — telemetry
+    auditor.usage.json          ← T22 — telemetry
+    gate_pytest.txt             ← T08 — gate-output capture
+    gate_lint-imports.txt       ← T08
+    gate_ruff.txt               ← T08
+    spawn_<agent>.tokens.txt    ← T02 — per-spawn token count
+    agent_<name>_raw_return.txt ← T01 — full text return per agent
+    auditor_rotation.txt        ← T27 — rotation event log (present only if rotation fired)
+  cycle_2/
+    ...
+  cycle_N/
+    ...
+  integrity.txt                 ← T09 — pre-commit ceremony (top-level, latest run wins)
+  meta.json                     ← T17 — parallel-build flag + pre-task commit SHA
+```
+
+See [`.claude/commands/_common/cycle_summary_template.md`](_common/cycle_summary_template.md)
+for the full `cycle_<N>/summary.md` template and the read-only-latest-summary rule.
+
+### Builder spawn — read-only-latest-summary rule
+
+**Cycle 1** — minimal pre-load set:
+- Task spec path
+- Issue file path (may not exist yet)
+- Parent milestone README path
+- Project context brief
+
+**Cycle N (N ≥ 2)** — replace the parent milestone README with the latest cycle summary:
+- Task spec path
+- Issue file path
+- **Most recent `runs/<task>/cycle_{N-1}/summary.md`** (include path + content inline)
+- Project context brief
+
+**Do not include** prior Builder reports' chat content, prior Auditor chat content, or
+prior cycle summaries beyond `cycle_{N-1}/summary.md`.  The summary is the durable
+carry-forward; earlier chat history is ephemeral and must not re-enter the spawn prompt.
+
+**Remove from inline content (all cycles):** sibling task issue files, `architecture.md`
+content, `CHANGELOG.md` content.
+
+**T26 long-running trigger override** — when `runs/<task>/plan.md` and
+`runs/<task>/progress.md` exist, replace the cycle-N>=2 `cycle_{N-1}/summary.md` pre-load
+entry with `plan.md` (immutable) + `progress.md` (cumulative). See
+`agent_docs/long_running_pattern.md`.
+
+Output budget directive (include verbatim in the Builder spawn prompt):
+
+```
+Output budget: 4K tokens. Durable findings live in the file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+### Auditor spawn — read-only-latest-summary rule
+
+**Cycle 1** — minimal pre-load set:
+- Task spec path
+- Issue file path
+- Parent milestone README path
+- Project context brief
+- Current `git diff`
+- Cited KDR identifiers (parsed from the task spec — e.g. "KDR-003, KDR-013")
+
+**Cycle N (N ≥ 2)** — add the latest cycle summary:
+- Task spec path
+- Issue file path
+- Parent milestone README path
+- Project context brief
+- Current `git diff`
+- Cited KDR identifiers (compact pointer)
+- **Most recent `runs/<task>/cycle_{N-1}/summary.md`** (include path + content inline)
+
+**Do not include** prior cycle summaries beyond the most recent one.  The summary is the
+durable carry-forward; full prior-cycle chat history must not re-enter the spawn prompt.
+
+**Remove from inline content (all cycles):** whole `architecture.md` content (Auditor reads
+on-demand), sibling issue file content, whole-milestone-README content. Path references
+stay; content inlining goes.
+
+**KDR pre-load rule:** parse KDR citations from the task spec. Pass only those identifiers
+as a compact list (e.g. "Relevant KDRs: KDR-003, KDR-013 — read §9 of architecture.md
+on-demand for the full text"). When no KDRs are cited, pass the §9 grid header only.
+
+**No T26 override for the Auditor spawn** — the Auditor continues to receive standard inputs
+regardless of the T26 trigger state.
+
+Output budget directive (include verbatim in the Auditor spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the issue file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+### Reviewer spawns (sr-dev, sr-sdet, security-reviewer)
+
+Minimal pre-load set: task spec path, issue file path, project context brief, current
+`git diff`, list of files touched (aggregated from Builder reports across all cycles).
+
+**Remove from inline content:** full source file content, full test file content,
+`architecture.md` content.
+
+Output budget directive (include verbatim in each reviewer spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the issue file you append;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
 
 ---
 
@@ -35,9 +234,11 @@ If at any point the loop attempts to invoke a halted operation, abort the cycle 
 
 ## Pre-flight (before any agent spawn)
 
-1. **Sandbox check.** Verify `AIW_AUTONOMY_SANDBOX=1` is set in the environment (`echo "${AIW_AUTONOMY_SANDBOX:-}"` returns `1`). This var is set in `docker-compose.yml` for the sandbox container only. **HARD HALT** if missing or empty — autonomous mode does not run on the host. The fix is `make shell` (or `docker compose run --rm aiw bash`) and re-invoke from inside the container after `claude /login`.
-2. **Branch check.** `git rev-parse --abbrev-ref HEAD` must return `design_branch`. HARD HALT otherwise — autonomous mode does not switch branches.
-3. **Working tree check.** `git status --short` must be empty. HARD HALT on a dirty tree — the loop would conflate prior changes with this task's diff at commit time.
+**Important — avoid shell expansion in pre-flight Bash calls.** Each step below is a separate Bash invocation; do not assemble status strings via `$(...)` substitution or `${VAR:-default}` in a single Bash call (Claude Code's `Contains expansion` guard prompts the user on those, breaking unattended autonomy).
+
+1. **Sandbox check.** Run `printenv AIW_AUTONOMY_SANDBOX` (no expansion). Output is `1` inside the sandbox container or empty/error on the host. **HARD HALT** if not `1` — autonomous mode does not run on the host. The fix is `make shell` (or `docker compose run --rm aiw bash`) and re-invoke from inside the container after `claude /login`.
+2. **Branch check.** Run `git rev-parse --abbrev-ref HEAD`. Output must be `design_branch`. HARD HALT otherwise — autonomous mode does not switch branches.
+3. **Working tree check.** Run `git status --short`. Output must be empty. HARD HALT on a dirty tree — the loop would conflate prior changes with this task's diff at commit time.
 
 If any pre-flight check fails, surface the failure verbatim and halt before spawning the first subagent.
 
@@ -52,6 +253,10 @@ Resolve `$ARGUMENTS` to concrete paths:
 - **Parent milestone README:** `design_docs/phases/milestone_<M>_<name>/README.md`.
 
 (Branch + clean-tree checks already ran in the pre-flight section above.)
+
+**Capture pre-task commit SHA:** run `git rev-parse HEAD` and record as `<pre-task-commit>`.
+This is used by the Pre-commit ceremony (Check 1 and Check 2) to compare the working tree
+against the state before the first Builder spawn. Record to `runs/<task-shorthand>/pre_task_commit.txt`.
 
 Build the **project context brief** — pass verbatim to every subsequent `Task` spawn:
 
@@ -77,14 +282,66 @@ Autonomy mode: ON — auto-commit + push design_branch only; HARD HALT on main/p
 
 If anything material is unclear (spec missing, milestone README absent, ambiguous shorthand) — **halt and surface to the user** before spawning agents.
 
+**Parallel-build flag (T18 gate):** At project-setup time, check whether the task spec
+contains a `## Slice scope` section. If present, record `PARALLEL_ELIGIBLE=true` in
+`runs/<task>/meta.json` alongside the pre-task commit SHA. If absent, record
+`PARALLEL_ELIGIBLE=false`. In M21 with T18 not yet shipped, this flag is always `false`
+in practice — the check is a forward-compatible stub. Write the file inline (no separate
+agent spawn needed):
+
+```json
+{
+  "PARALLEL_ELIGIBLE": false,
+  "pre_task_commit": "<pre-task-commit>",
+  "task": "<task-shorthand>"
+}
+```
+
+---
+
+## Two-prompt long-running pattern (T26)
+
+**Reference:** [`agent_docs/long_running_pattern.md`](../../agent_docs/long_running_pattern.md)
+
+### Trigger check (inline, at project-setup time)
+
+The pattern fires when **either** is true at the start of cycle N:
+
+1. The task spec carries `**Long-running:** yes` under the spec header.
+2. `N >= 3` (third Builder cycle on the same task).
+
+For N < 3 with no opt-in, the existing T03 cycle-summary rule is the only carry-forward.
+
+### Initializer step (one-shot at first trigger fire — cycle 1 for opt-in tasks; cycle 3 for auto-trigger)
+
+1. Read the task spec.
+2. Write `runs/<task>/plan.md` — extracted from spec `## Why this task exists` +
+   `## What to Build` (high level) + `## Out of scope` + `## Acceptance criteria`.
+   No invented scope.
+3. Seed `runs/<task>/progress.md` with heading `# Progress — <task>` and an empty
+   `## Cycle 1` section the Auditor will populate at end of cycle 1.
+
+This is a one-shot, inline orchestrator step — not a separate agent spawn.
+
+### Builder spawn change when trigger is on (cycle N >= 2)
+
+Replace the cycle N>=2 read-only-latest-summary rule with:
+
+- Pass `plan.md` (full content, immutable) + `progress.md` (full content, monotonic).
+- Drop `cycle_{N-1}/summary.md` from the Builder's pre-load — its content is already
+  captured in `progress.md`'s most recent `## Cycle <N>` section.
+
+See `agent_docs/long_running_pattern.md` for the full reference including the worked
+example and Auditor-side `progress.md` update shape.
+
 ---
 
 ## Stop conditions (functional loop, check after every audit, in priority order)
 
 1. **BLOCKER** — Issue file contains a HIGH issue marked `🚧 BLOCKED` requiring user input. Halt, surface verbatim.
 2. **USER INPUT REQUIRED** — Any issue recommends "stop and ask the user" / "user decision needed" **and the auditor's recommendation is genuinely ambiguous** (two or more reasonable paths surfaced; the auditor declines to pick one; the choice is a substantive design lock the user must own). Halt, list all such issues. **Auditor-agreement bypass:** if the auditor surfaced a single clear recommendation (one path, not "Option A vs Option B for the user to pick") and you concur with that recommendation against the spec + KDRs + locked decisions in the issue file, treat the recommendation as the locked decision: stamp it into the issue file as `Locked decision (loop-controller + Auditor concur, YYYY-MM-DD): <one-line summary>`, feed it to the next Builder cycle as a carry-over AC, and continue the loop. Halt only if (a) the auditor presents two or more options without a recommendation, (b) the recommendation conflicts with a locked KDR / prior user decision / the spec, (c) the recommendation expands scope beyond the spec, or (d) the recommendation defers work to a future task that the user hasn't already agreed exists.
-3. **FUNCTIONALLY CLEAN** — Issue file status line reads `✅ PASS` with no OPEN issues. Proceed to the **security + team gates** below.
-4. **CYCLE LIMIT** — 10 build → audit cycles without 1–3. Halt, present outstanding issues. **Do not run the security or team gates against an unclean task.**
+3. **FUNCTIONALLY CLEAN** — Issue file status line reads `✅ PASS` with no OPEN issues. Proceed to the **unified terminal gate** below.
+4. **CYCLE LIMIT** — 10 build → audit cycles without 1–3. Halt, present outstanding issues. **Do not run the terminal gate against an unclean task.**
 
 **At the start of cycle 1 only:** if the issue file already contains an unresolved BLOCKER from a prior session, treat as condition 1 immediately — don't spawn the Builder against an open blocker.
 
@@ -96,15 +353,173 @@ For cycles 1..10:
 
 ### Step 1 — Builder
 
-Spawn the `builder` subagent via `Task` with: task identifier, spec path, issue file path, project context brief, parent milestone README path. Wait for completion. Capture the Builder's report.
+**T26 trigger re-check (every cycle):** If the T26 long-running trigger was not already on
+at cycle 1, re-evaluate it now: if N >= 3 and `runs/<task>/plan.md` does not yet exist,
+run the initializer step inline before spawning the Builder (write `plan.md` from the spec
+and seed `progress.md` as described in the §Two-prompt long-running pattern (T26) section above).
+
+#### Parallel-Builder dispatch path (T18)
+
+Read `runs/<task>/meta.json` (written at project setup). Branch on `PARALLEL_ELIGIBLE`:
+
+**If `PARALLEL_ELIGIBLE=true`:**
+
+1. Read the task spec's `## Slice scope` table to enumerate slices (slice names + file lists).
+2. **Concurrency cap — ≤4 slices per cycle.** If the spec has more than 4 slices, only the
+   first 4 run in parallel this cycle; slices 5+ run in the next cycle.
+3. For each slice (up to 4), spawn an isolated Builder Agent via `Task` with:
+   - `isolation: "worktree"` — each Builder gets its own git worktree copy.
+   - Same pre-load inputs as the serial Builder spawn rule (spec path, issue path,
+     project context brief, latest cycle summary if N ≥ 2).
+   - Extra constraint in prompt: `"Work ONLY on the files listed in your slice scope:
+     <slice-N files>. Do not touch files outside this list."`
+   - Telemetry: pass `--agent builder-slice-<N>` (1-indexed) so per-slice cost is
+     tracked separately.
+4. Run all slice spawns **in a single orchestrator turn** (parallel Task calls). Wait for
+   all slices to complete. Collect all Builder reports.
+5. **Overlap detection** — after all parallel Builders return, cross-check changed files:
+
+   Cross-check the files-touched lists from each Builder's report. For a git-level
+   check, use `git -C <worktree-path> diff --name-only HEAD` per worktree — not
+   `git diff --name-only` in the main tree (main tree has no pending changes yet
+   when worktrees are isolated).
+
+   If any file appears in multiple slices' Builder reports, surface:
+   ```
+   🚧 BLOCKED: parallel-Builder overlap detected — <file> modified by slice-A and slice-B.
+   Review slice scope in spec ## Slice scope section.
+   ```
+   Do not proceed to the Auditor spawn until the overlap is manually resolved.
+
+6. **Worktree merge** — apply each worktree's changes into the main working tree. The Agent
+   tool with `isolation: worktree` returns the worktree path in its result when changes
+   were made; the orchestrator applies them via cherry-pick or merge.
+   After applying the worktree's changes, run:
+   ```bash
+   git worktree remove <worktree-path>
+   ```
+
+7. **Worktree cleanup** — covers ALL worktrees (both empty-diff and merged):
+   Worktree cleanup covers two cases:
+   - Empty-diff (no changes): run `git worktree remove <worktree-path>` immediately.
+   - Successfully merged: run `git worktree remove <worktree-path>` after Step 6 merge.
+   In both cases, do not leave worktrees on disk after the cycle completes.
+
+#### Post-parallel merge (T19)
+
+After all slice Builders return, overlap check passes, and Step 6–7 (worktree merge +
+cleanup) completes, the combined diff is now in the main working tree. Apply each
+worktree's changes to the main working tree in slice order using:
+
+```bash
+git diff <worktree-path> | git apply --index
+# or: git cherry-pick <worktree-HEAD-commit>
+```
+
+On apply failure (merge conflict): **HARD HALT**:
+```
+🚧 HARD HALT — merge conflict in post-parallel merge; resolve manually.
+```
+
+Once all worktrees are applied:
+
+- Proceed to **Step 2 (Auditor spawn)** exactly as in the serial path. The Auditor sees
+  the full combined diff — not per-slice diffs.
+- After FUNCTIONALLY CLEAN, the **terminal gate** (unified sr-dev + sr-sdet +
+  security-reviewer) runs as today — single pass, not once-per-slice.
+- **Status-surface flips happen once** after the combined-diff Auditor pass, not
+  once-per-slice. The four surfaces (per-task spec `**Status:**` line, milestone README
+  task table row, `tasks/README.md` row if present, milestone README "Done when"
+  checkboxes) all flip together in the commit ceremony — same discipline as serial builds.
+
+8. **Telemetry (T22):** before spawning each parallel slice, run a `spawn` record for each:
+   ```bash
+   python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+     --agent builder-slice-1 --model <model-slug> --effort <effort>
+   python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+     --agent builder-slice-2 --model <model-slug> --effort <effort>
+   # ...repeat for each slice up to 4
+   ```
+   After all Tasks return, run a `complete` record for each using their respective verdicts.
+   Records land at `runs/<task>/cycle_<N>/builder-slice-<N>.usage.json`.
+
+**If `PARALLEL_ELIGIBLE=false`** (no `## Slice scope` section — serial path, unchanged):
+
+Spawn the `builder` subagent via `Task` with the inputs prescribed by the
+"Builder spawn — read-only-latest-summary rule" section above (cycle 1: include
+parent milestone README path; cycle N ≥ 2: replace it with the latest cycle
+summary content). Wait for completion. Capture the Builder's report.
+
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent builder --model <model-slug> --effort <effort>
+```
+After the Task returns, run:
+```bash
+python scripts/orchestration/telemetry.py complete --task <task-shorthand> --cycle <N> \
+  --agent builder --input-tokens <n> --output-tokens <n> \
+  [--cache-creation <n>] [--cache-read <n>] --verdict <BUILT|BLOCKED|STOP-AND-ASK> \
+  [--fragment-path <path>] [--section <section>]
+```
+Read the Task's response metadata fields for token counts; use the regex proxy
+(`len(re.findall(r"\S+", text)) * 1.3`) for input_tokens when metadata is unavailable.
+Cache-* fields are null if the Task tool surface check found them unavailable.
+Record lands at `runs/<task>/cycle_<N>/builder.usage.json`.
 
 ### Step 2 — Auditor
 
-Spawn the `auditor` subagent via `Task` with: task identifier, spec path, issue file path, architecture docs + KDR paths, gate commands, project context brief, the Builder's report from Step 1. Wait for completion.
+**Input-volume rotation trigger (T27):** Before spawning the Auditor on cycle N ≥ 2,
+read `runs/<task>/cycle_{N-1}/auditor.usage.json` (T22 record from the previous cycle).
+Run the rotation check:
+
+```bash
+python scripts/orchestration/auditor_rotation.py \
+  --input-tokens <input_tokens from cycle_{N-1} record> \
+  --verdict <verdict from cycle_{N-1} record>
+```
+
+- Output `ROTATE` (exit 1) AND cycle N-1 verdict was `OPEN` → spawn the Auditor with
+  the **compacted input** (spec path + issue file path + project context brief +
+  current `git diff` + `runs/<task>/cycle_{N-1}/summary.md` content only).
+  Write the rotation event log:
+  ```bash
+  # (orchestrator writes this file directly — no separate script call needed)
+  # Path: runs/<task>/cycle_{N-1}/auditor_rotation.txt
+  # Content: ROTATED: cycle <N-1> input_tokens=<value>; cycle <N> spawn input
+  #          compacted (cycle_summary + diff only)
+  ```
+  See [`.claude/commands/_common/auditor_context_management.md`](_common/auditor_context_management.md)
+  for the full compacted-input shape and Path A rejection rationale (audit H6).
+- Output `NO-ROTATE` (exit 0) → spawn the Auditor with the **standard input** per
+  the "Auditor spawn — read-only-latest-summary rule" section above.
+- **Cycle 1:** no prior telemetry record exists; always use standard input (no rotation check).
+- **Verdict PASS:** rotation check is moot — the loop ends. No rotation log written.
+
+`AIW_AUDITOR_ROTATION_THRESHOLD` env var lowers/raises the trigger threshold (default
+60 000 input tokens). Pass it through when invoking the helper.
+
+Spawn the `auditor` subagent via `Task` with the inputs selected above (compacted or
+standard). Include cited KDR identifiers (compact pointer per scope-discipline section
+above). Wait for completion.
+
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent auditor --model <model-slug> --effort <effort>
+```
+After the Task returns, run:
+```bash
+python scripts/orchestration/telemetry.py complete --task <task-shorthand> --cycle <N> \
+  --agent auditor --input-tokens <n> --output-tokens <n> \
+  [--cache-creation <n>] [--cache-read <n>] --verdict <PASS|OPEN|BLOCKED> \
+  [--fragment-path <issue-file-path>] [--section <section>]
+```
+Record lands at `runs/<task>/cycle_<N>/auditor.usage.json`.
 
 ### Step 3 — Read issue file and evaluate stop conditions
 
-**Read the issue file on disk.** Do not trust the Auditor's chat summary — the issue file is the source of truth. Evaluate the four stop conditions in order against what's actually written. If condition 3 (FUNCTIONALLY CLEAN) triggers, go to the **security gate**. If none trigger and cycles remain, loop to Step 1 targeting only the OPEN issues the audit identified.
+**Read the issue file on disk.** Do not trust the Auditor's chat summary — the issue file is the source of truth. Evaluate the four stop conditions in order against what's actually written. If condition 3 (FUNCTIONALLY CLEAN) triggers, go to the **unified terminal gate**. If none trigger and cycles remain, loop to Step 1 targeting only the OPEN issues the audit identified.
 
 **Between Step 1 and Step 2, forbidden:**
 
@@ -118,72 +533,234 @@ The Auditor is the only thing that can decide whether the task is functionally c
 
 ---
 
-## Security gate (runs once, after FUNCTIONALLY CLEAN)
+## Unified terminal gate (runs once, after FUNCTIONALLY CLEAN — parallel)
 
-Same shape as `/clean-implement`. Re-stated here so the autonomous loop is self-contained.
+Replaces the prior two-gate Security+Team sequential flow. sr-dev, sr-sdet, and
+security-reviewer run concurrently in a single orchestrator message (three Task tool
+calls in one assistant turn). Each writes to a fragment file; the orchestrator
+stitches the fragments into the issue file in a follow-up turn.
 
-### Step S1 — Security reviewer (always runs)
+### Step G1 — Parallel spawn (three Task tool calls in one assistant turn)
 
-Spawn `security-reviewer` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task (aggregate from all Builder reports), architecture docs + KDR paths.
+Spawn sr-dev, sr-sdet, and security-reviewer concurrently in a single
+orchestrator message (three Task tool calls in one assistant turn).
 
-Output appends under `## Security review` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+Each agent writes its review to `runs/<task>/cycle_<N>/<agent>-review.md`
+per the agent's updated `## Output format`:
+- sr-dev → `runs/<task>/cycle_<N>/sr-dev-review.md`
+- sr-sdet → `runs/<task>/cycle_<N>/sr-sdet-review.md`
+- security-reviewer → `runs/<task>/cycle_<N>/security-review.md`
 
-### Step S2 — Dependency auditor (conditional)
+Spawn inputs per scope discipline:
+- sr-dev: task identifier, spec path, issue file path, project context brief, list of
+  files touched across the whole task, the most recent Auditor verdict.
+- sr-sdet: task identifier, spec path, issue file path, project context brief, list of
+  test files touched across the whole task, the most recent Auditor verdict.
+- security-reviewer: task identifier, spec path, issue file path, project context brief,
+  list of files touched across the whole task, cited KDR identifiers (compact pointer).
 
-Run **only if** the aggregated diff across this task touched `pyproject.toml` or `uv.lock`. Check by inspecting Builder reports for manifest edits.
+**Telemetry (T22):** before spawning each reviewer, run a `spawn` record for each:
+```bash
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent sr-dev --model <model-slug> --effort <effort>
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent sr-sdet --model <model-slug> --effort <effort>
+python scripts/orchestration/telemetry.py spawn --task <task-shorthand> --cycle <N> \
+  --agent security-reviewer --model <model-slug> --effort <effort>
+```
+After all three Tasks return, run a `complete` record for each using their respective verdicts.
+Records land at `runs/<task>/cycle_<N>/sr-dev.usage.json`, `sr-sdet.usage.json`,
+`security-reviewer.usage.json`.
 
-If triggered, spawn `dependency-auditor` via `Task` with: task identifier, list of dep-manifest files changed, project context brief, lockfile path. Output appends under `## Dependency audit` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+Wait for all three Tasks to complete.
+
+### Step G2 — Read fragments, parse verdicts, apply precedence rule
+
+In a follow-up turn:
+
+1. Read the three fragment files in one multi-Read call:
+   `runs/<task>/cycle_<N>/sr-dev-review.md`,
+   `runs/<task>/cycle_<N>/sr-sdet-review.md`,
+   `runs/<task>/cycle_<N>/security-review.md`.
+2. Parse each agent's T01 return-schema verdict line.
+3. Apply the precedence rule:
+   - **All three SHIP → TERMINAL CLEAN.** Proceed to stitch step (G3) then
+     conditional spawns (G4, G5), then the commit ceremony.
+   - **Any reviewer BLOCK → TERMINAL BLOCK.** Halt loop; surface the
+     security-reviewer BLOCK first if applicable (threat-model finding is the
+     most user-load-bearing), else the offending reviewer's BLOCK verbatim.
+     Next action is another Builder → Auditor cycle targeting these findings.
+   - **Any reviewer FIX-THEN-SHIP (no BLOCK) → TERMINAL FIX.** Apply the
+     Auditor-agreement bypass: if all FIX findings carry single clear
+     recommendations and you concur against KDRs + spec, stamp
+     `Locked terminal decision (loop-controller + reviewer concur, YYYY-MM-DD): <summary>`
+     per finding and re-loop with each as carry-over. Halt only on the same
+     four conditions (multi-option, KDR conflict, scope expansion, deferral to
+     nonexistent task).
+4. If TERMINAL CLEAN: stitch the three fragment files into the issue file under
+   `## Sr. Dev review`, `## Sr. SDET review`, `## Security review` sections in
+   one Edit pass.
+
+### Step G3 — Stitch fragments into issue file (TERMINAL CLEAN only)
+
+Read all three fragment files (already done in G2 step 1). In one Edit pass,
+append all three `## <Name> review` sections to the issue file in this order:
+`## Sr. Dev review`, `## Sr. SDET review`, `## Security review`.
+
+### Step G4 — Dependency auditor (conditional, synchronous, post-parallel-batch)
+
+Run **only if** the aggregated diff across this task touched `pyproject.toml` or
+`uv.lock`. Check by inspecting Builder reports for manifest edits.
+
+If triggered, spawn `dependency-auditor` via `Task` (synchronous — after the
+parallel batch returns and G3 stitch completes) with: task identifier, list of
+dep-manifest files changed, project context brief, lockfile path. Output appends
+under `## Dependency audit` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
+
+If triggered and verdict is BLOCK, surface it ahead of any FIX-THEN-SHIP from
+the parallel batch — dependency-auditor BLOCK has the same precedence weight as
+security-reviewer BLOCK (supply-chain-shaped threat).
 
 If not triggered, note in the issue file: `Dependency audit: skipped — no manifest changes.`
 
-### Step S3 — Read issue file and evaluate security verdicts
+### Step G5 — Architect (conditional, on-demand)
 
-Re-read the issue file. Evaluate in priority order:
+Spawn `architect` via `Task` **only if** any of the reviewers (auditor,
+security-reviewer, dependency-auditor, sr-dev, sr-sdet) flagged a finding whose
+recommendation reads "this should be a new KDR" or "violates an unwritten rule".
+Pass: trigger=`new-KDR`, the finding ID, the project context brief.
 
-1. **SECURITY BLOCKER** — Either reviewer's verdict is `BLOCK`. Halt; surface findings verbatim. The task is **not** CLEAN. Next action is another Builder → Auditor cycle targeting these findings.
-2. **SECURITY FIX-THEN-SHIP** — Either reviewer's verdict is `FIX-THEN-SHIP`. Apply the same Auditor-agreement bypass logic from functional condition 2. If clear consensus → stamp `Locked security decision (loop-controller + reviewer concur, YYYY-MM-DD): <summary>` and re-loop with the finding as carry-over. Halt and surface only if (a) two-plus options without recommendation, (b) recommendation conflicts with KDR / prior user decision / spec, (c) scope expansion, or (d) defers to a future task that doesn't exist.
-3. **SECURITY CLEAN** — All applicable reviewers' verdicts are `SHIP`. Proceed to the **team gate**.
+Architect output appends under `## Architect review` in the issue file. Verdict
+line: `ALIGNED / MISALIGNED / OPEN / PROPOSE-NEW-KDR`.
 
----
+This is unchanged from the prior conditional spawn — architect is invoked
+on-demand, not per-cycle.
 
-## Team gate (runs once, after SECURITY CLEAN — autonomous-mode only)
+### Step G6 — Final gate verdict
 
-This gate is the autonomous-mode addition. It does not exist in `/clean-implement`. The gate enforces the consensus rule from autonomy decision 3: "more auditor sub-agents for resolving bugs if they align or agree".
+After G3 stitch (and G4 if triggered, and G5 if triggered), evaluate the final
+terminal verdict in priority order:
 
-### Step T1 — Sr. Dev (always runs)
-
-Spawn `sr-dev` via `Task` with: task identifier, spec path, issue file path, project context brief, list of files touched across the whole task, the most recent Auditor verdict.
-
-Output appends under `## Sr. Dev review` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
-
-### Step T2 — Sr. SDET (always runs)
-
-Spawn `sr-sdet` via `Task` with: task identifier, spec path, issue file path, project context brief, list of test files touched across the whole task, the most recent Auditor verdict.
-
-Output appends under `## Sr. SDET review` in the issue file. Verdict line: `SHIP | FIX-THEN-SHIP | BLOCK`.
-
-T1 and T2 may run in parallel — they read disjoint files (sr-dev reads source, sr-sdet reads tests) and write to disjoint sections of the same issue file. Spawn both in a single message with two `Task` tool calls.
-
-**Concurrent Edit on disjoint sections — has not raced in practice; if it does (e.g. one section's append clobbers the other's mid-write), serialize: spawn T1, await completion, then spawn T2.** Each agent uses Edit to append its own `## Sr. <Role> review` section, so the disjoint-section assumption holds as long as neither rewrites the other's section. Surface the race as a tooling finding for follow-up rather than retrying the gate.
-
-### Step T3 — Architect (conditional)
-
-Spawn `architect` via `Task` **only if** any of the five reviewers (auditor, security-reviewer, dependency-auditor, sr-dev, sr-sdet) flagged a finding whose recommendation reads "this should be a new KDR" or "violates an unwritten rule". Pass: trigger=`new-KDR`, the finding ID, the project context brief.
-
-Architect output appends under `## Architect review` in the issue file. Verdict line: `PROPOSE-NEW-KDR | NO-KDR-NEEDED-EXISTING-RULE-COVERS | NO-KDR-NEEDED-CASE-BY-CASE`.
-
-### Step T4 — Read issue file and evaluate team verdicts
-
-Re-read the issue file. Aggregate verdicts from sr-dev + sr-sdet + (if invoked) architect. Evaluate in priority order:
-
-1. **TEAM BLOCKER** — Any sr-* verdict is `BLOCK`. Halt; surface findings. Next action is another Builder → Auditor cycle targeting these findings (BLOCK from sr-dev / sr-sdet means a hidden bug or test-passes-for-wrong-reason — code change required, security and team gates re-run after).
-2. **TEAM FIX-THEN-SHIP** — Any sr-* verdict is `FIX-THEN-SHIP`. Apply the Auditor-agreement bypass: if all FIX findings carry single clear recommendations and you concur against KDRs + spec, stamp `Locked team decision (loop-controller + sr-* concur, YYYY-MM-DD): <summary>` per finding and re-loop with each as carry-over. Halt only on the same four conditions (multi-option, KDR conflict, scope expansion, deferral to nonexistent task).
-3. **DIVERGENT VERDICTS** — sr-dev and sr-sdet disagree (one says BLOCK, other says SHIP, etc.). **HARD HALT.** Surface the disagreement; user arbitrates. Per autonomy decision 3 the team must align before work proceeds.
-4. **TEAM CLEAN** — All sr-* verdicts are `SHIP`. Proceed to the **commit ceremony**.
+1. **TERMINAL BLOCK** — Any reviewer (including dependency-auditor) returned
+   BLOCK. Halt; surface security-reviewer BLOCK first if applicable. The task is
+   **not** CLEAN. Next action is another Builder → Auditor cycle.
+2. **TERMINAL FIX** — Any reviewer returned FIX-THEN-SHIP (no BLOCK). Apply
+   Auditor-agreement bypass or halt for user arbitration.
+3. **TERMINAL CLEAN** — All applicable reviewers returned SHIP. Proceed to the
+   **commit ceremony**.
 
 ---
 
-## Commit ceremony (runs once, after TEAM CLEAN — autonomous-mode only)
+## Gate-capture-and-parse convention (required before AUTO-CLEAN stamp)
+
+**Reference:** [`.claude/commands/_common/gate_parse_patterns.md`](_common/gate_parse_patterns.md)
+
+Before stamping AUTO-CLEAN (i.e., before the commit ceremony), the orchestrator
+independently runs each gate command and captures output to
+`runs/<task>/cycle_<N>/gate_<name>.txt`.
+
+### Capture step
+
+For each gate (`uv run pytest`, `uv run lint-imports`, `uv run ruff check`, plus any
+task-specific smoke test gates named in the spec):
+
+1. Run the gate command via Bash.
+2. Capture stdout + stderr + exit code into `runs/<task>/cycle_<N>/gate_<name>.txt`
+   using the format described in `_common/gate_parse_patterns.md` §Capture format.
+   Gate file names: `gate_pytest.txt`, `gate_lint-imports.txt`, `gate_ruff.txt`
+   (task-specific gates use their command slug, e.g. `gate_smoke.txt`).
+3. Record the exit code in the same file or a companion `gate_<name>.exit` file.
+
+### Parse step
+
+For each captured file, parse the footer line per the regex table in
+`_common/gate_parse_patterns.md`:
+
+- `pytest`:       `^=+ \d+ passed` (and no `failed` on the same line)
+- `ruff`:         `^All checks passed\.$` or `^\d+ files? checked\.$`
+- `lint-imports`: `^Contracts kept$` (exact, trimmed)
+
+### Halt condition
+
+If **any** of the following is true for any gate, halt immediately with:
+
+```
+🚧 BLOCKED: gate <name> output not parseable; see runs/<task>/cycle_<N>/gate_<name>.txt
+```
+
+1. The captured file is empty (zero bytes or whitespace only).
+2. No line in the file matches the gate's footer regex.
+3. Exit code ≠ 0 (even if a footer line is present).
+4. Footer line is present but indicates failures (e.g. `failed` in a pytest footer).
+
+**Do not proceed to AUTO-CLEAN stamp if any gate halts.**
+
+The captured files become the durable record consulted by Auditor + sr-dev + sr-sdet
+on their re-runs (per the per-cycle directory layout above).
+
+---
+
+## Pre-commit ceremony (runs once, after G6 TERMINAL CLEAN — before commit)
+
+**Reference:** [`.claude/commands/_common/integrity_checks.md`](_common/integrity_checks.md)
+
+After all reviewers SHIP (G6 TERMINAL CLEAN) and before the commit ceremony, the
+orchestrator runs three task-integrity checks. Each check is independent; the first
+failure halts immediately without running the remaining checks.
+
+Capture all outputs to `runs/<task-shorthand>/integrity.txt` (top-level under the task
+directory, not per-cycle — latest run wins). See `_common/integrity_checks.md` §Captured
+output location for the append format.
+
+### Check 1 — Non-empty diff
+
+Run `git diff --stat <pre-task-commit>..HEAD`. The `<pre-task-commit>` is the commit
+SHA recorded at the start of cycle 1 (before the first Builder spawn — capture it with
+`git rev-parse HEAD` during project setup).
+
+Assert: output is non-empty (at least one insertion or deletion line).
+
+If empty: halt with:
+```
+🚧 BLOCKED: task-integrity check 1 (empty diff) failed; see runs/<task>/integrity.txt
+```
+
+### Check 2 — Non-empty test diff (code tasks only)
+
+Determine task-kind: parse the spec's `**Kind:**` line (e.g. `Safeguards / code`,
+`Compaction / doc + code`). If absent, read the milestone README's task-pool
+"Phase / Kind" column for this task's row.
+
+If task-kind contains `code`:
+
+  Run `git diff --stat <pre-task-commit>..HEAD -- tests/`.
+  Assert: output is non-empty.
+
+  If empty: halt with:
+  ```
+  🚧 BLOCKED: task-integrity check 2 (empty test diff for code task) failed; see runs/<task>/integrity.txt
+  ```
+
+If task-kind does NOT contain `code` (doc-only, analysis-only): skip Check 2.
+
+### Check 3 — Independent pytest re-run
+
+Run `uv run pytest -q`. Parse the footer per the `pytest` pattern in
+`_common/gate_parse_patterns.md` (reuse the same parser — no duplication).
+
+Assert: exit code 0 AND footer matches `^=+ \d+ passed` AND footer does not contain
+`failed`.
+
+If any assertion fails: halt with:
+```
+🚧 BLOCKED: task-integrity check 3 (pytest failure) failed; see runs/<task>/integrity.txt
+```
+
+**Do not proceed to the commit ceremony if any integrity check halts.**
+
+---
+
+## Commit ceremony (runs once, after TERMINAL CLEAN — autonomous-mode only)
 
 Per autonomy decisions 1 and 2.
 
@@ -237,9 +814,8 @@ task implements>
 
 Cycles run: <N>
 Auditor verdict: ✅ PASS
-Security: SHIP (or "FIX-THEN-SHIP locked: <summary>" if bypass fired)
-Sr. Dev: SHIP
-Sr. SDET: SHIP
+Terminal gate: CLEAN (Sr. Dev: SHIP, Sr. SDET: SHIP, Security: SHIP)
+Dependency audit: <SHIP | skipped — no manifest changes>
 Architect: <if invoked: verdict + KDR-NNN if proposed>
 
 Files touched:
@@ -247,6 +823,18 @@ Files touched:
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ```
+
+**If the task was parallel-built** (T18 path — `PARALLEL_ELIGIBLE=true` in meta.json),
+append a `Parallel-build:` line in the commit message body immediately after the
+`Architect:` line:
+
+```
+Parallel-build: <N> slices dispatched (slice-A: <N> files; slice-B: <N> files; ...)
+```
+
+The commit is still a **single commit** — no per-slice commits. The `Files touched:`
+list covers all slices combined. Status-surface flips happen once (after the
+combined-diff Auditor pass), not once-per-slice.
 
 ### Step C4 — Push
 
@@ -270,21 +858,23 @@ End-of-cycle one-liner for build → audit cycles:
 
 `Cycle N/10 — [FUNCTIONALLY CLEAN | OPEN: <count> issues | BLOCKED: <issue-id> | USER INPUT: <issue-id>]`
 
-End-of-security-gate one-liner:
+End-of-terminal-gate one-liner:
 
-`Security gate — [CLEAN | SEC-BLOCK: <count> | SEC-FIX: <count>]`
-
-End-of-team-gate one-liner:
-
-`Team gate — [CLEAN | TEAM-BLOCK: <reviewer:count> | TEAM-FIX: <reviewer:count> | TEAM-DIVERGE: <reviewer-A says X, reviewer-B says Y>]`
+`Terminal gate — [CLEAN | TERMINAL-BLOCK: <reviewer:count> | TERMINAL-FIX: <reviewer:count>]`
 
 Final-stop summary (whether AUTO-CLEAN or HALT): stop condition triggered, total cycle count, remaining OPEN issues (id + one-liner), commit hash(es) if AUTO-CLEAN, the user action needed if HALT.
 
 ---
 
-## Why team-gate runs after security-gate, not in parallel
+## Why the unified terminal gate parallelizes all three reviewers
 
-The security-reviewer's threat-model check is narrower than sr-dev / sr-sdet's quality check; running them all in parallel would burn tokens redundantly when a security BLOCK already invalidates the run. Order matters: security-blockers are the hardest gate (re-loops to Builder), then quality-blockers, then quality-fixes. Each later gate only fires when its prerequisite passed.
+sr-dev, sr-sdet, and security-reviewer each check non-overlapping concerns (code quality,
+test quality, threat model) and write to non-overlapping fragment files — no shared-state
+or file-write contention. Spawning all three concurrently reduces wall-clock time from
+sum-of-three to max-of-three (target ≥ 2× improvement). When security-reviewer returns
+BLOCK, the TERMINAL BLOCK precedence rule surfaces that finding first — the same
+precedence that the old sequential flow achieved implicitly (by running security first)
+is now made explicit in the combined verdict evaluation step (G2).
 
 ## Why this is a separate command from /clean-implement
 

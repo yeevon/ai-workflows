@@ -1,6 +1,7 @@
 ---
 name: ai-workflows
 description: Invoke ai-workflows planner / slice_refactor workflows through the MCP server (primary) or the aiw CLI (fallback). Use when the user asks for a plan from a goal, or to refactor a slice of code across parallel branches.
+allowed-tools: Bash
 ---
 
 # ai-workflows

@@ -1,0 +1,192 @@
+Recommendation file path: runs/autopilot-20260427T152243Z-iter4.md
+
+## Project context brief
+
+Project: ai-workflows (Python, MIT, published as jmdl-ai-workflows on PyPI)
+Layer rule: primitives → graph → workflows → surfaces (enforced by `uv run lint-imports`)
+Gate commands: `uv run pytest`, `uv run lint-imports`, `uv run ruff check`
+Architecture: design_docs/architecture.md (especially §3 four-layer rule, §6 dep table, §9 KDRs)
+ADRs: design_docs/adr/*.md
+Deferred-ideas file: design_docs/nice_to_have.md (out-of-scope by default)
+Changelog convention: ## [Unreleased] → ### Added — M<N> Task <NN>: <Title> (YYYY-MM-DD)
+Dep manifests: pyproject.toml + uv.lock — either changing triggers the dependency-auditor
+Load-bearing KDRs: 002 (MCP-as-substrate), 003 (no Anthropic API), 004 (validator pairing),
+                   006 (three-bucket retry via RetryingEdge), 008 (FastMCP + pydantic schema),
+                   009 (SqliteSaver-only checkpoints), 013 (user-owned external workflow code)
+Status surfaces (must flip together at task close): per-task spec **Status:** line,
+                   milestone README task table row, tasks/README.md row if present,
+                   milestone README "Done when" checkboxes
+
+## Prior iteration context (PRE-T04 — full chat history; NOT compacted)
+
+### Iteration 1 — full orchestrator dialogue (PRE-T04 bloat)
+
+[Autopilot iteration 1 — queue-pick invocation]
+
+Orchestrator: Starting autopilot iter 1. Spawning roadmap-selector for milestone scope: m12.
+
+roadmap-selector returned: verdict=PROCEED, task=design_docs/phases/milestone_12_audit_cascade/task_01_auditor_tier_configs.md
+
+Orchestrator: Roadmap selector recommends M12 T01. Proceeding with auto-implement.
+
+[Builder spawn — cycle 1]
+Spawning builder for M12 Task 01 (Auditor TierConfigs).
+Task spec path: design_docs/phases/milestone_12_audit_cascade/task_01_auditor_tier_configs.md
+Issue file path: design_docs/phases/milestone_12_audit_cascade/issues/task_01_issue.md
+Parent milestone README path: design_docs/phases/milestone_12_audit_cascade/README.md
+Builder returned: verdict=BUILT, file=design_docs/phases/milestone_12_audit_cascade/issues/task_01_issue.md, section=—
+
+[Auditor spawn — cycle 1]
+Spawning auditor for M12 Task 01.
+Auditor returned: verdict=OPEN, file=design_docs/phases/milestone_12_audit_cascade/issues/task_01_issue.md, section=## 🟡 MEDIUM
+
+Open issue: M12-T01-ISS-01 — TierConfig initialization order not validated.
+Action: Builder must add test asserting tier config order is stable across imports.
+
+[Builder spawn — cycle 2]
+Spawning builder for M12 Task 01 cycle 2 with issue file updated.
+Builder returned: verdict=BUILT, file=—, section=—
+
+Files changed this cycle:
+- ai_workflows/graph/tiered_node.py
+- tests/graph/test_tiered_node.py
+- CHANGELOG.md
+
+[Auditor spawn — cycle 2]
+Spawning auditor for M12 Task 01 cycle 2.
+Auditor returned: verdict=PASS, file=design_docs/phases/milestone_12_audit_cascade/issues/task_01_issue.md, section=—
+
+[Security gate]
+Spawning security-reviewer for M12 Task 01.
+security-reviewer returned: verdict=SHIP, file=—, section=—
+
+[Team gate]
+Spawning sr-dev for M12 Task 01.
+sr-dev returned: verdict=SHIP, file=—, section=—
+Spawning sr-sdet for M12 Task 01.
+sr-sdet returned: verdict=SHIP, file=—, section=—
+
+[Commit ceremony]
+Running git commit for M12 T01.
+Commit SHA: a1b2c3d4e5f6789012345678901234567890abcd
+Pushed to design_branch.
+
+Iteration 1 complete. Task M12/T01 shipped at commit a1b2c3d4.
+
+### Iteration 2 — full orchestrator dialogue (PRE-T04 bloat)
+
+[Autopilot iteration 2 — queue-pick invocation]
+
+Orchestrator: Starting autopilot iter 2. Prior iteration: T01 shipped at a1b2c3d4.
+Spawning roadmap-selector for milestone scope: m12.
+
+roadmap-selector returned: verdict=PROCEED, task=design_docs/phases/milestone_12_audit_cascade/task_02_graph_adapter_coverage.md
+
+Orchestrator: Roadmap selector recommends M12 T02. Proceeding with auto-implement.
+
+[Builder spawn — cycle 1]
+Spawning builder for M12 Task 02 (Graph Adapter Coverage).
+Task spec path: design_docs/phases/milestone_12_audit_cascade/task_02_graph_adapter_coverage.md
+Issue file path: design_docs/phases/milestone_12_audit_cascade/issues/task_02_issue.md
+Parent milestone README path: design_docs/phases/milestone_12_audit_cascade/README.md
+Builder returned: verdict=BUILT, file=design_docs/phases/milestone_12_audit_cascade/issues/task_02_issue.md, section=—
+
+Files changed:
+- ai_workflows/graph/retrying_edge.py
+- tests/graph/test_retrying_edge.py
+- CHANGELOG.md
+
+[Auditor spawn — cycle 1]
+Spawning auditor for M12 Task 02 cycle 1.
+Auditor returned: verdict=PASS, file=design_docs/phases/milestone_12_audit_cascade/issues/task_02_issue.md, section=—
+
+No issues found. All ACs satisfied.
+
+[Security gate]
+Spawning security-reviewer for M12 Task 02.
+security-reviewer returned: verdict=SHIP, file=—, section=—
+
+[Team gate]
+Spawning sr-dev for M12 Task 02.
+sr-dev returned: verdict=SHIP, file=—, section=—
+Spawning sr-sdet for M12 Task 02.
+sr-sdet returned: verdict=SHIP, file=—, section=—
+
+[Commit ceremony]
+Commit SHA: b2c3d4e5f6789012345678901234567890bcdef1
+Pushed to design_branch.
+
+Iteration 2 complete. Task M12/T02 shipped at commit b2c3d4e5.
+
+### Iteration 3 — full orchestrator dialogue (PRE-T04 bloat)
+
+[Autopilot iteration 3 — queue-pick invocation]
+
+Orchestrator: Starting autopilot iter 3. Prior iterations: T01@a1b2c3d4, T02@b2c3d4e5.
+Spawning roadmap-selector for milestone scope: m12.
+
+roadmap-selector returned: verdict=PROCEED, task=design_docs/phases/milestone_12_audit_cascade/task_03_workflow_wiring.md
+
+Orchestrator: Roadmap selector recommends M12 T03. Proceeding with auto-implement.
+
+[Builder spawn — cycle 1]
+Spawning builder for M12 Task 03 (Workflow Wiring).
+Task spec path: design_docs/phases/milestone_12_audit_cascade/task_03_workflow_wiring.md
+Issue file path: design_docs/phases/milestone_12_audit_cascade/issues/task_03_issue.md
+Parent milestone README path: design_docs/phases/milestone_12_audit_cascade/README.md
+Builder returned: verdict=BUILT, file=—, section=—
+
+Files changed:
+- ai_workflows/workflows/audit_cascade.py
+- tests/workflows/test_audit_cascade.py
+- CHANGELOG.md
+
+[Auditor spawn — cycle 1]
+Spawning auditor for M12 Task 03 cycle 1.
+Auditor returned: verdict=OPEN, file=design_docs/phases/milestone_12_audit_cascade/issues/task_03_issue.md, section=## 🟡 MEDIUM
+
+Open issue: M12-T03-ISS-01 — wire-level MCP smoke test missing. Fixture bypasses dispatch.
+Action required: Builder must add a real-install smoke test exercising the dispatch path.
+
+[Builder spawn — cycle 2]
+Spawning builder for M12 Task 03 cycle 2.
+Builder returned: verdict=BUILT, file=—, section=—
+
+Files changed:
+- tests/release/test_install_smoke.py
+- CHANGELOG.md
+
+[Auditor spawn — cycle 2]
+Spawning auditor for M12 Task 03 cycle 2.
+Auditor returned: verdict=PASS, file=design_docs/phases/milestone_12_audit_cascade/issues/task_03_issue.md, section=—
+
+All ACs satisfied. ISS-01 resolved.
+
+[Security gate]
+Spawning security-reviewer for M12 Task 03.
+security-reviewer returned: verdict=SHIP, file=—, section=—
+
+[Team gate]
+Spawning sr-dev for M12 Task 03.
+sr-dev returned: verdict=SHIP, file=—, section=—
+Spawning sr-sdet for M12 Task 03.
+sr-sdet returned: verdict=SHIP, file=—, section=—
+
+[Commit ceremony]
+Commit SHA: c3d4e5f6789012345678901234567890cdef0123
+Pushed to design_branch.
+
+Iteration 3 complete. Task M12/T03 shipped at commit c3d4e5f6.
+
+## Output budget
+
+Output budget: 1-2K tokens. Durable findings live in the recommendation file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+
+## Return schema
+
+Return per .claude/commands/_common/agent_return_schema.md — exactly 3 lines:
+verdict: <token>
+file: <path or —>
+section: <## header or —>
+No prose, no preamble, no chat body outside those three lines.

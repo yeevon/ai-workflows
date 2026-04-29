@@ -1,6 +1,9 @@
 ---
 model: claude-opus-4-7
-thinking: max
+thinking:
+  type: adaptive
+effort: high
+# Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
 # /autopilot
@@ -12,6 +15,55 @@ You are the **Autonomous Queue-Drain orchestrator** for: $ARGUMENTS
 This command is the meta-loop on top of `/queue-pick`, `/clean-tasks`, and `/auto-implement`. It loops over (queue-pick → clean-tasks-if-needed → auto-implement) until the queue drains, the user-supplied scope is exhausted, or a halt fires. **It does not chain via the `Skill` tool** (Skill chaining returns after one call, breaking the outer loop — see memory: `feedback_skill_chaining_reuse.md`); instead, the orchestrator reads `.claude/commands/auto-implement.md` and `.claude/commands/clean-tasks.md` and executes their procedures inline as part of this single conversation.
 
 **This is the autonomy command.** It auto-commits + auto-pushes `design_branch`, runs every team gate, and only stops on halt boundaries or queue exhaustion. Use `/queue-pick` for the manual one-shot version.
+
+---
+
+## Agent-return parser convention
+
+After every `Task` spawn, parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/autopilot-<run-timestamp>-iter<N>/agent_<name>_raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of the agent's allowed tokens (see schema reference); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent <name> returned non-conformant text —
+   see the raw return file`. **Do not auto-retry.**
+
+---
+
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what each agent will certainly use. Let agents pull the rest on demand via their
+own `Read` tool. Full-document content inlining is wasteful; path references are always safe.
+
+After every `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into the appropriate path:
+- For roadmap-selector: `runs/autopilot-<ts>-iter<N>/spawn_roadmap-selector.tokens.txt`
+- For task-analyzer: `runs/<milestone>/round_<N>/spawn_task-analyzer.tokens.txt`
+- For all per-task agents: `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt`
+
+### Per-agent rules (summary — full details in spawn_prompt_template.md)
+
+| Agent | Minimal pre-load | Remove |
+|---|---|---|
+| Builder | spec path, issue path, milestone README path, context brief | sibling issues, architecture.md content, CHANGELOG content |
+| Auditor | spec path, issue path, milestone README path, context brief, `git diff`, cited KDR IDs | architecture.md content, sibling issue content, milestone README content |
+| Reviewers (sr-dev, sr-sdet, security-reviewer, dependency-auditor) | spec path, issue path, context brief, `git diff`, files-touched list | full source files, full test files, architecture.md content |
+| architect | recommendation file path, issue path, context brief, KDR identifiers | full source files, full architecture.md content — see spawn_prompt_template.md §architect |
+| roadmap-selector | recommendation file path, context brief, milestone scope | full milestone README content, full spec content |
+| task-analyzer | milestone dir path, analysis file path, context brief, round number, spec filenames list | full spec content, architecture.md, sibling milestone READMEs |
+
+Output budget directives (include verbatim in each spawn prompt — substitute `<BUDGET>`):
+
+```
+Output budget: <BUDGET> tokens. Durable findings live in the file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+Budgets: Builder = 4K; all other agents = 1–2K.
 
 ---
 
@@ -34,14 +86,12 @@ If at any point the loop attempts to invoke a halted operation, abort the iterat
 
 ## Pre-flight (run once, before iteration 1)
 
-1. **Sandbox check.** Verify `AIW_AUTONOMY_SANDBOX=1` (set in `docker-compose.yml`'s `environment` block; absent on the host). `echo "${AIW_AUTONOMY_SANDBOX:-}"` returns `1`. **HARD HALT** if missing — autonomous mode does not run on the host. The fix is `make shell` and re-invoke after `claude /login`.
-2. **Branch check.** `git rev-parse --abbrev-ref HEAD` returns `design_branch`. HARD HALT otherwise.
-3. **Working tree check.** `git status --short` is empty. HARD HALT on a dirty tree.
-4. **Memory path computation.** Compute via Bash:
-   ```bash
-   MEMORY_PATH="$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md"
-   ```
-   Verify the file exists. HARD HALT if missing — the orchestrator was invoked from an unfamiliar directory.
+**Important — avoid shell expansion in pre-flight Bash calls.** Claude Code's `Contains expansion` and `Contains simple_expansion` guards prompt the user on any single Bash call that uses `$(...)`, `${VAR:-default}`, or `$VAR` inside a loop body. Each pre-flight step below is a **separate** Bash invocation; the orchestrator assembles the resulting strings in its own thinking, never via shell substitution.
+
+1. **Sandbox check.** Run `printenv AIW_AUTONOMY_SANDBOX` (no expansion). Output is `1` inside the sandbox or empty/error on the host. **HARD HALT** if not `1` — autonomous mode does not run on the host. The fix is `make shell` and re-invoke after `claude /login`.
+2. **Branch check.** Run `git rev-parse --abbrev-ref HEAD` (no expansion). Output is `design_branch`. HARD HALT otherwise.
+3. **Working tree check.** Run `git status --short` (no expansion). Output is empty. HARD HALT on a dirty tree.
+4. **Memory path computation.** Run `pwd` (no expansion) and capture the working-directory path. Then in your own thinking, replace every `/` with `-` and substitute into the form `$HOME/.claude/projects/<encoded-path>/memory/MEMORY.md` (`$HOME` is the invoking user's home; resolve via a separate `printenv HOME` call if needed). Run `ls -la <fully-resolved-path>` (literal path; no expansion) to verify the file exists. HARD HALT if missing — the orchestrator was invoked from an unfamiliar directory.
 5. **Resolve milestone scope** from `$ARGUMENTS` (empty = all open; otherwise the supplied list).
 
 Surface every pre-flight failure verbatim and halt before iteration 1.
@@ -54,6 +104,22 @@ For iteration `N` from 1 upward (no hard cap; halt on the boundaries above or qu
 
 ### Step A — Roadmap selection (queue-pick logic, inlined)
 
+#### Read-only-latest-shipped rule (iteration N ≥ 2)
+
+On iteration 1, spawn the `roadmap-selector` with only the project context brief and the
+recommendation-file path (no prior iteration artifact exists yet).
+
+On iteration N ≥ 2, spawn the `roadmap-selector` with:
+- The project context brief.
+- The recommendation-file path.
+- The content of the most recent iter-shipped artifact
+  (`runs/autopilot-<run-timestamp>-iter<N-1>-shipped.md`) for context on what the prior
+  iteration delivered.
+- **Do NOT** carry prior iteration chat history into this spawn. Prior iterations'
+  dialogue is compacted into the iter-shipped artifact at Step D; chat replay is dropped.
+
+This is the cross-task analogue of the in-task read-only-latest-summary rule (T03).
+
 1. Build the **project context brief** for `roadmap-selector`:
    ```text
    Project: ai-workflows (Python, MIT, published as jmdl-ai-workflows on PyPI)
@@ -64,7 +130,19 @@ For iteration `N` from 1 upward (no hard cap; halt on the boundaries above or qu
    Milestone scope: <from $ARGUMENTS, or "all open">
    ```
 2. Recommendation file path: `runs/autopilot-<run-timestamp>-iter<N>.md` (under the gitignored `runs/` directory).
-3. Spawn the `roadmap-selector` subagent via `Task` with: the recommendation-file path, the project context brief, the milestone list. Wait for completion.
+3. Spawn the `roadmap-selector` subagent via `Task` with: the recommendation-file path,
+   the project context brief, the milestone list, and (on N ≥ 2) the most recent
+   iter-shipped artifact content per the read-only-latest-shipped rule above. Wait for completion.
+
+   **Telemetry (T22):** before spawning, run:
+   ```bash
+   python scripts/orchestration/telemetry.py spawn \
+     --task autopilot_iter<N> --cycle 1 \
+     --agent roadmap-selector --model <model-slug> --effort medium
+   ```
+   After the Task returns, run `complete` with the verdict (PROCEED/NEEDS-CLEAN-TASKS/HALT-AND-ASK).
+   Record lands at `runs/autopilot_iter<N>/cycle_1/roadmap-selector.usage.json`.
+
 4. **Read the recommendation file on disk.** Verdict line is the source of truth. Empty / missing / no-`Verdict:`-line → treat as `HALT-AND-ASK` with the surface "agent halted before producing output" (per `/queue-pick` Step 2's pre-condition rule).
 
 Branch on verdict:
@@ -108,7 +186,68 @@ After Step B's `AUTO-CLEAN` or Step C's `CLEAN`/`LOW-ONLY`:
 
 1. Re-verify the working tree is clean (`git status --short` empty). If dirty, that's a HARD HALT — Step B's commit ceremony or Step C's phase-3 push left state behind.
 2. Re-verify branch is still `design_branch`. HARD HALT otherwise.
-3. Increment `N`; return to Step A.
+3. **Write the iter-shipped artifact** at `runs/autopilot-<run-timestamp>-iter<N>-shipped.md`.
+   Populate from the iteration's outcome (recommendation file + commit log + per-cycle
+   summaries from T03's `cycle_<M>/summary.md` files):
+
+   ```markdown
+   # Autopilot iter <N> — shipped
+
+   **Run timestamp:** <YYYY-MM-DDTHHMMSSZ>
+   **Iteration:** N
+   **Date:** YYYY-MM-DD
+   **Verdict from queue-pick:** <PROCEED | NEEDS-CLEAN-TASKS | HALT-AND-ASK>
+
+   ## Task shipped (if PROCEED)
+   - **Task:** <milestone>/<task spec filename>
+   - **Cycles:** N
+   - **Final commit:** <sha> on `design_branch`
+   - **Files touched:** <list>
+   - **Auditor verdict:** PASS
+   - **Reviewer verdicts:** sr-dev=<verdict>, sr-sdet=<verdict>, security=<verdict>, dependency=<verdict>
+   - **KDR additions (if any):** <KDR-XXX + ADR-NNNN, isolated commit sha>
+
+   ## Milestone work (if NEEDS-CLEAN-TASKS)
+   - **Milestone:** <milestone>
+   - **/clean-tasks rounds:** N
+   - **Final stop verdict:** <CLEAN | LOW-ONLY>
+   - **Specs hardened:** <list of task spec filenames>
+
+   ## Halt (if HALT-AND-ASK)
+   - **Halt reason:** <one paragraph>
+   - **State preserved:** <list of uncommitted files>
+   - **User-arbitration question(s):** <bullet list>
+
+   ## Carry-over to next iteration
+   - *(empty for routine iterations; populated when a finding from this iteration affects the next task)*
+
+   ## Telemetry summary
+   - *(retrofitted by T22 when it lands; T04 ships before T22 in Phase A vs Phase C — leave this section empty at T04 land time, per audit M15)*
+   ```
+
+   The `-shipped.md` suffix distinguishes close-out from kick-off. Both files have
+   read-only semantics after iteration close.
+
+4. Increment `N`; return to Step A.
+
+#### §Path convention
+
+Each iteration produces two sibling files under the flat `runs/` directory:
+
+```
+runs/
+  autopilot-20260427T152243Z-iter1.md            (kick-off recommendation file, queue-pick output)
+  autopilot-20260427T152243Z-iter1-shipped.md    (close-out artifact, Step D)
+  autopilot-20260427T152243Z-iter2.md
+  autopilot-20260427T152243Z-iter2-shipped.md
+  ...
+```
+
+Path naming convention: `runs/autopilot-<run-ts>-iter<N>(-shipped)?.md`
+- `<run-ts>` is the pre-flight timestamp (e.g. `20260427T152243Z`).
+- `-shipped.md` suffix marks the close-out artifact (Step D).
+- No per-run subdirectory — flat layout matches today's autopilot.md convention.
+- No migration of existing recommendation-file paths needed.
 
 ### Queue-exhaust condition
 

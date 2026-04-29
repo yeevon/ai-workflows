@@ -1,6 +1,9 @@
 ---
 model: claude-opus-4-7
-thinking: max
+thinking:
+  type: adaptive
+effort: high
+# Per-role effort assignment: see .claude/commands/_common/effort_table.md
 ---
 
 # /clean-tasks
@@ -21,6 +24,20 @@ The analysis runs in a dedicated `task-analyzer` subagent via `Task`. Fix applic
 
 ---
 
+## Agent-return parser convention
+
+After every `Task` spawn (the `task-analyzer` subagent), parse the agent's return per
+[`.claude/commands/_common/agent_return_schema.md`](_common/agent_return_schema.md):
+
+1. Capture the full text return to `runs/<milestone>/round_<N>/agent_task-analyzer_raw_return.txt`.
+2. Split on `\n`; expect exactly 3 non-empty lines.
+3. Each line must match `^(verdict|file|section): ?(.+)$`.
+4. The `verdict` value must be one of `CLEAN`, `LOW-ONLY`, `OPEN` (task-analyzer's allowed tokens); trailing whitespace on any value is stripped before validation.
+5. On any failure: halt, surface `BLOCKED: agent task-analyzer returned non-conformant text —
+   see the raw return file`. **Do not auto-retry.**
+
+---
+
 ## Project setup (run once at the start)
 
 Resolve `$ARGUMENTS` to a milestone directory:
@@ -31,11 +48,16 @@ Resolve `$ARGUMENTS` to a milestone directory:
 
 Verify the milestone directory contains a `README.md`. If not, **stop and ask** — the README is the source of truth for task scope.
 
-**Compute the project memory path at runtime** — do not hardcode a username or machine path. Compute via Bash before assembling the brief:
+**Compute the project memory path at runtime** — do not hardcode a username or machine path. **Avoid shell expansion**: `$(pwd | tr / -)` and `${HOME}` substitutions inside a single Bash call trip Claude Code's `Contains expansion` guard and prompt the user, breaking unattended autonomy.
+
+Use **two separate Bash calls** plus orchestrator-side string assembly:
 
 ```bash
-MEMORY_PATH="$HOME/.claude/projects/$(pwd | tr / -)/memory/MEMORY.md"
+pwd                # capture working-dir path
+printenv HOME      # capture invoking user's home (no expansion)
 ```
+
+Then in your own thinking: replace every `/` in the captured working-dir path with `-`, and substitute into the form `<HOME>/.claude/projects/<encoded-path>/memory/MEMORY.md`. The resolved string is the `MEMORY_PATH` to use in the project context brief below.
 
 Build the **project context brief** — pass verbatim to every `task-analyzer` spawn (substitute the resolved `MEMORY_PATH` into the line below):
 
@@ -61,6 +83,35 @@ Project memory: <MEMORY_PATH computed above; substitute the resolved absolute pa
 
 ---
 
+## Spawn-prompt scope discipline
+
+**Reference:** [`.claude/commands/_common/spawn_prompt_template.md`](_common/spawn_prompt_template.md)
+
+Pass only what the `task-analyzer` will certainly use. Let the agent pull full spec contents
+on demand via its own `Read` tool. Inlining the full text of every spec into the spawn prompt
+is wasteful and degrades attention; path references are sufficient.
+
+After every `Task` spawn, capture the spawn-prompt token count (regex proxy:
+`len(re.findall(r"\S+", text)) * 1.3`, truncated to int) into
+`runs/<milestone>/round_<N>/spawn_task-analyzer.tokens.txt`.
+
+### task-analyzer spawn
+
+Minimal pre-load set: milestone directory path, analysis-output file path, project context
+brief, round number, list of task spec filenames.
+
+**Remove from inline content:** full task spec contents (analyzer reads them via its own
+Read tool), `architecture.md` content, sibling milestone README content.
+
+Output budget directive (include verbatim in the task-analyzer spawn prompt):
+
+```
+Output budget: 1-2K tokens. Durable findings live in the task_analysis.md file you write;
+the return is the 3-line schema only — see .claude/commands/_common/agent_return_schema.md
+```
+
+---
+
 ## Phase 1 — Generate (run inline; skip if specs already exist)
 
 Check the milestone directory for `task_*.md` files. If at least one exists, skip generation and go to Phase 2 — the user has already tasked the milestone out.
@@ -76,10 +127,32 @@ If none exist:
    - For code tasks: name an explicit smoke test the Auditor will run (CLAUDE.md *Code-task verification is non-inferential*).
    - List explicit Out-of-scope items.
    - Include empty Carry-over sections — they get populated by `/clean-implement`'s audit cycle later, and possibly by Phase 3 below if LOWs need to be pushed down.
+   - **Slice scope (T17):** If the milestone README task row enumerates ≥ 2 file-disjoint acceptance-criterion groups (e.g. "AC-1 touches primitives; AC-2 touches graph"), emit a `## Slice scope` stub with one row per group. Leave the `Files / symbols` column populated with `<TODO — fill at spec-review time>`. If the task row is not explicitly multi-slice or the spec author would need to invent the file boundaries, omit the section.
 
 Do **not** invent scope beyond what the milestone README names. If the README's task row is sparse on a task, write the minimal spec that covers the row + the milestone's exit criteria; do not extrapolate features.
 
 After generation, verify with: `ls <milestone-dir>/task_*.md`. Report the count to the user before entering Phase 2.
+
+### Slice scope section template
+
+When a spec's ACs decompose into file-disjoint slices, append this optional section:
+
+```markdown
+## Slice scope (optional — required for parallel-Builder dispatch)
+
+| Slice | ACs | Files / symbols |
+|-------|-----|-----------------|
+| slice-A | AC-1, AC-2 | `ai_workflows/primitives/foo.py`, `tests/test_foo.py` |
+| slice-B | AC-3 | `ai_workflows/graph/bar.py`, `tests/test_bar.py` |
+```
+
+### Slice scope rules
+
+1. The section is **optional**. Specs without it run serial as today.
+2. When present, every AC must appear in exactly one slice row. ACs that span multiple files may be grouped into one slice if they cannot be executed in isolation.
+3. Slice names are freeform lowercase (e.g. `slice-a`, `primitives-layer`, `tests-only`).
+4. Files must be repo-relative paths. Symbols are optional (e.g. `foo.py::BarClass::baz_method`).
+5. A spec with this section is a **candidate for parallel dispatch** in T18. Tasks without the section always run serial.
 
 ---
 
@@ -96,6 +169,15 @@ Spawn the `task-analyzer` subagent via `Task` with:
 - Project context brief (above).
 - Round number (so the analyzer can stamp it into the report).
 - List of task specs to analyze (default: every `task_*.md` in the milestone dir).
+
+**Telemetry (T22):** before spawning, run:
+```bash
+python scripts/orchestration/telemetry.py spawn \
+  --task <milestone-shorthand>_clean --cycle <round-number> \
+  --agent task-analyzer --model <model-slug> --effort <effort>
+```
+After the Task returns, run `complete` with the verdict (CLEAN/LOW-ONLY/OPEN).
+Record lands at `runs/<milestone-shorthand>_clean/cycle_<N>/task-analyzer.usage.json`.
 
 Wait for completion. Capture the agent's one-line return.
 

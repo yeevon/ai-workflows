@@ -1,0 +1,185 @@
+You are the Auditor for: M12 Task 01 — Auditor TierConfigs (auditor-sonnet + auditor-opus)
+
+Task spec path: design_docs/phases/milestone_12_audit_cascade/task_01_auditor_tier_configs.md
+Issue file path: design_docs/phases/milestone_12_audit_cascade/issues/task_01_issue.md
+Parent milestone README path: design_docs/phases/milestone_12_audit_cascade/README.md
+
+## Project context brief
+
+Project: ai-workflows (Python, MIT, published as jmdl-ai-workflows on PyPI)
+Layer rule: primitives → graph → workflows → surfaces (enforced by `uv run lint-imports`)
+Gate commands: `uv run pytest`, `uv run lint-imports`, `uv run ruff check`
+Architecture: design_docs/architecture.md (especially §3 four-layer rule, §6 dep table, §9 KDRs)
+ADRs: design_docs/adr/*.md
+Deferred-ideas file: design_docs/nice_to_have.md (out-of-scope by default)
+Changelog convention: ## [Unreleased] → ### Added — M<N> Task <NN>: <Title> (YYYY-MM-DD)
+Dep manifests: pyproject.toml + uv.lock — either changing triggers the dependency-auditor
+Load-bearing KDRs: 002 (MCP-as-substrate), 003 (no Anthropic API), 004 (validator pairing),
+                   006 (three-bucket retry via RetryingEdge), 008 (FastMCP + pydantic schema as
+                   public contract), 009 (SqliteSaver-only checkpoints),
+                   013 (user-owned external workflow code)
+Issue file path: design_docs/phases/milestone_12_audit_cascade/issues/task_01_issue.md
+Status surfaces (must flip together at task close): per-task spec **Status:** line,
+                   milestone README task table row, tasks/README.md row if present,
+                   milestone README "Done when" checkboxes
+
+## Full architecture.md content (inlined — PRE-T02 bloat)
+
+# ai-workflows — Architecture
+
+**Status:** v0.1 (2026-04-19). Source of truth for the system's shape. Replaces the archived milestone-era design docs.
+**Grounding decision:** [analysis/langgraph_mcp_pivot.md](analysis/langgraph_mcp_pivot.md).
+
+## 1. Purpose
+
+Orchestrate multi-step AI workflows — planning, execution, validation, human gates, resume — with durable state, multi-provider routing, and deterministic cost accounting, for a **solo developer** using a **Claude Max subscription** as the primary interactive tool.
+
+### **In scope**
+
+- Named workflows (e.g. `planner`, `slice_refactor`) executed as DAGs with checkpointed resume.
+- Tiered provider routing (Gemini, Qwen via Ollama, Claude Code CLI subprocess).
+- Human-in-the-loop gates with strict-review semantics.
+- Cost ledger aggregating per-call and per-sub-model usage.
+- Two consumption surfaces: a local CLI and a portable MCP server.
+
+### **Out of scope**
+
+- Anthropic API usage (explicit non-goal — Claude access is OAuth-only via the CLI).
+- Hosted / multi-tenant deployment.
+- Distributed execution across machines.
+- Training / fine-tuning loops.
+- Non-Python language support beyond what MCP clients give for free.
+
+## 2. Principles
+
+1. **Outside-in core, inside-out surface.** Orchestration lives in Python (LangGraph). UX can be reached from any MCP host (Claude Code, Cursor, Zed, OpenAI) without coupling the core to any one of them.
+2. **Reuse mature infrastructure.** LangGraph for DAG/checkpoint/interrupt; MCP for portable tool exposure. No hand-rolled orchestrators, no hand-rolled resume state machines, no hand-rolled gate timeouts.
+3. **Provider-agnostic runtime.** Nodes are plain Python functions. Tier resolution is the *only* place a provider is named.
+4. **Deterministic accounting.** Every model call produces a `TokenUsage` record with `modelUsage` sub-model breakdown. Every run is checkpointed. Every interrupt is durable.
+5. **Prompting is a contract.** MCP tool schemas, validator nodes after every LLM node, and an eval harness substitute for the determinism we cede to the graph engine and the hosts.
+6. **Reversibility over cleverness.** LangGraph nodes are replaceable Python; MCP is an open spec. If either becomes a dead end, migration is bounded.
+
+## 3. Layered structure
+
+The existing `primitives` / `components` / `workflows` import-linter contract is preserved in spirit and extended:
+
+```bash
+surfaces        (ai_workflows.cli, ai_workflows.mcp)
+    ↓                                       ↘
+workflows       (ai_workflows.workflows.*)   → evals (ai_workflows.evals.*)
+    ↓                                           ↓
+graph           (ai_workflows.graph.*)         (replay reaches back into workflows
+    ↓                                           to extract StateNodeSpec.runnable;
+primitives      (ai_workflows.primitives.*)    graph stays evals-unaware)
+```
+
+## 9. Key design decisions
+
+Referenced by short ID from future specs, tasks, and commits.
+
+| ID | Decision | Source |
+| --- | --- | --- |
+| KDR-001 | LangGraph replaces hand-rolled DAG orchestrator, resume state machine, and human gate timeout. | [analysis](analysis/langgraph_mcp_pivot.md) § B |
+| KDR-002 | MCP server is the portable inside-out surface; Claude Code skill is optional packaging, not the substrate. | [analysis](analysis/langgraph_mcp_pivot.md) § C |
+| KDR-003 | No Anthropic API. Gemini + Qwen runtime; Claude Code CLI via OAuth for power-tier only. | memory: provider strategy |
+| KDR-004 | Validator-node-after-every-LLM-node is mandatory; prompting is a schema contract. Under the M19 spec API (ADR-0008), this graduates from convention-enforced-by-review to invariant-enforced-by-construction — `LLMStep` requires `response_format`, and the compiler pairs the validator automatically. The escape-hatch `register(name, build_fn)` API retains the convention-enforced-by-review status quo. | [analysis](analysis/langgraph_mcp_pivot.md) § E · [ADR-0008](adr/0008_declarative_authoring_surface.md) |
+| KDR-005 | Project primitives layer is preserved and owned; LangGraph is the substrate, not the replacement. | [analysis](analysis/langgraph_mcp_pivot.md) § F |
+| KDR-006 | Three-bucket retry taxonomy at the `TieredNode` boundary; graph-level routing by bucket. | §8.2 |
+| KDR-007 | LiteLLM is the unified adapter for Gemini + Qwen/Ollama. Collapses two hand-rolled provider drivers, supplies per-call cost enrichment, and provides transient-retry underneath our taxonomy. Claude Code CLI stays bespoke (subprocess OAuth). | §4.1, §6 |
+| KDR-008 | FastMCP is the MCP server implementation. Decorators over pydantic functions; tool schemas derive from signatures. | §4.4, §6 |
+| KDR-009 | LangGraph's built-in `SqliteSaver` owns checkpoint persistence. No `StorageCheckpointer` adapter. `Storage` owns run registry and gate log only. | §4.1, §4.2 |
+| KDR-010 | Pydantic models bound for LLM `response_format` ship bare-typed — no `Field(min_length/max_length/ge/le/...)` bounds — because Gemini's structured-output complexity budget rejects rich schemas. `extra="forbid"` is retained. Runtime bounds live at the caller-input surface (`*Input` models) and in prompt text; semantic enforcement stays at the paired `ValidatorNode` (KDR-004). MCP tool I/O models are unaffected. | [ADR-0002](adr/0002_bare_typed_response_format_schemas.md), §7 |
+| KDR-011 | **Tiered audit cascade.** Generative LLM nodes whose output is read by a downstream node or user are paired with an **auditor** one tier above the author (Haiku/Gemini/Qwen → `auditor-sonnet`; Sonnet → `auditor-opus`; Opus is not audited). The cascade is **inline** (sub-graph per generative node, not post-hoc), **opt-in** per workflow (`audit_cascade_enabled: bool = False`), and **routed through `RetryingEdge`** on audit failure with the auditor's `failure_reasons` + `suggested_approach` re-rendered into the next prompt (not a raw retry). After bounded retries, failure escalates to a strict `HumanGate`. Auditor tiers route through the existing `ClaudeCodeSubprocess` over the OAuth CLI (`--model sonnet` / `--model opus`) — KDR-003 preserved. Standalone invocation over an existing artefact is exposed by the `run_audit_cascade` MCP tool (§4.4). Telemetry: each cascade step tags `TokenUsage` with `role` (`author` / `auditor` / `verdict`) so `CostTracker.by_role` feeds the empirical tuning loop. | [ADR-0004](adr/0004_tiered_audit_cascade.md), §4.2, §4.4 |
+| KDR-013 | **External workflow module discovery.** Downstream consumers register their own workflow modules via dotted Python module paths through `AIW_EXTRA_WORKFLOW_MODULES` (comma-separated env var) or the `--workflow-module` CLI flag on `aiw` and `aiw-mcp` (repeatable, composes with the env var). Loading uses `importlib.import_module`; user modules are expected to call `ai_workflows.workflows.register(...)` at module top level. The existing `register()` collision check prevents shadowing of in-package workflows — `load_extra_workflow_modules()` eagerly pre-imports shipped workflows so that check fires reliably. `_dispatch._import_workflow_module` consults the registry first and routes to the registered builder's source module via `sys.modules[builder.__module__]`, so external workflows resolve even though their module path sits outside `ai_workflows.workflows.*`. User code is owned by the user — ai-workflows does not lint, test, or sandbox it. Entry-point discovery (PEP 621) and directory-scan loaders are deferred to separate milestones with their own triggers. Under the M19 spec API (ADR-0008), the user-owned-code boundary shifts: workflow specs are *data* (no Python privileges to worry about); custom step types remain *code* (still user-owned). The framework continues to surface — not police — custom step type implementations. | [ADR-0007](adr/0007_user_owned_code_contract.md), §4.2 · [ADR-0008](adr/0008_declarative_authoring_surface.md) |
+| KDR-014 | **Framework owns quality policy; user owns invocation; operator override is env-var.** Quality knobs live in module-level constants in each workflow source file — never on `*Input` pydantic models, `WorkflowSpec` fields, CLI flags on `aiw run`, or MCP tool input schemas. | [ADR-0009](adr/0009_framework_owns_policy.md), §4.2 |
+
+## Milestone README content (inlined — PRE-T02 bloat)
+
+# Milestone 12 — Tiered Audit Cascade
+
+**Status:** ✅ Complete.
+
+The M12 milestone adds a tiered audit cascade (AuditCascadeNode) to the ai-workflows runtime.
+The cascade pairs every generative LLM node with an auditor one tier above the author, routing
+through RetryingEdge on audit failure before escalating to HumanGate.
+
+### Tasks
+
+| # | Task | Status |
+|---|---|---|
+| T01 | Auditor TierConfigs | ✅ Done |
+| T02 | AuditCascadeNode | ✅ Done |
+| T03 | Workflow wiring | ✅ Done |
+| T08 | Skip terminal gate | ✅ Done |
+
+## Sibling issue files (inlined — PRE-T02 bloat)
+
+### task_02_issue.md (sibling — not directly relevant to T01)
+
+**Status:** ✅ PASS
+
+#### AC-1 — AuditCascadeNode composes TieredNode(primary) → ValidatorNode → TieredNode(auditor) → AuditVerdictNode
+
+Grade: PASS. The node is implemented in `ai_workflows/graph/audit_cascade.py` and correctly
+composes the four sub-nodes into a LangGraph sub-graph.
+
+#### AC-2 — RetryingEdge routes on audit failure
+
+Grade: PASS. The `RetryingEdge` configuration in `audit_cascade.py` correctly implements
+the semantic-bucket routing.
+
+### task_03_issue.md (sibling — not directly relevant to T01)
+
+**Status:** ✅ PASS
+
+Workflow wiring verified. `audit_cascade_enabled=True` activates the cascade.
+
+## Current diff
+
+```diff
+diff --git a/ai_workflows/workflows/planner.py b/ai_workflows/workflows/planner.py
+index abc1234..def5678 100644
+--- a/ai_workflows/workflows/planner.py
++++ b/ai_workflows/workflows/planner.py
+@@ -650,6 +650,14 @@ def planner_tier_registry() -> dict[str, TierConfig]:
+     "planner-synth": TierConfig(
+         route=ClaudeCodeRoute(cli_model_flag="opus"),
+     ),
++    "auditor-sonnet": TierConfig(
++        route=ClaudeCodeRoute(cli_model_flag="sonnet"),
++    ),
++    "auditor-opus": TierConfig(
++        route=ClaudeCodeRoute(cli_model_flag="opus"),
++    ),
+ }
+```
+
+## Gate command outputs (inlined — PRE-T02 bloat)
+
+### uv run pytest (full output inlined)
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.0, pytest-7.4.0, pluggy-1.3.0
+rootdir: /home/papa-jochy/prj/ai-workflows
+collected 247 items
+
+tests/test_scaffolding.py ....
+tests/test_version_dunder.py .
+tests/primitives/test_cost_tracker.py ...............
+tests/primitives/test_storage.py .....................
+tests/graph/test_tiered_node.py .................
+tests/graph/test_validator_node.py ..............
+tests/graph/test_retrying_edge.py .............
+tests/workflows/test_planner.py ..........
+tests/workflows/test_slice_refactor.py ..........
+tests/workflows/test_spec_api.py ...................
+
+============================== 247 passed in 8.32s ==============================
+
+### uv run lint-imports (output inlined)
+
+All import contracts satisfied.
+
+### uv run ruff check (output inlined)
+
+All checks passed.
