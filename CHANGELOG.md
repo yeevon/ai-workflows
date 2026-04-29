@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — M21 Task 26 cycle 2: T26 trigger re-check + bundled wording fixes (auto-implement.md; long_running_pattern.md) (2026-04-29)
+
+Files touched: `.claude/commands/auto-implement.md` (FIX-1: trigger re-check note added to §Functional loop procedure Step 1; ADV-1: initializer step heading updated to "first trigger fire" wording; ADV-2: "No T26 override for the Auditor spawn" appended to §Auditor spawn — read-only-latest-summary rule), `agent_docs/long_running_pattern.md` (ADV-1: "one-shot at cycle 1" updated to "one-shot at first trigger fire (cycle 1 for opt-in tasks; cycle 3 for auto-trigger)").
+
+ACs satisfied: FIX-1 (N>=3 trigger arm now reachable via per-cycle re-check in functional loop Step 1), ADV-1 (wording updated in both files), ADV-2 (Auditor spawn no-override note added).
+
+Deviations: none.
+
+### Added — M21 Task 26: Two-prompt long-running pattern (agent_docs/long_running_pattern.md; auto-implement + builder wired for trigger ≥3 cycles) (2026-04-29)
+
+Files touched: `agent_docs/long_running_pattern.md` (new — T24-rubric-conformant pattern reference, creates `agent_docs/` directory), `.claude/commands/auto-implement.md` (new `## Two-prompt long-running pattern (T26)` section + T26 trigger override appended to `### Builder spawn — read-only-latest-summary rule`), `.claude/agents/builder.md` (one bullet added to `## Hard rules` — T26 schema-purity anchor), `.claude/agents/auditor.md` (Phase 5b extended — `progress.md` append step after `cycle_<N>/summary.md`), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (row 76 description + status updated; G5 exit criterion satisfaction parenthetical added), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_26_two_prompt_long_running.md` (Status → Done; TA-LOW-01/02/03 ticked).
+
+ACs satisfied: AC1 (agent_docs/long_running_pattern.md exists; T24 rubric summary/section-budget/code-block-len pass), AC2 (agent_docs/ directory created by this task), AC3 (auto-implement.md carries `## Two-prompt long-running pattern (T26)` section), AC4 (builder.md references both plan.md and progress.md), AC5 (T10 invariant 9/9), AC6 (T24 invariant — .claude/agents/*.md passes section-budget), AC7 (CHANGELOG), AC8a (spec Status → Done), AC8b (README row 76 description and status updated), AC8c (README G5 satisfaction parenthetical added). TA-LOW-01 (H3s promoted to H2s in long_running_pattern.md). TA-LOW-02 (unescaped backticks used in Edit old_string/new_string). TA-LOW-03 (exact verbatim schema-purity bullet copied per spec).
+
+Deviations: none.
+
 ### Added — M21 Task 12: Skills extraction (.claude/skills/dep-audit/; pattern locked) (2026-04-29)
 
 Files touched: `.claude/skills/dep-audit/SKILL.md` (new — dep-audit operational shortcut Skill, ≤5K tokens), `.claude/skills/dep-audit/runbook.md` (new — full assertion lists, error-message catalog, edge cases; cycle-2: corrected §Lockfile-diff, §Dep-detection exit-code semantics, §Wheel-contents allowlist), `.claude/agents/dependency-auditor.md` (new `## Operational shortcuts` section pointing to Skill), `.claude/agents/_common/skills_pattern.md` (new — Skill-extraction pattern documentation), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_12_skills_extraction.md` (Status → Done; TA-LOW-01/02 ticked; grounding line-numbers replaced with anchor strings), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T12 row → Done; G6 exit criterion added + satisfied).

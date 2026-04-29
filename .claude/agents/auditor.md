@@ -142,6 +142,13 @@ emit the summary file at the path the orchestrator will read.
 - See [`.claude/commands/_common/cycle_summary_template.md`](_common/cycle_summary_template.md)
   for the full directory-layout spec and the read-only-latest-summary rule.
 
+**T26 progress.md extension (Phase 5b):** after emitting `cycle_<N>/summary.md`, check
+whether `runs/<task>/progress.md` exists (T26 long-running trigger fired). If it does,
+append a fresh `## Cycle <N> (YYYY-MM-DD)` section to `progress.md` mirroring the
+summary's content shape: what landed (file list with one-line descriptions), what is
+deferred to next cycle, locked decisions made this cycle, blockers (if any). Single-writer
+discipline: the Builder does not write `progress.md`; only the Auditor appends to it.
+
 ## Phase 6 — Forward-deferral propagation
 
 For every finding deferred to a future task:

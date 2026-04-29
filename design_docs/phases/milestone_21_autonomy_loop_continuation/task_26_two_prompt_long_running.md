@@ -1,6 +1,6 @@
 # Task 26 — Two-prompt long-running pattern for multi-cycle Builder runs
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Slimming / doc + code.
 **Grounding:** [milestone README](README.md) · [research brief §T26 (NEW)](../milestone_20_autonomy_loop_optimization/research_analysis.md) — anchor `### T26 — Adopt Anthropic's two-prompt long-running pattern for multi-cycle Builder runs` · [Anthropic "Effective harnesses for long-running agents"](https://anthropic.com/engineering/effective-harnesses-for-long-running-agents) (cited in research brief §T26 verbatim). · [T03/T04 cycle-summary pattern](../milestone_20_autonomy_loop_optimization/) — predecessor; T26 strengthens it. · `.claude/commands/auto-implement.md` (`runs/<task>/cycle_<N>/summary.md` is the existing carry-forward) · `.claude/agents/builder.md` (current Builder spawn shape). KDR drift checks apply per M21 scope note (autonomy-infra; no direct KDR citation needed).
 
@@ -174,14 +174,14 @@ grep -qE '^### (Added|Changed) — M21 Task 26:' CHANGELOG.md && echo "CHANGELOG
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Promote pattern-section H3s to H2s when transposing into `agent_docs/long_running_pattern.md`** (severity: LOW, source: task_analysis.md round 6 / T26 round 1, carried through round 8)
+- [x] **TA-LOW-01 — Promote pattern-section H3s to H2s when transposing into `agent_docs/long_running_pattern.md`** (severity: LOW, source: task_analysis.md round 6 / T26 round 1, carried through round 8)
       Spec's `## Pattern (locked at T26)` section is ~580 tokens — fine in the spec (not enforced by `md_discoverability.py`), but a Builder copy-paste into `agent_docs/long_running_pattern.md` as one section would fail T24 rubric.
       **Recommendation:** When transposing the content, promote each H3 (Trigger / File shape / Builder cycle-N spawn / Auditor writes progress.md / Initializer step / Reference Builder loop) to a top-level H2 so each section stays ≤500 tokens per T24 rubric.
 
-- [ ] **TA-LOW-02 — AC 8(b) old_string uses backslash-escaped backticks; the README's actual text is unescaped** (severity: LOW, source: task_analysis.md round 7 / T26 round 2)
+- [x] **TA-LOW-02 — AC 8(b) old_string uses backslash-escaped backticks; the README's actual text is unescaped** (severity: LOW, source: task_analysis.md round 7 / T26 round 2)
       AC 8(b) gives the README row-76 fix as `replace X with Y` where X and Y are written with `\``. The README's actual text uses plain backticks. Verbatim copy into `Edit` would fail.
       **Recommendation:** Builder uses unescaped backticks when constructing the `Edit` `old_string`/`new_string` (trivial hand-correction).
 
-- [ ] **TA-LOW-03 — Builder return-text schema reminder must be copy-pasted verbatim** (severity: LOW, source: task_analysis.md round 6 / T26 round 1, re-affirmed round 8)
+- [x] **TA-LOW-03 — Builder return-text schema reminder must be copy-pasted verbatim** (severity: LOW, source: task_analysis.md round 6 / T26 round 1, re-affirmed round 8)
       The schema-purity bullet (Step 3 second edit) is the explicit anchor against the recurring `feedback_builder_schema_non_conformance.md` pattern. Paraphrasing dilutes the anchor.
       **Recommendation:** Builder copies the exact text from Step 3: "When the T26 long-running trigger fires (orchestrator passes `plan.md` + `progress.md` instead of `cycle_{N-1}/summary.md`), the 3-line return-text schema is unchanged; `progress.md` is owned by the Auditor (Phase 5b extension), not the Builder."

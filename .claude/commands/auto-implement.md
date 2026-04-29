@@ -144,6 +144,11 @@ carry-forward; earlier chat history is ephemeral and must not re-enter the spawn
 **Remove from inline content (all cycles):** sibling task issue files, `architecture.md`
 content, `CHANGELOG.md` content.
 
+**T26 long-running trigger override** — when `runs/<task>/plan.md` and
+`runs/<task>/progress.md` exist, replace the cycle-N>=2 `cycle_{N-1}/summary.md` pre-load
+entry with `plan.md` (immutable) + `progress.md` (cumulative). See
+`agent_docs/long_running_pattern.md`.
+
 Output budget directive (include verbatim in the Builder spawn prompt):
 
 ```
@@ -180,6 +185,9 @@ stay; content inlining goes.
 **KDR pre-load rule:** parse KDR citations from the task spec. Pass only those identifiers
 as a compact list (e.g. "Relevant KDRs: KDR-003, KDR-013 — read §9 of architecture.md
 on-demand for the full text"). When no KDRs are cited, pass the §9 grid header only.
+
+**No T26 override for the Auditor spawn** — the Auditor continues to receive standard inputs
+regardless of the T26 trigger state.
 
 Output budget directive (include verbatim in the Auditor spawn prompt):
 
@@ -275,6 +283,43 @@ If anything material is unclear (spec missing, milestone README absent, ambiguou
 
 ---
 
+## Two-prompt long-running pattern (T26)
+
+**Reference:** [`agent_docs/long_running_pattern.md`](../../agent_docs/long_running_pattern.md)
+
+### Trigger check (inline, at project-setup time)
+
+The pattern fires when **either** is true at the start of cycle N:
+
+1. The task spec carries `**Long-running:** yes` under the spec header.
+2. `N >= 3` (third Builder cycle on the same task).
+
+For N < 3 with no opt-in, the existing T03 cycle-summary rule is the only carry-forward.
+
+### Initializer step (one-shot at first trigger fire — cycle 1 for opt-in tasks; cycle 3 for auto-trigger)
+
+1. Read the task spec.
+2. Write `runs/<task>/plan.md` — extracted from spec `## Why this task exists` +
+   `## What to Build` (high level) + `## Out of scope` + `## Acceptance criteria`.
+   No invented scope.
+3. Seed `runs/<task>/progress.md` with heading `# Progress — <task>` and an empty
+   `## Cycle 1` section the Auditor will populate at end of cycle 1.
+
+This is a one-shot, inline orchestrator step — not a separate agent spawn.
+
+### Builder spawn change when trigger is on (cycle N >= 2)
+
+Replace the cycle N>=2 read-only-latest-summary rule with:
+
+- Pass `plan.md` (full content, immutable) + `progress.md` (full content, monotonic).
+- Drop `cycle_{N-1}/summary.md` from the Builder's pre-load — its content is already
+  captured in `progress.md`'s most recent `## Cycle <N>` section.
+
+See `agent_docs/long_running_pattern.md` for the full reference including the worked
+example and Auditor-side `progress.md` update shape.
+
+---
+
 ## Stop conditions (functional loop, check after every audit, in priority order)
 
 1. **BLOCKER** — Issue file contains a HIGH issue marked `🚧 BLOCKED` requiring user input. Halt, surface verbatim.
@@ -291,6 +336,11 @@ If anything material is unclear (spec missing, milestone README absent, ambiguou
 For cycles 1..10:
 
 ### Step 1 — Builder
+
+**T26 trigger re-check (every cycle):** If the T26 long-running trigger was not already on
+at cycle 1, re-evaluate it now: if N >= 3 and `runs/<task>/plan.md` does not yet exist,
+run the initializer step inline before spawning the Builder (write `plan.md` from the spec
+and seed `progress.md` as described in the §Two-prompt long-running pattern (T26) section above).
 
 Spawn the `builder` subagent via `Task` with the inputs prescribed by the
 "Builder spawn — read-only-latest-summary rule" section above (cycle 1: include

@@ -44,6 +44,7 @@ The invoker provides: task identifier, spec path, issue file path (may not exist
 - **SqliteSaver owns checkpoints (KDR-009).** No hand-rolled checkpoint writes; the primitives `Storage` layer owns run registry + gate log only.
 - **User code is user-owned (KDR-013).** Externally-registered workflow modules run in-process with full Python privileges; framework surfaces import errors but does not lint, test, or sandbox them. In-package workflows cannot be shadowed (register-time collision guard).
 - **Status-surface discipline.** When a task closes, all matching status surfaces flip together: per-task spec `**Status:**` line, milestone README task table row, `tasks/README.md` row if present, milestone README "Done when" checkboxes the task satisfies.
+- When the T26 long-running trigger fires (orchestrator passes `plan.md` + `progress.md` instead of `cycle_{N-1}/summary.md`), the 3-line return-text schema is unchanged; `progress.md` is owned by the Auditor (Phase 5b extension), not the Builder.
 
 ## Stop and ask
 
