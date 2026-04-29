@@ -245,3 +245,237 @@ None. The hostile re-read surfaced no new HIGH or MEDIUM regressions from the Ro
 - CHANGELOG `[Unreleased]` block noted (AC line 197).
 
 The spec is ready for `/clean-implement m12 t06`.
+
+---
+
+## Round 3 — T07 initial analysis (task-analyzer, 2026-04-29)
+
+**Round:** 3 | **Analyzed on:** 2026-04-29 | **Analyst:** task-analyzer agent
+**Specs analyzed:** `task_07_milestone_closeout.md` (freshly drafted; T01–T06 + T08 already shipped on `design_branch`).
+
+### Summary
+
+| Severity | Count |
+| --- | --- |
+| 🔴 HIGH | 0 |
+| 🟡 MEDIUM | 3 |
+| 🟢 LOW | 4 |
+
+**Stop verdict:** OPEN
+
+### Findings
+
+#### 🟡 MEDIUM
+
+##### M1 — AC list omits explicit "flip row 07 in milestone README task-order table" surface
+
+**Task:** T07
+**Location:** `task_07_milestone_closeout.md` lines 100–113 (§Deliverables → milestone README block) + AC line 143
+**Issue:** CLAUDE.md status-surface discipline requires four surfaces flip together; for the milestone README that is **two** distinct cells: the top-of-file `**Status:**` line *and* the row in the §"Task order" table. Verified in the live README (lines 70 of the milestone README): row 07 currently reads `| 07 | Milestone close-out | doc | 📝 Planned |`. The T07 spec only enumerates the top-of-file Status flip + the Outcome-section append; the §"Task order" row 07 cell is not called out as a deliverable nor as an AC. M11 T02 (the mirrored close-out spec) had the same omission shape and the close-out commit landed it implicitly via Builder discipline — but the spec being explicit removes any wiggle for a literal Builder.
+
+Same gap exists for the §"Task order" row format. Other rows already flipped (T01..T06 + T08) all carry `✅ Complete (YYYY-MM-DD)`; T07 should follow.
+
+Additionally, milestone README Exit-criteria item 10 (`tests/graph/test_audit_cascade.py + tests/workflows/test_audit_cascade_wiring.py — hermetic coverage of...`) currently has **no** check-marker prefix, while items 1–9 + 11–12 carry `✅` / `[x]`. Substantively the test coverage shipped at T02/T03; T07 close-out is the natural moment to flip item 10 to `✅ (T02/T03 complete 2026-04-27)`. Spec is silent on this. Either a deliverable or an explicit "out of scope, item 10 is descriptive of the wider hermetic-test surface and stays unchecked because no single task owns it."
+
+**Recommendation:** Add two AC items:
+- `[ ] Milestone README §"Task order" row 07 Status column flipped from "📝 Planned" to "✅ Complete (2026-04-29)".`
+- `[ ] Milestone README §"Exit criteria" item 10 marked complete (or explicitly justified as left unchecked).`
+
+And add a one-line bullet under §Deliverables → milestone README block:
+- `Flip row 07 in §"Task order" table from "📝 Planned" to "✅ Complete (2026-04-29)" (matches every other already-shipped row's format).`
+
+**Apply this fix:** Insert above plus an AC entry after current AC line 143 ("Milestone README Status flipped to `✅ Complete (2026-04-29)`; Outcome section covers all 8 tasks.") splitting it into three AC items: top-of-file Status flip, §"Task order" row 07 flip, §"Exit criteria" item 10 disposition.
+
+##### M2 — Milestone README §"Cumulative carry-over forward-deferred to M12 T07 close-out" lists only 4 items; T07 spec carries 5 (missing CO-5)
+
+**Task:** T07
+**Location:** Milestone README lines 128–137 (the cumulative-carry-over section); T07 spec §Carry-over items (CO-5 lines 72–82)
+**Issue:** Inconsistency between the milestone README's own forward-deferral roster and the T07 spec's carry-over set. The milestone README enumerates 4 items (4 stale-framing fixes — CO-1/CO-2/CO-3/CO-4). T07 spec adds a 5th: CO-5 (nice_to_have.md §25 EvalRunner cascade-fixture replay entry, sourced from T06 KDR-004 carve-out). T06 was the source — verified at `task_06_eval_harness_fixture_convention.md` (T06's "Replay constraint" / "Out of scope" sections explicitly defer cascade replay through `EvalRunner`).
+
+This is not a HIGH because the T07 spec is the authoritative carry-over manifest at this point (the milestone README's roster was authored at T05 close-out, before T06 added the new carry-over). But the milestone README will outlive T07 as a reading surface; an operator reading the milestone README to understand what landed at T07 will miss CO-5 entirely. The T07 deliverable should backfill the milestone README's list.
+
+**Recommendation:** Add a deliverable under §Deliverables (milestone README block):
+- `Update §"Cumulative carry-over forward-deferred to M12 T07 close-out" to add CO-5 as the fifth bundled item: "**`nice_to_have.md` §25** EvalRunner cascade-fixture replay — from T06 spec / KDR-004 carve-out."`
+
+And an AC item:
+- `[ ] Milestone README §"Cumulative carry-over forward-deferred to M12 T07 close-out" backfilled with CO-5 (currently lists only CO-1–CO-4).`
+
+**Apply this fix:** Three-line edit to the milestone README's bulleted list at line 132–135 — insert one new bullet after the existing four, citing T06 as the source. Same shape as the existing four bullets.
+
+##### M3 — CO-3 "Required fix" leaves the second-clause staleness ("the MCP tool is a thin surface wrapper") implicit; Builder may rewrite only the first clause
+
+**Task:** T07
+**Location:** `task_07_milestone_closeout.md` lines 50–56 (CO-3 block)
+**Issue:** ADR-0004 §Decision item 7's stale sentence is **two semicolon-joined clauses**:
+
+> Internal routing reuses the same `AuditCascadeNode`; the MCP tool is a thin surface wrapper.
+
+Both halves are stale per the T05 Option A landing:
+- Clause 1: "Internal routing reuses the same `AuditCascadeNode`" — false; tool bypasses the cascade primitive.
+- Clause 2: "the MCP tool is a thin surface wrapper" — false; the tool is a standalone, schema-compatible re-implementation that builds its own `tiered_node` + config + verdict-parse path (see `mcp/server.py` `_build_standalone_audit_config`, `_build_audit_configurable`, `_make_standalone_auditor_prompt_fn` — four private helpers, not "thin").
+
+The spec's "Required fix" (line 56) says to "name Option A and explain that the tool invokes the auditor tier directly (standalone path independent of workflow sub-graph composition)" — implicitly addresses both clauses, but a literal Builder might preserve "the MCP tool is a thin surface wrapper" because the explicit prose only calls out the routing-reuse clause. The wrapper-vs-standalone distinction is the entire point of H1 Option A — both clauses must die.
+
+**Recommendation:** Tighten the CO-3 "Required fix" prose to enumerate both clauses explicitly:
+
+> Replace **both clauses** of the stale sentence:
+> - Clause 1 ("Internal routing reuses the same `AuditCascadeNode`") — false; tool bypasses the cascade primitive.
+> - Clause 2 ("the MCP tool is a thin surface wrapper") — false; tool is a standalone re-implementation (see `mcp/server.py`'s four `_build_standalone_*` helpers).
+> Accurate replacement must name Option A (H1 locked 2026-04-27), explain that `run_audit_cascade` invokes the auditor `tiered_node` directly with caller-supplied `artefact_kind` (H2 Option A), and acknowledge that the cascade primitive remains the inline-workflow surface.
+
+Same shape applies to CO-4 (the architecture.md line 105 sentence-fragment carries the same "reuses the `AuditCascadeNode` primitive" framing that needs to die — the spec already calls this out cleanly there, so CO-4 is fine; CO-3 is the underspecified one).
+
+**Apply this fix:** Replace T07 spec lines 50–56 with the expanded "Required fix" text above.
+
+#### 🟢 LOW
+
+##### L1 — Outcome bullet list orders T08 before T03 (chronological), not numeric — flag for reader's eye
+
+**Task:** T07
+**Location:** Spec lines 103–112 (Outcome section under milestone README deliverable)
+**Issue:** Bullet list reads T01 → T02 → T08 → T03 → T04 → T05 → T06 → T07 — chronological order matching the autopilot landing sequence (T08 was a T02 amendment that shipped before T03 per the milestone README §"Task order" sequencing exception). This is intentional and accurate, but a reader who scans by task number first will trip on the T08-between-T02-and-T03 placement.
+
+**Push to spec:** Add a one-line parenthetical above the bullet list explaining the ordering choice:
+
+> *(Bullets ordered chronologically per landing date — T08 amends T02 and ships before T03 per milestone README §"Task order" sequencing exception.)*
+
+Carry-over text for the spec:
+
+> **TA-T07-LOW-01 (Round 3):** When writing the Outcome section, prepend a one-line parenthetical explaining the chronological-not-numeric ordering of T08 in the bullet list, so readers don't mistake it for an editorial typo.
+
+##### L2 — CO-5's nice_to_have.md entry spec lacks an "Integration sketch" body even though §Deliverables says all five canonical fields are required
+
+**Task:** T07
+**Location:** Spec lines 78–82 (CO-5 §Required addition) + spec line 98 (Deliverables note "following the established entry format: **What this would add**, **Why deferred**, **Trigger to adopt**, **Integration sketch**, **Related**")
+**Issue:** The spec says the new §25 entry must follow the 5-field convention (matches §24's shape — verified). But CO-5's "Required addition" enumerates content for only 4 of the 5 fields: "What it would add", "Why deferred", "Trigger to adopt", "Related". No content sketched for "Integration sketch". Builder will either (a) write one freehand without explicit guidance, (b) skip it (then AC is technically unmet because the entry is missing a required field).
+
+The §24 Integration sketch is concrete: *"Add compaction-resume handler to `auto-implement.md` + `clean-implement.md` Auditor spawn blocks. `trigger.value = 80000`. New task T29 (M20 if open, M21 otherwise). Effort: MEDIUM (1–2 days)."* — i.e. names the touchpoints + a trigger value + a follow-on task placement.
+
+**Push to spec:** Add a 5th bullet to CO-5's Required addition (line 78 onwards) sketching the Integration approach:
+
+> - **Integration sketch:** Either (a) extend `EvalRunner._resolve_node_scope` to recognise `_primary` / `_auditor` suffixes as cascade-internal node-name conventions and skip the validator-pair lookup for the `_auditor` side (validator is the cascade's `<cascade_name>_validator` node, not `<cascade_name>_primary_validator`), or (b) introduce a `CascadeEvalRunner` subclass that overrides `_resolve_node_scope` for cascade fixtures while leaving the base `EvalRunner` untouched. Touchpoints: `ai_workflows/evals/runner.py` (`_resolve_node_scope` + `_invoke_replay`), `tests/evals/test_runner.py` (new test cases for the cascade-replay path). New ADR required to record the validator-pairing carve-out per KDR-004.
+
+Carry-over text for the spec:
+
+> **TA-T07-LOW-02 (Round 3):** Add the missing 5th bullet ("Integration sketch") to CO-5's Required addition before implementation, so the Builder doesn't have to derive the technical sketch fresh while drafting the §25 entry. Without this, the Builder either lands a 4-field entry (AC fail because the spec says "all five canonical fields") or freehand-writes a sketch that may not match the actual `_resolve_node_scope` shape.
+
+##### L3 — AC for "Zero `ai_workflows/` diff" cites comparison "against T06 landing commit" but doesn't pin the commit SHA
+
+**Task:** T07
+**Location:** Spec line 147 (AC zero-diff invariant)
+**Issue:** AC reads "verify with `git diff --stat` against T06 landing commit" — but doesn't pin the SHA. The T06 landing commit is `e8f43c9` per `git log` at top of session. T07 will land its own commit; without a SHA pin, "T06 landing commit" is recoverable by `git log --grep "M12 Task 06"` but adds friction and risks Builder picking a different commit (e.g. an in-flight T06 fix-up commit). M11 T02's analogous AC pinned the comparison commit SHA explicitly (line 92–93 of M11 T02 spec).
+
+**Push to spec:** Tighten AC line 147:
+
+> `[ ] Zero `ai_workflows/` diff at T07 (docs-only invariant — verify with `git diff --stat e8f43c9..HEAD -- ai_workflows/` against the T06 landing commit `e8f43c9`).`
+
+Carry-over text for the spec:
+
+> **TA-T07-LOW-03 (Round 3):** Pin the T06 landing commit SHA (`e8f43c9` at time of T07 spec drafting) into the zero-diff AC so the Builder doesn't have to re-derive the baseline. If T07 starts from a later commit (e.g. an in-flight T06 fix-up shipped after `e8f43c9`), update the SHA at Builder pre-flight time.
+
+##### L4 — Root README "Next" section currently points at M22 (post-M21); spec's "Update if applicable" hedge means Builder may unnecessarily rewrite
+
+**Task:** T07
+**Location:** Spec lines 130–132 (Root README deliverable)
+**Issue:** Root README §Next currently reads "M21 is complete. The next planned milestone is **M22**, which will address any operator-resume items from M20/M21..." — verified at `README.md:148`. M12 closing does NOT change this narrative because M12 is older than M21 (M12 is being closed retroactively; M21 already shipped). Spec's hedge "Update the **Next** section if applicable (M13 or later milestone pointer)" is correct that nothing-to-do is the likely answer, but a literal Builder may still rewrite the section to "mention M12 complete" — adding noise that contradicts the linear-narrative-by-newest-milestone shape every other Next section uses.
+
+**Push to spec:** Sharpen the spec to either (a) explicitly say "no change required to §Next — M21 is the newest milestone and its Next pointer at M22 is unaffected by M12 close-out", or (b) remove the §Next bullet entirely from the deliverables list (it's already noise-free if Builder skips it — but absence of explicit guidance risks unnecessary edits).
+
+Carry-over text for the spec:
+
+> **TA-T07-LOW-04 (Round 3):** The Root README §Next section ("M21 is complete. The next planned milestone is **M22**…") is unaffected by M12 close-out — M12 is older than M21, so the linear-narrative-by-newest-milestone surface stays as-is. Sharpen the spec from "if applicable" to "no change expected to §Next; M21's M22 pointer remains authoritative" so Builder doesn't add stale M12-mentioning prose to the §Next narrative.
+
+### What's structurally sound
+
+- **CO-1 / CO-2 / CO-4 source-text precision is verified.** Live ADR-0004 line 25 (CO-1 source), line 54 (CO-2 source), line 40 (CO-3 source), and architecture.md line 105 (CO-4 source) all match the spec's quoted current-text exactly. Builder will not have to hunt for the right sentence.
+- **CO-5 slot is free.** nice_to_have.md highest-numbered section is §24 (Server-side compaction); §25 is unclaimed. No slot drift. Verified all sections from §1 onwards: §8 is missing (legacy gap, intentional — section numbers don't have to be contiguous); §25 is the right next slot.
+- **All seven load-bearing KDRs preserved.** T07 is docs-only — zero risk of KDR-002/003/004/006/008/009/013 violation. Spec correctly forbids any `ai_workflows/` diff.
+- **Layer rule unaffected.** No production-code touch; primitives → graph → workflows → surfaces remains untouched.
+- **Status-surface discipline four-of-four enumerated** if M1 above is applied: (a) per-task spec Status, (b) milestone README §Status + §"Task order" row 07 + §"Exit criteria" item 10, (c) `tasks/README.md` — N/A (verified no `tasks/` subdir under `milestone_12_audit_cascade/`), (d) roadmap.md row.
+- **CHANGELOG handling matches M11 T02 precedent.** Promote `[Unreleased]` block (currently contains T06 entry + T05/T04/T03/T02/T01 entries) into a dated `[M12 Tiered Audit Cascade] - 2026-04-29` section + retain `[Unreleased]` skeleton + add T07 entry at top of new section. Mirror exact.
+- **Roadmap.md format correctly differentiates lower-case "planned" from emoji "📝 Planned".** Spec line 117 says `from 'planned' to '✅ complete (2026-04-29)'` (lowercase, no emoji) — matches the live cell text format. Spec line 102 uses capital `📝 Planned` → `✅ Complete (2026-04-29)` for the milestone README — matches that file's convention. No format conflation.
+- **No SEMVER touch.** Version stays at `0.3.1` (verified at `ai_workflows/__init__.py:33`). T07 is docs-only; no `pyproject.toml` version bump implied. Spec correctly omits any version-bump deliverable.
+- **No `nice_to_have.md` adoption.** §25 is a NEW deferred entry, not an adoption — KDR-014 + ADR-0009 already cover the architectural promotion story for the audit cascade. CO-5 is parking-lot bookkeeping, not promotion.
+- **No `pyproject.toml` / `uv.lock` diff.** No dependency-auditor trigger.
+
+### Cross-cutting context
+
+- **M12 autopilot resume target.** Per memory `project_m12_autopilot_2026_04_27_checkpoint.md` and the milestone README §"Autopilot checkpoint", T07 is the final task of M12 — the only task left after T06 closed today. The spec is appropriately scoped for a doc-only close-out.
+- **No memory flag for M12 hold-status.** Milestone is in active autopilot resume state; T07 is timely.
+- **CHANGELOG `[Unreleased]` block contains 6 M12 entries** (T01–T06) — verified at lines 8 onwards. T07's promotion-to-dated-section deliverable will sweep all six into the new dated section, and T07's own entry will sit at the top.
+- **No cross-task collision.** No other in-flight task spec touches ADR-0004, architecture.md §4.4 line 105, nice_to_have.md §25, roadmap.md M12 row, root README M12 row, or milestone README §Status. T07 is the sole owner of all five surfaces.
+- **The `_DynamicState["slice"]` workflow-name leak (T03 audit `M12-T03-LOW-05`) is correctly OUT of T07 scope** per spec line 159 + milestone README §138. Future task triggered by "first non-`slice` embedding workflow." Spec discipline preserved.
+- **AC line 148** ("uv run pytest + lint-imports (5 contracts) + ruff all clean") matches the live state — verified `lint-imports` runs 5 contracts post-T02 (per milestone README exit-criterion 11). No drift.
+
+---
+
+## Round 4 — T07 re-read after MEDIUM fixes (task-analyzer, 2026-04-29)
+
+**Round:** 4 | **Analyzed on:** 2026-04-29 | **Analyst:** task-analyzer agent
+**Specs analyzed:** `task_07_milestone_closeout.md` (hostile re-read after Round 3 MEDIUM fixes M1/M2/M3 + LOW carry-over).
+
+### Summary
+
+| Severity | Count |
+| --- | --- |
+| 🔴 HIGH | 0 |
+| 🟡 MEDIUM | 0 |
+| 🟢 LOW | 0 (Round-3 LOWs all carried over into spec §Carry-over from spec-hardening) |
+
+**Stop verdict:** CLEAN
+
+### Verification of Round 3 fixes
+
+All three MEDIUM fixes from Round 3 landed correctly and verifiably; all four LOWs were correctly carried into the spec rather than left open:
+
+- **M1 fix verified (Task-order row 07 + Exit-criteria item 10 + new ACs).** Spec §Deliverables → milestone README block (lines 105–110) now enumerates four explicit deliverable bullets: Status flip, §"Task order" row 07 flip, §"Exit criteria" item 10 flip to `✅ (T02/T03 complete 2026-04-27)`, and §"Cumulative carry-over" CO-5 backfill. Three new ACs added at lines 152–154 mirror these ("§"Task order" row 07 Status column flipped", "§"Exit criteria" item 10 marked", "§"Cumulative carry-over" backfilled with CO-5"). Verified against live milestone README: row 07 at line 70 currently reads `| 07 | Milestone close-out | doc | 📝 Planned |` (matches the spec's "from" state); §"Exit criteria" item 10 (lines 35–36 of the README) is unchecked while items 1–9 + 11–12 carry `✅` (matches the spec's claim); §"Cumulative carry-over" at lines 128–137 enumerates 4 items (matches the spec's "currently lists only CO-1–CO-4" claim). All three surface flips resolve cleanly.
+
+- **M2 fix verified (CO-5 5-field convention).** CO-5 §Required addition (spec lines 82–87) now enumerates all five canonical nice_to_have entry fields: **What it would add**, **Why deferred**, **Trigger to adopt**, **Integration sketch**, **Related**. The Integration sketch (line 86) names both Option A (extend `_resolve_node_scope`) and Option B (`CascadeEvalRunner` subclass), pins touchpoints (`ai_workflows/evals/runner.py` `_resolve_node_scope` + `_invoke_replay`, `tests/evals/test_runner.py`), and notes "New ADR required to record the validator-pairing carve-out per KDR-004." Verified against `nice_to_have.md` §24 (the highest-numbered live entry, line 557+): same 5-field convention (What this would add / Why deferred / Trigger to adopt / Integration sketch / Related). CO-5's shape is conformant. AC line 150 ("`nice_to_have.md` §25 EvalRunner cascade-fixture replay entry added with trigger + integration sketch") covers the additive surface. The §Deliverables block at line 103 also names the five-field convention explicitly ("**What this would add**, **Why deferred**, **Trigger to adopt**, **Integration sketch**, **Related**"), so the Builder cannot accidentally drop a field.
+
+- **M3 fix verified (CO-3 both clauses enumerated).** CO-3 §Required fix (spec lines 56–60) now explicitly enumerates **both** stale clauses: Clause 1 ("Internal routing reuses the same `AuditCascadeNode`") and Clause 2 ("the MCP tool is a thin surface wrapper"), with concrete refutation evidence for each (Clause 2 cites `mcp/server.py`'s `_build_standalone_audit_config`, `_build_audit_configurable`, `_make_standalone_auditor_prompt_fn` and the fourth build helper). Accurate-replacement constraints are pinned: "must name Option A (H1 locked 2026-04-27), explain that `run_audit_cascade` invokes the auditor `TieredNode` directly with caller-supplied `artefact_kind` (H2 Option A), and acknowledge that `AuditCascadeNode` remains the inline-workflow surface." Builder cannot rewrite only the first clause. Verified against live ADR-0004 line 40: the actual sentence reads `Internal routing reuses the same AuditCascadeNode; the MCP tool is a thin surface wrapper.` — exactly the two-clause shape the fix enumerates.
+
+- **L1–L4 all carried over correctly.** Spec lines 173–180 contain a new §"Carry-over from spec-hardening (task-analyzer Round 3 LOWs — push to Builder)" section enumerating all four Round-3 LOWs verbatim:
+  - **TA-T07-LOW-01** (chronological-not-numeric T08 ordering parenthetical) — line 177.
+  - **TA-T07-LOW-02** (use the CO-5 Integration sketch verbatim, do not derive new) — line 178.
+  - **TA-T07-LOW-03** (T06 landing commit SHA `e8f43c9` — verified live: `git log` HEAD shows `e8f43c9 M12 Task 06: harden T06 spec…`, but actually T06 LANDING commit is per memory checkpoint; the spec also embeds the SHA into AC line 158 directly: `git diff --stat e8f43c9..HEAD -- ai_workflows/`) — line 179.
+  - **TA-T07-LOW-04** (Root README §Next is unaffected by M12 close-out) — line 180.
+  Section framing ("not ACs but should be followed during implementation") matches the carry-over discipline used elsewhere (T06 spec §"Carry-over from spec-hardening"). Plus, the Root README §Next deliverable text at spec lines 138–140 was sharpened from the Round-3 hedge to an explicit "**No change to the §Next section.** ... Do not add M12-mentioning prose to the §Next narrative." — this lifts TA-T07-LOW-04 from a guidance carry-over into a deliverable-level instruction, which is even stronger than the Round-3 recommendation.
+
+### New issues found in Round 4
+
+**None.** The hostile re-read surfaced no new HIGH or MEDIUM regressions from the Round-3 edits.
+
+### Minor observations (informational, not findings)
+
+- **AC line 158 SHA pin is robust.** The zero-diff AC now reads `verify with git diff --stat e8f43c9..HEAD -- ai_workflows/` against T06 landing commit `e8f43c9`; update SHA at Builder pre-flight if a later commit has since landed on `design_branch`. This handles both the happy path (no intervening commit) and the drift path (the Builder swaps the SHA at pre-flight). The carry-over TA-T07-LOW-03 reinforces this. Verified against live `git log -5 --oneline`: `e8f43c9` is the T06 landing commit on `design_branch`. Spec is internally consistent.
+
+- **Outcome-section bullets cover all 8 tasks (lines 112–121).** T01–T08 each have a one-line summary; bullet ordering is T01 → T02 → T08 → T03 → T04 → T05 → T06 → T07 (chronological per Round-3 L1 finding). The Builder will follow TA-T07-LOW-01 to prepend the parenthetical explaining the ordering. Each bullet correctly attributes the landing artifact (e.g. T03 → "module-constant cascade enable + `AIW_AUDIT_CASCADE*` env-var overrides for `planner` + `slice_refactor`; KDR-014 / ADR-0009 locked decision"). No misattribution. T05's bullet correctly says "Option A standalone path (bypasses `AuditCascadeNode`)" — consistent with CO-3's required-fix framing. The "KDR additions" bullet at line 120 names KDR-011 + KDR-014 + ADR-0004 + ADR-0009 — accurate per milestone README line 113.
+
+- **CHANGELOG section lines 127–134** correctly enumerate CO-1/2/3 (ADR-0004 amendments), CO-4 (architecture.md framing fix), CO-5 (nice_to_have.md §25), the 5-contract lint-imports snapshot, and the docs-only zero-diff invariant. Mirror of the M11 T02 close-out shape.
+
+- **Out-of-scope block (lines 167–171)** correctly excludes the `_DynamicState["slice"]` workflow-name leak (T03 audit `M12-T03-LOW-05`) and cascade-depth tuning / shared-quota circuit breaker / cross-workflow telemetry dashboard. Spec discipline preserved.
+
+- **Spec internal consistency.** The CO-5 §Required addition Integration sketch (line 86) and the carry-over guidance TA-T07-LOW-02 (line 178) both point to the same prose — "Builder should use that sketch verbatim — do not derive a new one from scratch." This is mutually reinforcing, not duplicative.
+
+- **AC count consistency.** Spec lists 14 ACs (lines 146–159). Each AC maps to a deliverable bullet: CO-1 → AC1, CO-2 → AC2, CO-3 → AC3, CO-4 → AC4, CO-5 → AC5, milestone README Status → AC6, milestone README task-order row 07 → AC7, milestone README exit-criteria item 10 → AC8, milestone README cumulative-carry-over → AC9, roadmap.md → AC10, CHANGELOG → AC11, root README → AC12, zero-diff invariant → AC13, gates → AC14. No orphan deliverables, no orphan ACs.
+
+### What's structurally sound (Round 4 confirmation)
+
+- All three Round-3 MEDIUMs resolved with explicit deliverable + AC pairs (no implicit Builder discretion left).
+- All four Round-3 LOWs surfaced as a §Carry-over section the Builder reads at implementation time; one of them (TA-T07-LOW-04 §Next) was promoted into a stronger deliverable-level instruction rather than left as guidance.
+- All seven load-bearing KDRs preserved (T07 is docs-only, zero `ai_workflows/` diff per AC13).
+- Layer rule (`primitives → graph → workflows → surfaces`) unaffected — no production-code touch.
+- Status-surface discipline is now four-of-four explicitly addressed: (a) per-task spec Status, (b) milestone README §Status + §"Task order" row 07 + §"Exit criteria" item 10, (c) `tasks/README.md` — N/A (no per-task subdir under M12), (d) roadmap.md row.
+- CHANGELOG handling matches M11 T02 precedent (promote `[Unreleased]` to dated `[M12 Tiered Audit Cascade] - 2026-04-29`, retain skeleton, T07 entry at top).
+- nice_to_have.md slot §25 free (verified live: §24 is the highest-numbered section; legacy §8 gap is intentional). No slot drift.
+- No SEMVER touch (version stays at `0.3.1`, verified at `__init__.py:33` per Round-3 verification — unchanged).
+- No `pyproject.toml` / `uv.lock` diff; no dependency-auditor trigger.
+
+### Cross-cutting context
+
+- **M12 autopilot resume target unchanged.** T07 is the final task; spec is now ready for `/clean-implement m12 t07`.
+- **No memory flag for M12 hold-status.** Milestone is in active autopilot resume state; T07 is timely.
+- **No cross-task collision.** Confirmed Round 3 still holds: no other in-flight task spec touches ADR-0004, architecture.md §4.4 line 105, nice_to_have.md §25, roadmap.md M12 row, root README M12 row, or milestone README §Status.
+- **The spec is internally consistent and complete enough for a Builder to execute without ambiguity.** Every CO has a quoted "current text" + "required fix" + Builder-discretion boundary; every status-surface flip has a concrete from→to literal; every carry-over LOW has implementation-time guidance.
+
+The spec is ready for `/clean-implement m12 t07`.
