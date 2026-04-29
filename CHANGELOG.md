@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M21 Task 14: /check on-disk vs pushed-state Skill (2026-04-29)
+
+Files touched: `.claude/skills/check/SKILL.md` (new — check Skill, ≤5K tokens, four required ## anchors, allowed-tools: Bash declared with rationale note per TA-LOW-02), `.claude/skills/check/runbook.md` (new — T24-rubric-conformant; classification matrix six states × next-action, git invocations with example outputs, PyPI version compare section), `tests/test_t14_check.py` (new — frontmatter validity, token budget, four anchors, runbook reference, T24 rubric, T25 efficiency gate, Live Skills count line, CHANGELOG entry), `.claude/agents/_common/skills_pattern.md` (Live Skills line extended: added check (T14)), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_14_check_command.md` (Status → Done; TA-LOW-01/02 ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T14 row → Done; G3 exit criterion amended with satisfaction parenthetical naming /check), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (SKILL.md exists; frontmatter name=check, description ≤200 chars, allowed-tools declared; body ≤5K tokens; four ## anchors Inputs/Procedure/Outputs/Return schema; smoke steps 1-3+5 pass), AC2 (runbook.md exists, T24 rubric summary/section-budget/code-block-len pass; smoke step 4), AC3 (T25 skills_efficiency --check all clean against .claude/skills/; smoke step 6), AC7 (_common/skills_pattern.md Live Skills count line extended with check (T14); single line; smoke step 11), AC8 (CHANGELOG entry present; smoke step 10), AC9a (T14 spec Status → Done), AC9b (M21 README T14 row → Done), AC9c (M21 README G3 prose amended with T14 satisfaction). TA-LOW-01 (extended existing single Live Skills line — did not add a second). TA-LOW-02 (one-line allowed-tools rationale note added under §Skill structure §1 in SKILL.md).
+
+Deviations: none.
+
 ### Added — M21 Task 13: /triage post-halt diagnosis Skill (2026-04-29)
 
 Files touched: `.claude/skills/triage/SKILL.md` (new — triage Skill, ≤5K tokens, four required ## anchors, allowed-tools declared), `.claude/skills/triage/runbook.md` (new — T24-rubric-conformant; halt classifications taxonomy, option matrices per halt category, two worked examples), `tests/test_t13_triage.py` (new — frontmatter validity, token budget, four anchors, runbook reference, T24 rubric, T25 efficiency gate, Live Skills count line, CHANGELOG entry), `.claude/agents/_common/skills_pattern.md` (appended Live Skills count line: ai-workflows, dep-audit, triage), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_13_triage_command.md` (Status → Done; TA-LOW-01 ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T13 row → Done; G3 exit criterion amended with satisfaction parenthetical naming /triage as the highest-value Phase F Skill), `CHANGELOG.md` (this entry).

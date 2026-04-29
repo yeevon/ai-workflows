@@ -1,6 +1,6 @@
 # Task 14 — `/check` on-disk vs pushed-state verifier
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done.
 **Kind:** Productivity / code + doc.
 **Grounding:** [milestone README](README.md) · [research brief §T13–T16](../milestone_20_autonomy_loop_optimization/research_analysis.md) — anchor `### T13–T16 — New commands (/triage, /check, /ship, /sweep)` · [T12 spec](task_12_skills_extraction.md) (✅ Done — Skills extraction pattern) · [T13 spec](task_13_triage_command.md) (✅ Done — first Phase F Skill, sets the convention) · [T25 spec](task_25_periodic_skill_audit.md) (✅ Done — four-anchor canonical shape). KDR drift checks apply per M21 scope note.
 
@@ -223,10 +223,10 @@ grep -qE '^Live Skills:.*check' .claude/agents/_common/skills_pattern.md && echo
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Step 5 wording: extend Live Skills line, do not append a new line** (severity: LOW, source: task_analysis.md round 15 / T14 round 1)
+- [x] **TA-LOW-01 — Step 5 wording: extend Live Skills line, do not append a new line** (severity: LOW, source: task_analysis.md round 15 / T14 round 1)
       Step 5 says "Append `check (T14)` to the live-Skills line." A careful Builder might add a second `Live Skills:` line.
       **Recommendation:** Builder extends the existing single `Live Skills:` line from `..., triage (T13).` to `..., triage (T13), check (T14).` — single line; do not add a second.
 
-- [ ] **TA-LOW-02 — `allowed-tools` rationale informational note** (severity: LOW, source: task_analysis.md round 15)
+- [x] **TA-LOW-02 — `allowed-tools` rationale informational note** (severity: LOW, source: task_analysis.md round 15)
       T14 declares `allowed-tools: Bash` only (vs T13's `Read, Bash, Grep`); rationale is that T14's procedure is fully Bash-native (`git`, `curl`, `cat`, `grep` inside Bash subprocess calls). Worth noting for T15/T16 templates.
       **Recommendation:** Builder may add a one-line rationale under §Skill structure §1; optional, no blocker.
