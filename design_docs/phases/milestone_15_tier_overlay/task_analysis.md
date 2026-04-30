@@ -1,133 +1,82 @@
-# M15 — Task Analysis (Round 3, T04 only)
+# M15 Tier Fallback Chains — Task Analysis
 
-**Round:** 3 | **Analyzed on:** 2026-04-30 | **Analyst:** task-analyzer agent
-**Specs analyzed:** `task_04_adr_0006_and_tiers_doc_relocation.md`
-(T01–T03 ✅ shipped; T05 close-out not yet drafted.)
+**Round:** 2 | **Analyzed on:** 2026-04-30 | **Analyst:** task-analyzer agent
+**Specs analyzed:** `task_05_milestone_closeout.md` (T01–T04 already shipped)
 
 ## Summary
-
 | Severity | Count |
 | --- | --- |
 | 🔴 HIGH | 0 |
 | 🟡 MEDIUM | 0 |
-| 🟢 LOW | 1 |
+| 🟢 LOW | 4 |
 
 **Stop verdict:** LOW-ONLY
 
-Round-2 fixes status:
+---
 
-- **H3** (`tests/test_scaffolding.py` parametrize) — ✅ resolved. Spec now contains a new
-  Deliverable 3a (lines 69–71) calling out the parametrize-list update with the exact file path
-  (`tests/test_scaffolding.py:113-127`, entry at line 117). Verified literally:
-  `test_scaffolding.py:113-127` is the parametrize block; line 117 is `"tiers.yaml",`. AC-4
-  (line 140) now reads "Five committed-file references update cleanly: four in
-  `tests/primitives/test_tiers_loader.py` … and one in `tests/test_scaffolding.py`
-  (parametrize entry replaced with `"docs/tiers.example.yaml"`)" — matches the deliverable.
-- **M4** (heading anchor `### Tier registry (\`tiers=\`)`) — ✅ resolved. Verified at
-  `docs/writing-a-workflow.md:36`. Both Deliverable C (line 14) and Deliverable 4 (line 75) now
-  read "the existing `### Tier registry (`tiers=`)` subsection" with line-36 cited explicitly
-  in Deliverable C. Heading topology re-checked: line 36 (`### Tier registry (`tiers=`)`) →
-  line 68 (`### Minimum viable spec`) — sibling-H3 insertion remains structurally sound.
-- **L3** (Dependencies section `yaml_path` line) — ✅ resolved. Spec line 179 now reads
-  *"No production-code dependency — T04 is documentation + test-path update only.
-  `ai_workflows/primitives/tiers.py` is unchanged."* TA-LOW-03 carry-over entry (lines 208–
-  209) records the round-2 history correctly.
+## Round-1 fix verification
 
-`_load_example_tiers()` helper shape re-verified end-to-end:
+### M1 — RESOLVED ✅
+Round-1 M1 flagged ambiguity around the `## Deferred` narrative entry at `roadmap.md:56`. Round-2 spec Deliverable §3 now spells out **two** roadmap.md edits explicitly:
 
-- `TierConfig` (`ai_workflows/primitives/tiers.py:84-122`) requires `name` + `route`; defaults
-  `max_concurrency=1`, `per_call_timeout_s=120`, `fallback=[]`.
-- The committed `tiers.yaml` shape (`<key>: {route: {...}, max_concurrency: …,
-  per_call_timeout_s: …}`) is exactly what `TierConfig.model_validate({**v, "name": k})`
-  expects when `k` is the dict key and `v` is the per-tier mapping.
-- The four assertions hit by the four named tests (`set(tiers) == {"local_coder", "opus",
-  "sonnet", "haiku"}`, `isinstance(.route, LiteLLMRoute)`, `.cli_model_flag == "opus"`,
-  `.model.startswith("ollama/")`) all remain valid against `_load_example_tiers()`'s return
-  type `dict[str, TierConfig]`. ✅
+1. Flip §Milestones table row at `roadmap.md:28` to `✅ complete (2026-04-30)` (verified — line 28 contains the cited `📝 planned (rescoped 2026-04-30 — YAML overlay dropped…)` text).
+2. Update `## Deferred` narrative entry at `roadmap.md:56` in-place: prefix `✅ Shipped 2026-04-30 — ` + rewrite closing verb `Implement after M17.` → `Implemented.` (verified — line 56 begins `**M15 — Tier fallback chains (rescoped 2026-04-30; deferred).**` and ends `Implement after M17.`).
+
+AC-6 updated to cover both edits. Builder no longer has to punt; both targets and exact verb-tense rewrite are unambiguous.
+
+### M2 — RESOLVED ✅
+Round-1 M2 flagged the `<pre-T05-commit>` SHA placeholder gymnastics. Round-2 spec uses `git diff --stat HEAD~1..HEAD -- ai_workflows/` in both AC-9 (line 101) and the smoke block (line 121). Placeholder removed entirely; matches M12 T07 single-commit close-out pattern. Auditor and Builder run the same canonical command.
 
 ---
 
 ## Findings
 
-### 🟢 LOW
+*(no new HIGH or MEDIUM findings introduced by the M1/M2 fixes)*
 
-#### L4 — `tests/test_wheel_contents.py:150, 170` strings still mention `tiers.yaml` (informational)
+### 🟢 LOW (carried over from Round 1; should be pushed to spec carry-over)
 
-**Task:** T04
-**Issue:** `tests/test_wheel_contents.py:150` (docstring) and `tests/test_wheel_contents.py:170`
-(`f"Repo-root `tiers.yaml` / `pricing.yaml` are dev-time only and …"`) still mention
-`tiers.yaml` after T04 deletes the file. The test logic is unaffected — the invariant pinned
-is "no bare-root `*.yaml` files in the wheel"; that remains true after `tiers.yaml` is moved
-under `docs/`. The mention is a stale-but-harmless string.
+#### L1 — Outcome §gate snapshot pre-asserts `1532 passed`
+**Task:** T05 — Deliverable §2 (Outcome section, line 65).
+**Issue:** The spec writes the gate-snapshot line as a literal: `` `uv run pytest` (1532 passed) ``. That number was T04's count (verified at `task_04_issue.md:50`); T05 may add or inherit a count change.
+**Recommendation:** Builder hygiene — at close-out commit, run `uv run pytest` and update the count to the live value.
+**Push to spec carry-over:** *"At close-out, update the Outcome §gate-snapshot pytest count from the placeholder `1532 passed` to the live value emitted by the final `uv run pytest` run."*
 
-**Recommendation:** Push to spec carry-over (informational; the Builder may optionally tidy
-the docstring/error-message during T04 but is not required to). The wheel-contents test will
-continue to pass unchanged.
+#### L2 — Outcome §"KDR additions: none" loses the M12-mentioned KDR-014-strengthening framing
+**Task:** T05 — Deliverable §2 (Outcome line 64).
+**Issue:** The framing is correct, but reviewers benefit from a one-line cross-link to ADR-0006 §Decision-point-7 + §Alternatives-rejected blocks.
+**Push to spec carry-over:** *"In Outcome §, hyperlink ADR-0006 inline when noting KDR-014 strengthening so reviewers can jump to the rejection rationale."*
 
-**Push to spec:** add to T04's "Carry-over from task analysis" section:
+#### L3 — T04 audit LOW-1 (carry-over checkboxes left unticked) is not surfaced in T05
+**Task:** T05 — Carry-over from prior audits §.
+**Issue:** `task_04_issue.md:71-75` flags "carry-over checkboxes left unticked despite resolved diffs" with the Auditor explicitly suggesting "orchestrator may do this, or roll into M15 T05 close-out." T05 only carries M15-T04-LOW-02 forward; M15-T04-LOW-01 is dropped.
+**Push to spec carry-over:** *"Per `task_04_issue.md` LOW-1, optionally tick the four `[ ]` carry-over checkboxes in `task_04_adr_0006_and_tiers_doc_relocation.md` to `[x]` during T05 close-out (one-line bookkeeping fix; non-blocking)."*
 
-> **TA-LOW-04 — `tests/test_wheel_contents.py` docstring + error message reference
-> `tiers.yaml`** (severity: LOW, source: task_analysis.md round 3)
-> The wheel-contents test at `tests/test_wheel_contents.py:150, 170` still names
-> `tiers.yaml` in its docstring + assertion message. Test logic is unaffected (the
-> invariant — "no bare-root `*.yaml` in the wheel" — is unchanged), but the string is
-> mildly stale after T04.
-> **Recommendation:** Optionally update the strings to read `docs/tiers.example.yaml`
-> while in the file; non-blocking.
+#### L4 — `architecture.md:67` cell still references `pricing.yaml` alongside `tiers.yaml`; CO-1 only mentions tiers
+**Task:** T05 — CO-1 wording.
+**Issue:** The cell currently reads `` `TierConfig` + `pricing.yaml` / `tiers.yaml` ``. CO-1 directs the Builder to fix the `tiers.yaml` half but says nothing about whether `pricing.yaml` is still accurate. `pricing.yaml` does still exist at the repo root.
+**Push to spec carry-over:** *"In CO-1, add a one-line note: `pricing.yaml` reference at `architecture.md:67` stays (still loaded at repo root); CO-1 only touches the `tiers.yaml` half of the cell heading."*
 
 ---
 
-## What's structurally sound
+## What's structurally sound (Round 2)
 
-- **H3 / M4 / L3 round-2 fixes all land cleanly.** Deliverable 3a is well-scoped and
-  specific (file path, line range, exact entry to replace). M4 anchor text now matches
-  `docs/writing-a-workflow.md:36` literally. Dependencies §line is internally consistent
-  with Deliverable 3 + Out-of-scope §1.
-- **`_load_example_tiers()` helper shape correct.** Cross-checked against `TierConfig`
-  Pydantic model — required fields `name` + `route`, all others default. Helper signature
-  `dict[str, TierConfig]` is exactly what the four named tests expect.
-- **`REPO_ROOT` preservation correctly justified.** `test_committed_pricing_yaml_has_only_
-  claude_cli_entries` (line 328 — verified) still loads `pricing.yaml` via `REPO_ROOT`; all
-  `_write(tmp_path / "tiers.yaml", …)` helpers (verified at lines 178, 200, 212, 224, 236,
-  252, 272, 310) still need `tmp_path`-rooted writes. Both classes of caller stay correct.
-- **AC-1 / AC-4 enumerations match the file.** AC-1 seven §Decision points map 1:1 to
-  Deliverable 1's seven numbered items (line 27). AC-4 names the five expected references
-  (4 + 1) precisely.
-- **AC-7 (`uv run pytest`) is now achievable.** With Deliverable 3a in place, both the
-  loader-test suite (4 tests) and the scaffolding-files invariant (1 parametrize entry)
-  flip together.
-- **Out-of-scope discipline.** Forecloses `tiers.py` edits, `AIW_TIERS_PATH`,
-  `~/.ai-workflows/tiers.yaml`, YAML-fallback authoring — all explicitly out per
-  rescoping.
-- **No KDR drift.** No layer violations, no Anthropic SDK imports, no validator skips, no
-  bespoke retry, no SqliteSaver edits. Doc + test-path-update only.
-- **Status surfaces handled correctly.** Deliverable 6 names all four surfaces; exit
-  criteria #7 + #8 correctly noted as milestone-level (T05 close-out flips them).
-- **ADR file path open.** Verified `design_docs/adr/0006_tier_fallback_cascade_semantics.md`
-  does not yet exist (next free slot is 0006 — present ADRs are 0001, 0002, 0004, 0005,
-  0007, 0008, 0009, 0010 — no 0003 or 0006 collision).
+- **M1 fix verified line-by-line.** Spec Deliverable §3 explicitly cites `roadmap.md:28` and `roadmap.md:56`; both line numbers verified against current roadmap.md content. Verb-tense rewrite (`Implement after M17.` → `Implemented.`) is concrete and grep-able post-commit.
+- **M2 fix verified.** Both AC-9 (line 101) and the smoke block (line 121) use `HEAD~1..HEAD` — single-commit close-out pattern matches M12 T07. No SHA bookkeeping required.
+- **AC-6 properly updated.** Now reads: *"`design_docs/roadmap.md` M15 §Milestones table row (`roadmap.md:28`) reflects `✅ complete (2026-04-30)`; `## Deferred` narrative entry prefixed with `✅ Shipped 2026-04-30 — ` and rewritten to past tense"* — captures both edits in a single AC, smoke-verifiable via `grep`.
+- **All Round-1 "What's structurally sound" verifications still hold** — `architecture.md:67` cell text, `lint-imports` 5-contract count, root `README.md:25` row, version `0.4.0` in `__init__.py:33`, CHANGELOG `[Unreleased]` structure, CO-1 source traceability, out-of-scope §, status-surface coverage, AC-1 through AC-12 mapping, M12 T07 pattern fidelity.
+- **No new scope creep.** Round-2 fixes were strictly tightening; no new deliverables, no new ACs beyond the AC-6 expansion, no new code paths.
 
 ## Cross-cutting context
 
-- **Project memory check.** `MEMORY.md` is consistent — M15 rescoped 2026-04-30, T04 is
-  doc-only territory; no on-hold flag for T04.
-- **CHANGELOG entry not yet drafted** — Deliverable 5 calls for one. No conflict with
-  `[Unreleased]`.
-- **importlinter contract count drift** (carry-over from round 1, surfaces at T05). AC-8
-  says "5 contracts kept, 0 broken"; M15 README line 55 still says "4 contracts kept" —
-  README copy drift. Already noted in round 1; will surface at T05 close-out spec authoring.
-- **`test_wheel_contents.py` invariant.** The "no bare-root `*.yaml` in the wheel" check
-  in `test_built_wheel_excludes_dotenv_and_loose_yaml` continues to pass after T04 — the
-  file is moved (still in repo source tree, just under `docs/`) but the wheel-builder
-  convention (`packages = ["ai_workflows"]`) excluded it before and excludes it after.
-  L4 above is the only stale-string remnant (informational).
-- **Existing ADRs as templates.** ADR-0004 + ADR-0009 verified to exist; both follow
-  Status / Context / Decision / Alternatives / Consequences shape that Deliverable 1
-  inherits.
-- **Sibling task consistency.** T01 / T02 / T03 cross-references all resolve cleanly
-  post-T04; no re-edits needed in shipped specs.
+- **Memory note unchanged.** M15 closes retroactively at 2026-04-30 alongside M17; no version bump (already at `0.4.0`).
+- **`/auto-implement` boundary still respected.** No `git push`, no `uv publish`, no `main`-branch interaction.
+- **Layer rule N/A.** T05 is doc-only.
+- **KDR drift check.** No new KDR / ADR introduced. KDR-014 framing strengthened narratively only.
+- **`nice_to_have.md` slot drift.** No additions; no slot-collision risk.
+- **Sibling-task scope creep risk: low.** T05 is the only open M15 task.
 
 ---
 
-**Round 3 verdict:** spec is at LOW-ONLY. The single LOW (L4) is informational and
-non-blocking — push to spec carry-over and proceed to `/clean-implement m15 t04`.
+## Stop-condition assessment
+
+Round 2 verdict is **LOW-ONLY** (zero HIGH, zero MEDIUM, four LOWs). Per `/clean-tasks` stop-condition, this round meets the bar to advance to Phase 3 (push the four LOWs into spec carry-over sections, then implement). The four LOWs are stable across both rounds — they describe optional polish/hygiene items the Builder can absorb at implement-time without re-loop risk.
