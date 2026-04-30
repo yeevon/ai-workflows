@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- next release entries go here -->
 
+### Added — M15 Task 01: TierConfig.fallback schema + hermetic tests (2026-04-30)
+
+Adds `fallback: list[Route]` field to `TierConfig` in `ai_workflows/primitives/tiers.py`
+with a `_reject_nested_fallback` pydantic `field_validator` that rejects nested fallbacks
+at schema-validation time (architecturally forbidden per ADR-0006). Ships schema + tests only;
+cascade dispatch lives in M15 T02.
+
+**Files touched:**
+- `ai_workflows/primitives/tiers.py` — `field_validator` added to pydantic import; `TierConfig`
+  extended with `fallback: list[Route] = Field(default_factory=list)` + `_reject_nested_fallback`
+  validator; module + class docstrings updated.
+- `tests/primitives/test_tierconfig_fallback.py` — 4 new hermetic tests (flat acceptance,
+  nested rejection with index assertion, empty default, round-trip via `model_dump` + `TypeAdapter`).
+- `design_docs/phases/milestone_15_tier_overlay/task_01_fallback_schema.md` — Status ✅ Built.
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — T01 row ✅ Built (cycle 1).
+
+**ACs satisfied:** AC-1 (fallback field + nested rejection), AC-2 (4 hermetic tests green),
+AC-3 (existing 1514 tests unchanged), AC-4 (TierConfig round-trip preserved), AC-5 (5 lint-imports
+contracts kept, 0 broken), AC-6 (gates green), AC-7 (this entry).
+
+**Carry-over absorbed:** TA-LOW-02 (Route alias reused), TA-LOW-03 (index in error message),
+TA-LOW-04 (field_validator import added).
+
+**Deviations from spec:** None.
+
 ## [M12 Tiered Audit Cascade] - 2026-04-29
 
 ### Changed

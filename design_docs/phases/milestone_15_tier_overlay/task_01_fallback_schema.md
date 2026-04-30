@@ -1,6 +1,6 @@
 # Task 01 — `TierConfig.fallback` schema
 
-**Status:** 📝 Planned.
+**Status:** ✅ Built (cycle 1, 2026-04-30).
 **Grounding:** [milestone README](README.md) · [architecture.md §4.1 + §9](../../architecture.md) · [ai_workflows/primitives/tiers.py](../../../ai_workflows/primitives/tiers.py) · [KDR-014](../../architecture.md) (framework owns tier policy; env-var is the only operator override path).
 
 ## What to Build
