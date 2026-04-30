@@ -321,6 +321,6 @@ performs file I/O, the security of those operations is yours to own.
 - **Tier 4 (escape to LangGraph directly)** — [`writing-a-graph-primitive.md`](writing-a-graph-primitive.md).
   When even the `compile()` override in Tier 3 cannot express your topology — typically
   non-standard control-flow patterns that the linear step list cannot describe.
-- **Full four-tier extension model** — [`design_docs/architecture.md` §Extension model](../design_docs/architecture.md#extension-model-extensibility-is-a-first-class-capability) (builder-only, on design branch).
+- **Full four-tier extension model** — [`design_docs/architecture.md` §Extension model](https://github.com/yeevon/ai-workflows/blob/design_branch/design_docs/architecture.md#extension-model-extensibility-is-a-first-class-capability) (builder-only, on design branch).
   The architecture-of-record for the extension framing: tier definitions, out-of-scope guidance
   for graph-layer primitives, and the graduation path from custom step to built-in.

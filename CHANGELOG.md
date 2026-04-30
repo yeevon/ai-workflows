@@ -9,197 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- next release entries go here -->
 
-### Added — M15 Task 05: Milestone close-out (2026-04-30)
-
-M15 milestone closed. All five tasks shipped.
-
-**Files touched:**
-- `design_docs/architecture.md` — §4.1 TierConfig row: stale `tiers.yaml` reference removed; `docs/tiers.example.yaml` (schema-reference example, not loaded at dispatch time) noted; `pricing.yaml` reference preserved (CO-1 / M15-T04-LOW-02).
-- `design_docs/phases/milestone_15_tier_overlay/README.md` — Status flipped to ✅ Complete; task-05 row updated; exit criterion #10 lint-imports count corrected from 4 to 5 contracts; all 10 exit criteria annotated with satisfying task (T01–T04/T05); **Outcome** section added (T01–T05 summaries + gate snapshot).
-- `design_docs/roadmap.md` — M15 §Milestones table row flipped to ✅ complete (2026-04-30); §Deferred narrative entry prefixed with ✅ Shipped and rewritten to past tense.
-- `README.md` — M15 row updated to Complete (2026-04-30).
-- `CHANGELOG.md` — this entry.
-- `design_docs/phases/milestone_15_tier_overlay/task_05_milestone_closeout.md` — Status flipped to ✅ Complete.
-- `design_docs/phases/milestone_15_tier_overlay/issues/task_05_issue.md` — issue file created.
-
-**ACs satisfied:** AC-1 (architecture.md TierConfig row corrected), AC-2 (milestone README Status flipped), AC-3 (task-05 row updated), AC-4 (exit criterion #10 corrected; all 10 annotated), AC-5 (Outcome section added), AC-6 (roadmap.md updated), AC-7 (root README.md updated), AC-8 (CHANGELOG updated), AC-9 (zero ai_workflows/ diff), AC-10 (pytest 1532 passed), AC-11 (lint-imports 5 contracts), AC-12 (ruff check passes).
-
-**Deviations from spec:** None.
-
-### Added — M15 Task 04: ADR-0006 + tiers.yaml relocation + writing-a-workflow.md tier-config section (2026-04-30)
-
-**Deliverable A — ADR-0006:**
-
-New `design_docs/adr/0006_tier_fallback_cascade_semantics.md`. Records the decisions made
-and alternatives rejected when designing the M15 fallback cascade: trigger condition
-(retry-budget exhaustion after `RetryingEdge` three-bucket cycle), cost-accounting posture
-(truthful — every attempted route logs `TokenUsage`), validator interaction (against successful
-route only; semantic-validation failure is a primary-route concern — KDR-004 preserved), nesting
-limit (flat — nested fallbacks explicitly rejected), and four rejected alternatives
-(immediate-fail-over on first `NonRetryable`, score-based routing, provider-health probes,
-YAML overlay). Explicitly notes YAML-overlay rejection due to KDR-014.
-
-**Deliverable B — `tiers.yaml` → `docs/tiers.example.yaml`:**
-
-Repo-root `tiers.yaml` relocated to `docs/tiers.example.yaml`. Header comment updated to remove
-stale "Forward-looking: M15 introduces..." sentence; replaced with "M15 shipped: this file has
-been relocated..." note. `tiers.yaml` deleted from repo root. All four tier entries
-(`local_coder`, `opus`, `sonnet`, `haiku`) unchanged.
-
-**Deliverable C — `docs/writing-a-workflow.md` fallback section:**
-
-New `### Fallback chains` subsection added after `### Tier registry (\`tiers=\`)` and before
-`### Minimum viable spec` under `## The WorkflowSpec shape`. Documents `TierConfig.fallback`
-field, flat-only semantics, cascade-trigger semantics, cost-attribution note, validator
-interaction, `ClaudeCodeRoute` → `LiteLLMRoute` example, cross-links to `docs/tiers.example.yaml`
-and ADR-0006.
-
-**Files touched:**
-- `design_docs/adr/0006_tier_fallback_cascade_semantics.md` — new ADR file.
-- `docs/tiers.example.yaml` — new file (relocated from `tiers.yaml`).
-- `tiers.yaml` — deleted.
-- `docs/writing-a-workflow.md` — `### Fallback chains` subsection added.
-- `tests/primitives/test_tiers_loader.py` — `DOCS_DIR` constant + `_load_example_tiers()`
-  helper added; four committed-file tests updated to use `_load_example_tiers()`.
-- `tests/test_scaffolding.py` — parametrize entry updated from `"tiers.yaml"` to
-  `"docs/tiers.example.yaml"`.
-- `tests/test_wheel_contents.py` — stale `tiers.yaml` strings updated (TA-LOW-04).
-- `design_docs/phases/milestone_15_tier_overlay/task_04_adr_0006_and_tiers_doc_relocation.md` —
-  Grounding line updated to cite `docs/tiers.example.yaml`; Status flipped to Built.
-- `design_docs/phases/milestone_15_tier_overlay/README.md` — task-04 row updated.
-- `design_docs/phases/milestone_15_tier_overlay/issues/task_04_issue.md` — issue file created.
-
-**ACs satisfied:** AC-1 (ADR-0006 exists, seven decision points + four alternatives covered),
-AC-2 (`docs/tiers.example.yaml` exists with four tiers, stale sentence removed), AC-3
-(`tiers.yaml` deleted from repo root), AC-4 (four `test_tiers_loader.py` tests + one
-`test_scaffolding.py` entry updated), AC-5 (`### Fallback chains` section added with all
-required content + ADR-0006 cross-link), AC-6 (CHANGELOG updated), AC-7 (pytest passes),
-AC-8 (lint-imports passes), AC-9 (ruff check passes).
-
-**Carry-over items resolved:** TA-LOW-01 (Grounding line updated), TA-LOW-02 (ADR-0006 link
-includes `(builder-only, on design branch)` suffix), TA-LOW-04 (`test_wheel_contents.py`
-stale strings updated). TA-LOW-03 already resolved inline in task analysis.
-
-### Added — M15 Task 03: aiw list-tiers command + HTTP CircuitOpen cascade test — cycle 2 (2026-04-30)
-
-**Deliverable A — `aiw list-tiers` CLI command:**
-
-New `@app.command("list-tiers")` subcommand in `ai_workflows/cli.py`. Reads
-`workflows.list_workflows()` and `workflows.get_spec(name).tiers` to print a tier table with
-columns: workflow, tier, kind (LiteLLM/ClaudeCode), model/flag, concurrency, timeout_s, fallback
-(em-dash when empty, comma-joined route identifiers when non-empty). Accepts `--workflow`/`-w`
-to filter to a single workflow; unknown workflow name raises `typer.BadParameter` (exit code 2).
-Imperative workflows (registered via `register()` only, no `WorkflowSpec`) appear with a
-`"(no tier registry exported)"` row. Fully synchronous — no `asyncio.run`, no `_async` helper
-(TA-LOW-01).
-
-**Deliverable B — HTTP CircuitOpen cascade test:**
-
-New `tests/mcp/test_http_fallback_on_circuit_open.py` with one hermetic test
-`test_http_run_workflow_fallback_cascade_on_circuit_open`. Starts the MCP HTTP server in a
-background daemon thread, installs `_FallbackStubLiteLLMAdapter` (primary raises `CircuitOpen`,
-fallback returns valid JSON), invokes `run_workflow` via `fastmcp.Client` over HTTP, and asserts
-conjunctively: (a) `error=None`, (b) `run_id` present, (c) no `AllFallbacksExhaustedError` in
-payload. Pins the HTTP-envelope shape when cascade fires under a tripped circuit breaker
-(M15 exit criterion #5).
-
-**Files touched:**
-- `ai_workflows/cli.py` — `list_tiers()` command + `_emit_list_tiers_table()` helper added;
-  `ClaudeCodeRoute, LiteLLMRoute` imports added from `ai_workflows.primitives.tiers`.
-  Cycle 2: `_eager_import_in_package_workflows()` called before registry read; bare `typer.echo`
-  before `raise typer.BadParameter` dropped (LOW-02).
-- `ai_workflows/workflows/__init__.py` — `_eager_import_in_package_workflows()` helper added;
-  handles both fresh-import and already-loaded-registry-cleared cases (Decision 1 / MED-01).
-- `tests/cli/test_list_tiers.py` — restructured: 4 original tests + LOW-01 test moved into
-  `TestListTiersIsolated` class with class-scoped autouse; MED-01 test added at module level
-  (outside autouse scope); 6 total CLI tests.
-- `tests/mcp/test_http_fallback_on_circuit_open.py` — 1 HTTP-transport cascade test (cycle 1,
-  unchanged in cycle 2).
-
-**ACs satisfied:** AC-1 (list-tiers registered), AC-2 (tier table output), AC-3 (--workflow filter
-+ exit code 2 / LOW-02: bare echo dropped), AC-4 (imperative workflows handled + LOW-01 test),
-AC-5 (HTTP CircuitOpen cascade test), AC-6 (6 CLI tests green), AC-7 (1532 existing tests
-unchanged in cycle 2), AC-8 (5 lint-imports contracts kept), AC-9 (all gates green), AC-10 (this
-entry). MED-01: `aiw list-tiers` smoke test now passes.
-
-**Carry-over absorbed:** TA-LOW-01 (sync implementation, no asyncio.run); TA-LOW-02 (register_workflow
-pattern from tests/workflows/test_compiler.py:215 and tests/workflows/test_spec.py:235); MED-01
-(eager-import path); LOW-01 (imperative workflow test coverage); LOW-02 (duplicate echo dropped).
-
-**Deviations from spec:** None.
-
-### Added — M15 Task 02: TieredNode fallback-cascade dispatch + cost attribution (2026-04-30)
-
-Wires the fallback cascade into `TieredNode`. When `_dispatch()` raises an infrastructure-level
-exception (`RetryableTransient`, `NonRetryable`, or `CircuitOpen`) for the primary route,
-`_node()` walks `tier_config.fallback` in order, attempting each route once. First successful
-call returns normally; cost attribution fires for every successful attempt. If all routes fail,
-raises `AllFallbacksExhaustedError` (a `NonRetryable` subclass). `RetryableSemantic` bypasses
-the cascade entirely (defensive pass-through; KDR-004 unchanged). Empty fallback (`fallback=[]`)
-preserves existing behaviour exactly.
-
-**Files touched:**
-- `ai_workflows/graph/tiered_node.py` — `TierAttempt` dataclass + `AllFallbacksExhaustedError`
-  added; `__all__` updated to export both; `_emit_failed_log` helper extracted; `_node()` closure
-  refactored to drive the cascade loop; `CircuitOpen` pre-dispatch guard extended to fire cascade
-  when `fallback` is non-empty; module docstring "Exactly-once invariants" bullet updated to
-  per-attempt wording (§1.6). `dataclasses.dataclass`/`field` added to stdlib imports.
-- `tests/graph/test_tiered_node_fallback.py` — 9 new hermetic tests covering all cascade ACs
-  (cascade success, all-exhausted, semantic pass-through, cost attribution, empty-fallback compat,
-  per-attempt logs, type/inheritance assertions).
-
-**ACs satisfied:** AC-1 (AllFallbacksExhaustedError), AC-2 (TierAttempt), AC-3 (cascade dispatch),
-AC-4 (RetryableSemantic pass-through), AC-5 (cost attribution), AC-6 (empty-fallback compat),
-AC-7 (9 hermetic tests green), AC-8 (existing 1514 tests unchanged), AC-9 (5 lint-imports contracts),
-AC-10 (all gates green), AC-11 (this entry), AC-12 (CircuitOpen triggers cascade), AC-13 (per-attempt logs).
-
-**Carry-over absorbed:** TA-LOW-01 (defensive comment on RetryableSemantic guard), TA-LOW-02
-(TierAttempt.usage forward-reserved with comment), TA-LOW-03 (timeout inheritance comment),
-TA-LOW-04 (breaker bypass comment for fallback dispatches).
-
-### Added — M15 Task 02: cycle-2 carry-over tests (2026-04-30)
-
-Two tests added to `tests/graph/test_tiered_node_fallback.py` per locked terminal decisions:
-- `test_cascade_triggers_on_retryable_transient_primary_fail` — AC-3: `RetryableTransient` from
-  primary triggers cascade; fallback succeeds; cost recorded.
-- `test_cascade_retryable_semantic_from_fallback_propagates_unchanged` — AC-4: primary
-  `NonRetryable` enters cascade; fallback raises `RetryableSemantic`; exception propagates
-  unchanged (not wrapped in `AllFallbacksExhaustedError`); `cost_tracker.total == 0`.
-
-Also added `_RetryableTransientAdapter` stub and `RetryableTransient` import to the test file.
-
-**Files touched:** `tests/graph/test_tiered_node_fallback.py`
-
-**ACs satisfied (cycle 2):** AC-3 (RetryableTransient cascade trigger), AC-4 (fallback
-RetryableSemantic pass-through). No code changes to `tiered_node.py`.
-
-**Deviations from spec:** None.
-
-### Added — M15 Task 01: TierConfig.fallback schema + hermetic tests (2026-04-30)
-
-Adds `fallback: list[Route]` field to `TierConfig` in `ai_workflows/primitives/tiers.py`
-with a `_reject_nested_fallback` pydantic `field_validator` that rejects nested fallbacks
-at schema-validation time (architecturally forbidden per ADR-0006). Ships schema + tests only;
-cascade dispatch lives in M15 T02.
-
-**Files touched:**
-- `ai_workflows/primitives/tiers.py` — `field_validator` added to pydantic import; `TierConfig`
-  extended with `fallback: list[Route] = Field(default_factory=list)` + `_reject_nested_fallback`
-  validator; module + class docstrings updated.
-- `tests/primitives/test_tierconfig_fallback.py` — 4 new hermetic tests (flat acceptance,
-  nested rejection with index assertion, empty default, round-trip via `model_dump` + `TypeAdapter`).
-- `design_docs/phases/milestone_15_tier_overlay/task_01_fallback_schema.md` — Status ✅ Built.
-- `design_docs/phases/milestone_15_tier_overlay/README.md` — T01 row ✅ Built (cycle 1).
-
-**ACs satisfied:** AC-1 (fallback field + nested rejection), AC-2 (4 hermetic tests green),
-AC-3 (existing 1514 tests unchanged), AC-4 (TierConfig round-trip preserved), AC-5 (5 lint-imports
-contracts kept, 0 broken), AC-6 (gates green), AC-7 (this entry).
-
-**Carry-over absorbed:** TA-LOW-02 (Route alias reused), TA-LOW-03 (index in error message),
-TA-LOW-04 (field_validator import added).
-
-**Deviations from spec:** None.
-
 ## [M12 Tiered Audit Cascade] - 2026-04-29
 
 ### Changed
@@ -1681,6 +1490,198 @@ as the foundation for the M12 tiered audit cascade (ADR-0004, KDR-011).
 in any modified file. The tree-wide grep test covers the new lines automatically.
 
 ## [0.4.0] - 2026-04-30
+
+### Added — M15 Task 05: Milestone close-out (2026-04-30)
+
+M15 milestone closed. All five tasks shipped.
+
+**Files touched:**
+- `design_docs/architecture.md` — §4.1 TierConfig row: stale `tiers.yaml` reference removed; `docs/tiers.example.yaml` (schema-reference example, not loaded at dispatch time) noted; `pricing.yaml` reference preserved (CO-1 / M15-T04-LOW-02).
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — Status flipped to ✅ Complete; task-05 row updated; exit criterion #10 lint-imports count corrected from 4 to 5 contracts; all 10 exit criteria annotated with satisfying task (T01–T04/T05); **Outcome** section added (T01–T05 summaries + gate snapshot).
+- `design_docs/roadmap.md` — M15 §Milestones table row flipped to ✅ complete (2026-04-30); §Deferred narrative entry prefixed with ✅ Shipped and rewritten to past tense.
+- `README.md` — M15 row updated to Complete (2026-04-30).
+- `CHANGELOG.md` — this entry.
+- `design_docs/phases/milestone_15_tier_overlay/task_05_milestone_closeout.md` — Status flipped to ✅ Complete.
+- `design_docs/phases/milestone_15_tier_overlay/issues/task_05_issue.md` — issue file created.
+
+**ACs satisfied:** AC-1 (architecture.md TierConfig row corrected), AC-2 (milestone README Status flipped), AC-3 (task-05 row updated), AC-4 (exit criterion #10 corrected; all 10 annotated), AC-5 (Outcome section added), AC-6 (roadmap.md updated), AC-7 (root README.md updated), AC-8 (CHANGELOG updated), AC-9 (zero ai_workflows/ diff), AC-10 (pytest 1532 passed), AC-11 (lint-imports 5 contracts), AC-12 (ruff check passes).
+
+**Deviations from spec:** None.
+
+### Added — M15 Task 04: ADR-0006 + tiers.yaml relocation + writing-a-workflow.md tier-config section (2026-04-30)
+
+**Deliverable A — ADR-0006:**
+
+New `design_docs/adr/0006_tier_fallback_cascade_semantics.md`. Records the decisions made
+and alternatives rejected when designing the M15 fallback cascade: trigger condition
+(retry-budget exhaustion after `RetryingEdge` three-bucket cycle), cost-accounting posture
+(truthful — every attempted route logs `TokenUsage`), validator interaction (against successful
+route only; semantic-validation failure is a primary-route concern — KDR-004 preserved), nesting
+limit (flat — nested fallbacks explicitly rejected), and four rejected alternatives
+(immediate-fail-over on first `NonRetryable`, score-based routing, provider-health probes,
+YAML overlay). Explicitly notes YAML-overlay rejection due to KDR-014.
+
+**Deliverable B — `tiers.yaml` → `docs/tiers.example.yaml`:**
+
+Repo-root `tiers.yaml` relocated to `docs/tiers.example.yaml`. Header comment updated to remove
+stale "Forward-looking: M15 introduces..." sentence; replaced with "M15 shipped: this file has
+been relocated..." note. `tiers.yaml` deleted from repo root. All four tier entries
+(`local_coder`, `opus`, `sonnet`, `haiku`) unchanged.
+
+**Deliverable C — `docs/writing-a-workflow.md` fallback section:**
+
+New `### Fallback chains` subsection added after `### Tier registry (\`tiers=\`)` and before
+`### Minimum viable spec` under `## The WorkflowSpec shape`. Documents `TierConfig.fallback`
+field, flat-only semantics, cascade-trigger semantics, cost-attribution note, validator
+interaction, `ClaudeCodeRoute` → `LiteLLMRoute` example, cross-links to `docs/tiers.example.yaml`
+and ADR-0006.
+
+**Files touched:**
+- `design_docs/adr/0006_tier_fallback_cascade_semantics.md` — new ADR file.
+- `docs/tiers.example.yaml` — new file (relocated from `tiers.yaml`).
+- `tiers.yaml` — deleted.
+- `docs/writing-a-workflow.md` — `### Fallback chains` subsection added.
+- `tests/primitives/test_tiers_loader.py` — `DOCS_DIR` constant + `_load_example_tiers()`
+  helper added; four committed-file tests updated to use `_load_example_tiers()`.
+- `tests/test_scaffolding.py` — parametrize entry updated from `"tiers.yaml"` to
+  `"docs/tiers.example.yaml"`.
+- `tests/test_wheel_contents.py` — stale `tiers.yaml` strings updated (TA-LOW-04).
+- `design_docs/phases/milestone_15_tier_overlay/task_04_adr_0006_and_tiers_doc_relocation.md` —
+  Grounding line updated to cite `docs/tiers.example.yaml`; Status flipped to Built.
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — task-04 row updated.
+- `design_docs/phases/milestone_15_tier_overlay/issues/task_04_issue.md` — issue file created.
+
+**ACs satisfied:** AC-1 (ADR-0006 exists, seven decision points + four alternatives covered),
+AC-2 (`docs/tiers.example.yaml` exists with four tiers, stale sentence removed), AC-3
+(`tiers.yaml` deleted from repo root), AC-4 (four `test_tiers_loader.py` tests + one
+`test_scaffolding.py` entry updated), AC-5 (`### Fallback chains` section added with all
+required content + ADR-0006 cross-link), AC-6 (CHANGELOG updated), AC-7 (pytest passes),
+AC-8 (lint-imports passes), AC-9 (ruff check passes).
+
+**Carry-over items resolved:** TA-LOW-01 (Grounding line updated), TA-LOW-02 (ADR-0006 link
+includes `(builder-only, on design branch)` suffix), TA-LOW-04 (`test_wheel_contents.py`
+stale strings updated). TA-LOW-03 already resolved inline in task analysis.
+
+### Added — M15 Task 03: aiw list-tiers command + HTTP CircuitOpen cascade test — cycle 2 (2026-04-30)
+
+**Deliverable A — `aiw list-tiers` CLI command:**
+
+New `@app.command("list-tiers")` subcommand in `ai_workflows/cli.py`. Reads
+`workflows.list_workflows()` and `workflows.get_spec(name).tiers` to print a tier table with
+columns: workflow, tier, kind (LiteLLM/ClaudeCode), model/flag, concurrency, timeout_s, fallback
+(em-dash when empty, comma-joined route identifiers when non-empty). Accepts `--workflow`/`-w`
+to filter to a single workflow; unknown workflow name raises `typer.BadParameter` (exit code 2).
+Imperative workflows (registered via `register()` only, no `WorkflowSpec`) appear with a
+`"(no tier registry exported)"` row. Fully synchronous — no `asyncio.run`, no `_async` helper
+(TA-LOW-01).
+
+**Deliverable B — HTTP CircuitOpen cascade test:**
+
+New `tests/mcp/test_http_fallback_on_circuit_open.py` with one hermetic test
+`test_http_run_workflow_fallback_cascade_on_circuit_open`. Starts the MCP HTTP server in a
+background daemon thread, installs `_FallbackStubLiteLLMAdapter` (primary raises `CircuitOpen`,
+fallback returns valid JSON), invokes `run_workflow` via `fastmcp.Client` over HTTP, and asserts
+conjunctively: (a) `error=None`, (b) `run_id` present, (c) no `AllFallbacksExhaustedError` in
+payload. Pins the HTTP-envelope shape when cascade fires under a tripped circuit breaker
+(M15 exit criterion #5).
+
+**Files touched:**
+- `ai_workflows/cli.py` — `list_tiers()` command + `_emit_list_tiers_table()` helper added;
+  `ClaudeCodeRoute, LiteLLMRoute` imports added from `ai_workflows.primitives.tiers`.
+  Cycle 2: `_eager_import_in_package_workflows()` called before registry read; bare `typer.echo`
+  before `raise typer.BadParameter` dropped (LOW-02).
+- `ai_workflows/workflows/__init__.py` — `_eager_import_in_package_workflows()` helper added;
+  handles both fresh-import and already-loaded-registry-cleared cases (Decision 1 / MED-01).
+- `tests/cli/test_list_tiers.py` — restructured: 4 original tests + LOW-01 test moved into
+  `TestListTiersIsolated` class with class-scoped autouse; MED-01 test added at module level
+  (outside autouse scope); 6 total CLI tests.
+- `tests/mcp/test_http_fallback_on_circuit_open.py` — 1 HTTP-transport cascade test (cycle 1,
+  unchanged in cycle 2).
+
+**ACs satisfied:** AC-1 (list-tiers registered), AC-2 (tier table output), AC-3 (--workflow filter
++ exit code 2 / LOW-02: bare echo dropped), AC-4 (imperative workflows handled + LOW-01 test),
+AC-5 (HTTP CircuitOpen cascade test), AC-6 (6 CLI tests green), AC-7 (1532 existing tests
+unchanged in cycle 2), AC-8 (5 lint-imports contracts kept), AC-9 (all gates green), AC-10 (this
+entry). MED-01: `aiw list-tiers` smoke test now passes.
+
+**Carry-over absorbed:** TA-LOW-01 (sync implementation, no asyncio.run); TA-LOW-02 (register_workflow
+pattern from tests/workflows/test_compiler.py:215 and tests/workflows/test_spec.py:235); MED-01
+(eager-import path); LOW-01 (imperative workflow test coverage); LOW-02 (duplicate echo dropped).
+
+**Deviations from spec:** None.
+
+### Added — M15 Task 02: TieredNode fallback-cascade dispatch + cost attribution (2026-04-30)
+
+Wires the fallback cascade into `TieredNode`. When `_dispatch()` raises an infrastructure-level
+exception (`RetryableTransient`, `NonRetryable`, or `CircuitOpen`) for the primary route,
+`_node()` walks `tier_config.fallback` in order, attempting each route once. First successful
+call returns normally; cost attribution fires for every successful attempt. If all routes fail,
+raises `AllFallbacksExhaustedError` (a `NonRetryable` subclass). `RetryableSemantic` bypasses
+the cascade entirely (defensive pass-through; KDR-004 unchanged). Empty fallback (`fallback=[]`)
+preserves existing behaviour exactly.
+
+**Files touched:**
+- `ai_workflows/graph/tiered_node.py` — `TierAttempt` dataclass + `AllFallbacksExhaustedError`
+  added; `__all__` updated to export both; `_emit_failed_log` helper extracted; `_node()` closure
+  refactored to drive the cascade loop; `CircuitOpen` pre-dispatch guard extended to fire cascade
+  when `fallback` is non-empty; module docstring "Exactly-once invariants" bullet updated to
+  per-attempt wording (§1.6). `dataclasses.dataclass`/`field` added to stdlib imports.
+- `tests/graph/test_tiered_node_fallback.py` — 9 new hermetic tests covering all cascade ACs
+  (cascade success, all-exhausted, semantic pass-through, cost attribution, empty-fallback compat,
+  per-attempt logs, type/inheritance assertions).
+
+**ACs satisfied:** AC-1 (AllFallbacksExhaustedError), AC-2 (TierAttempt), AC-3 (cascade dispatch),
+AC-4 (RetryableSemantic pass-through), AC-5 (cost attribution), AC-6 (empty-fallback compat),
+AC-7 (9 hermetic tests green), AC-8 (existing 1514 tests unchanged), AC-9 (5 lint-imports contracts),
+AC-10 (all gates green), AC-11 (this entry), AC-12 (CircuitOpen triggers cascade), AC-13 (per-attempt logs).
+
+**Carry-over absorbed:** TA-LOW-01 (defensive comment on RetryableSemantic guard), TA-LOW-02
+(TierAttempt.usage forward-reserved with comment), TA-LOW-03 (timeout inheritance comment),
+TA-LOW-04 (breaker bypass comment for fallback dispatches).
+
+### Added — M15 Task 02: cycle-2 carry-over tests (2026-04-30)
+
+Two tests added to `tests/graph/test_tiered_node_fallback.py` per locked terminal decisions:
+- `test_cascade_triggers_on_retryable_transient_primary_fail` — AC-3: `RetryableTransient` from
+  primary triggers cascade; fallback succeeds; cost recorded.
+- `test_cascade_retryable_semantic_from_fallback_propagates_unchanged` — AC-4: primary
+  `NonRetryable` enters cascade; fallback raises `RetryableSemantic`; exception propagates
+  unchanged (not wrapped in `AllFallbacksExhaustedError`); `cost_tracker.total == 0`.
+
+Also added `_RetryableTransientAdapter` stub and `RetryableTransient` import to the test file.
+
+**Files touched:** `tests/graph/test_tiered_node_fallback.py`
+
+**ACs satisfied (cycle 2):** AC-3 (RetryableTransient cascade trigger), AC-4 (fallback
+RetryableSemantic pass-through). No code changes to `tiered_node.py`.
+
+**Deviations from spec:** None.
+
+### Added — M15 Task 01: TierConfig.fallback schema + hermetic tests (2026-04-30)
+
+Adds `fallback: list[Route]` field to `TierConfig` in `ai_workflows/primitives/tiers.py`
+with a `_reject_nested_fallback` pydantic `field_validator` that rejects nested fallbacks
+at schema-validation time (architecturally forbidden per ADR-0006). Ships schema + tests only;
+cascade dispatch lives in M15 T02.
+
+**Files touched:**
+- `ai_workflows/primitives/tiers.py` — `field_validator` added to pydantic import; `TierConfig`
+  extended with `fallback: list[Route] = Field(default_factory=list)` + `_reject_nested_fallback`
+  validator; module + class docstrings updated.
+- `tests/primitives/test_tierconfig_fallback.py` — 4 new hermetic tests (flat acceptance,
+  nested rejection with index assertion, empty default, round-trip via `model_dump` + `TypeAdapter`).
+- `design_docs/phases/milestone_15_tier_overlay/task_01_fallback_schema.md` — Status ✅ Built.
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — T01 row ✅ Built (cycle 1).
+
+**ACs satisfied:** AC-1 (fallback field + nested rejection), AC-2 (4 hermetic tests green),
+AC-3 (existing 1514 tests unchanged), AC-4 (TierConfig round-trip preserved), AC-5 (5 lint-imports
+contracts kept, 0 broken), AC-6 (gates green), AC-7 (this entry).
+
+**Carry-over absorbed:** TA-LOW-02 (Route alias reused), TA-LOW-03 (index in error message),
+TA-LOW-04 (field_validator import added).
+
+**Deviations from spec:** None.
+
 
 ### Added — M17 Task 04: Milestone close-out + version bump to 0.4.0 (2026-04-30)
 
