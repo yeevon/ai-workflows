@@ -1,11 +1,11 @@
 # Milestone 17 — `scaffold_workflow` Meta-Workflow
 
 **Status:** 📝 Planned (drafted 2026-04-23).
-**Grounding:** [architecture.md §4.2 + §4.3](../../architecture.md) · [roadmap.md](../../roadmap.md) · [analysis/post_0.1.2_audit_disposition.md](../../analysis/post_0.1.2_audit_disposition.md) · [M15 README](../milestone_15_tier_overlay/README.md) (tier overlay — precondition) · [M16 README](../milestone_16_external_workflows/README.md) (external load path — precondition) · [M11 README](../milestone_11_gate_review/README.md) (gate-pause projection — M17 uses `HumanGate` with reviewable state).
+**Grounding:** [architecture.md §4.2 + §4.3](../../architecture.md) · [roadmap.md](../../roadmap.md) · [analysis/post_0.1.2_audit_disposition.md](../../analysis/post_0.1.2_audit_disposition.md) · [M15 README](../milestone_15_tier_overlay/README.md) (tier fallback chains — deferred; not a hard M17 dependency) · [M16 README](../milestone_16_external_workflows/README.md) (external load path — precondition, shipped 2026-04-24) · [M11 README](../milestone_11_gate_review/README.md) (gate-pause projection — M17 uses `HumanGate` with reviewable state).
 
 ## Why this milestone exists
 
-M15 gave users a way to **rebind** tiers for existing workflows. M16 gave users a way to **drop in** their own workflow Python file. Both are power-user surfaces: editing a `.py` file is the entry cost. A first-time user with a goal (*"generate exam questions from textbook chapters"*, *"refactor this Django app's auth middleware"*, *"summarise meeting transcripts into action items"*) still faces a blank `.py` and has to learn the `register(name, builder)` pattern, the `TieredNode` / `ValidatorNode` / `HumanGate` primitives, the LangGraph `StateGraph` API, and the tier-name conventions — before they write a single line of workflow code.
+M16 gave users a way to **drop in** their own workflow Python file. That's a power-user surface: editing a `.py` file is the entry cost. A first-time user with a goal (*"generate exam questions from textbook chapters"*, *"refactor this Django app's auth middleware"*, *"summarise meeting transcripts into action items"*) still faces a blank `.py` and has to learn the `register(name, builder)` pattern, the `TieredNode` / `ValidatorNode` / `HumanGate` primitives, the LangGraph `StateGraph` API, and the tier-name conventions — before they write a single line of workflow code.
 
 M17 closes that gap with a **meta-workflow** — a shipped workflow whose job is to generate other workflows. The user invokes `aiw run scaffold_workflow --goal "generate exam questions …" --target ~/my-workflows/question_gen.py`, reviews the generated code at a `HumanGate` that surfaces the full file contents, and on approval the scaffold writes the file to disk. The user then runs it via M16's `AIW_WORKFLOWS_PATH`:
 
@@ -74,7 +74,7 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 
 ## Exit criteria
 
-1. **`scaffold_workflow` ships in `ai_workflows/workflows/scaffold_workflow.py`.** Registered via the same `register("scaffold_workflow", build_scaffold_workflow)` call the shipped workflows use. Declares its own tier registry (`scaffold_workflow_tier_registry()`) with a single tier name (e.g. `scaffold-synth`) routing to Claude Opus. M15's overlay can rebind the tier to Sonnet or an external model without editing the scaffold.
+1. **`scaffold_workflow` ships in `ai_workflows/workflows/scaffold_workflow.py`.** Registered via the same `register("scaffold_workflow", build_scaffold_workflow)` call the shipped workflows use. Declares its own tier registry (`scaffold_workflow_tier_registry()`) with a single tier name (e.g. `scaffold-synth`) routing to Claude Opus. Tier can be rebound per-call via `--tier-override scaffold-synth=<replacement>` (CLI) or `tier_overrides={"scaffold-synth": "<replacement>"}` (MCP) per KDR-014.
 2. **Pydantic output schema.** `ScaffoldedWorkflow` model with the six fields named above. Imported from `ai_workflows/workflows/scaffold_workflow.py` or a sibling schemas module.
 3. **Validator enforces "parseable Python + `register()` shape."** The validator parses `source_python` via `ast.parse()`; if parsing raises, the validator rejects. If parsing succeeds, the validator walks the AST looking for a top-level `Call` node whose `func` resolves to the name `register` and whose first arg is a string literal matching the output's `name` field. Anything beyond that — whether the workflow actually works, whether its prompts are sensible, whether its tier registry is coherent — is **not checked**. Risk is the user's.
 4. **`HumanGate` preview.** The gate emits `source_python` + a structured `summary` field showing the declared tiers, validators, and write target. M11's projection carries the summary into `RunWorkflowOutput.gate_context` so MCP consumers see the preview.
@@ -106,7 +106,7 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 - **No version-pinning of generated code to the ai-workflows version.** Generated code may target a specific API shape (e.g. `TieredNode` signature). If ai-workflows evolves the primitive surface, old generated code may break — that's the user's to maintain. M17 does not emit compatibility shims.
 - **No code-gen for primitives.** T01 scaffolds workflows only. If a user needs a custom primitive, they write it hand (M16's `AIW_PRIMITIVES_PATH` is the surface). A `scaffold_primitive` workflow is a forward option once the workflow-scaffold shape has shipped and proven out.
 - **No multi-file scaffolds.** One invocation = one `.py` file. Workflows that naturally span multiple files (e.g. a large `StateGraph` with dedicated modules) are written hand or generated by multiple scaffold invocations. T01 keeps the unit of generation atomic.
-- **No Anthropic API (KDR-003).** The scaffold's LLM tier routes via Claude Code CLI subprocess (default Opus). M15's overlay can rebind to any LiteLLM-supported model; the default stays OAuth-subprocess.
+- **No Anthropic API (KDR-003).** The scaffold's LLM tier routes via Claude Code CLI subprocess (default Opus). The default stays OAuth-subprocess; per-call rebinding via `--tier-override` is available if the user wants a different model.
 - **No schema discoverability tooling beyond `aiw inspect`.** Users wanting to see available graph primitives read `docs/writing-a-graph-primitive.md`. The scaffold's prompt template does not embed the full primitive inventory — it points at the docs.
 
 ## Key decisions in effect
@@ -119,7 +119,7 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 | Scaffold is itself a LangGraph workflow — dogfooding, not new substrate | architecture.md §4.2 |
 | KDR-004 compliance: LLM node paired with ValidatorNode (schema check only) | KDR-004 |
 | M11 gate-pause projection carries the code preview over MCP | KDR-008 + M11 |
-| Default tier = Claude Opus via OAuth subprocess; overridable via M15 overlay | KDR-003 + KDR-007 + M15 |
+| Default tier = Claude Opus via OAuth subprocess; per-call rebind via `--tier-override` / `tier_overrides` | KDR-003 + KDR-007 + KDR-014 |
 
 ## Task order
 
@@ -134,14 +134,14 @@ Per-task specs land as each predecessor closes.
 
 ## Dependencies
 
-- **M15 landed** (tier overlay + fallback). Scaffold's default tier can be rebound by M15 overlay without regenerating the scaffold itself.
-- **M16 landed** (external workflows load path). Without M16, the scaffold's output has nowhere to go — it would write to a file nobody can load. M16 is a hard precondition.
+- **M16 landed** (external workflows load path, shipped 2026-04-24 as 0.3.0). Without M16, the scaffold's output has nowhere to go. M16 is a hard precondition.
+- **M15 deferred** (tier fallback chains, rescoped 2026-04-30). M15 is not a hard dependency for M17. Scaffold tier is rebindable per-call via `--tier-override` / `tier_overrides` per KDR-014. M15's `TierConfig.fallback` chains will compose with M17 once M15 ships.
 - **M13 (v0.1.0) + M14 (HTTP) + M11 (gate projection)** — shipped. M17 rides on all three.
 - **`.claude/skills/ai-workflows/SKILL.md`** — M9's skill packaging extends to cover the scaffold flow at T03 (doc-only; no code change in the skill itself).
 
 ## Ships as 0.4.0
 
-M15 → 0.2.0. M16 → 0.3.0. M17 → 0.4.0. Each is an additive minor release; no API breakage.
+0.3.1 is current. M17 ships as 0.4.0 — additive minor release; no API breakage.
 
 ## Open questions (resolve before T01 kickoff)
 
@@ -152,7 +152,7 @@ M15 → 0.2.0. M16 → 0.3.0. M17 → 0.4.0. Each is an additive minor release; 
 
 ## Carry-over from prior milestones
 
-- *None at M17 kickoff.* M15 and M16 absorb every pre-M17 finding.
+- *None at M17 kickoff.* M16 absorbs every pre-M17 finding. M15 is deferred; any M15-related items that surface at M17 audit time will carry over to M15's spec.
 
 ## Propagation status
 

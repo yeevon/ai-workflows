@@ -1,7 +1,7 @@
-# Task 01 — Overlay loader + `TierConfig.fallback` schema
+# Task 01 — `TierConfig.fallback` schema
 
-**Status:** 📝 Planned.
-**Grounding:** [milestone README](README.md) · [architecture.md §4.1 + §9](../../architecture.md) · [ai_workflows/primitives/tiers.py](../../../ai_workflows/primitives/tiers.py) · [ai_workflows/workflows/_dispatch.py:220-230](../../../ai_workflows/workflows/_dispatch.py#L220-L230) (the `_resolve_tier_registry()` merge point) · [M15 design review](README.md#why-this-milestone-exists) (workflow owns default; overlay rebinds by name).
+**Status:** 📝 Planned (rescoped 2026-04-30; spec needs rewrite before implementation — overlay loader deliverables dropped; scope = `TierConfig.fallback` schema + hermetic tests only).
+**Grounding:** [milestone README](README.md) · [architecture.md §4.1 + §9](../../architecture.md) · [ai_workflows/primitives/tiers.py](../../../ai_workflows/primitives/tiers.py) · [ai_workflows/workflows/_dispatch.py:264-274](../../../ai_workflows/workflows/_dispatch.py#L264-L274) (the `_resolve_tier_registry()` function, three-step: workflow-registry → `load_overlay` (noop) → `_apply_tier_overrides`) · [KDR-014](../../architecture.md) (framework owns quality policy; tier defaults in module constants; env-var override only).
 
 ## What to Build
 

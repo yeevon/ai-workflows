@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- M15 rescoped (2026-04-30): YAML overlay (`~/.ai-workflows/tiers.yaml`) dropped — conflicts with KDR-014 (framework owns quality policy; env-var is the only operator override). M15 scope is now `TierConfig.fallback` schema + `TieredNode` cascade dispatch + cost attribution + `aiw list-tiers` + ADR-0006. M15 deferred pending M17 close-out. M17 unblocked: scaffold tier rebindable per-call via `--tier-override` / `tier_overrides` (KDR-014).
+
+**Files touched:**
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — rescoping note, title, scope/goal/exit-criteria/non-goals/key-decisions/dependencies/open-questions updated.
+- `design_docs/phases/milestone_15_tier_overlay/task_01_overlay_and_fallback_schema.md` — status + title updated; overlay loader deliverables dropped.
+- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — M15 hard dependency removed; tier rebinding cites KDR-014 `--tier-override`; dependencies + carry-over updated.
+- `design_docs/roadmap.md` — M15 row + M17 row + M15/M17 summaries updated.
+- `.gitignore` — `.claude/worktrees/` added (agent-isolation artifact).
+
 ## [M12 Tiered Audit Cascade] - 2026-04-29
 
 ### Changed
