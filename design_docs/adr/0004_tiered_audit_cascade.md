@@ -22,7 +22,7 @@ The M9 T04 close-out live smoke (2026-04-21) surfaced the adjacent UX concern th
 
 **Introduce a tiered audit cascade as the KDR-004 quality surface.** Concretely:
 
-1. **Auditor tiers are a pair.** `auditor-sonnet` routes to `ClaudeCodeRoute(cli_model_flag="sonnet")`; `auditor-opus` routes to `ClaudeCodeRoute(cli_model_flag="opus")`. Both sit in the `TierRegistry` (`ai_workflows/primitives/tiers.py`) next to `planner-synth`. No new driver, no new LiteLLM route, no new env var.
+1. **Auditor tiers are a pair.** `auditor-sonnet` routes to `ClaudeCodeRoute(cli_model_flag="sonnet")`; `auditor-opus` routes to `ClaudeCodeRoute(cli_model_flag="opus")`. Both were placed in **workflow-scoped registries** at T01 (`planner.py`, `summarize_tiers.py`; `slice_refactor.py` inherits via composition) — not in `primitives/tiers.py`. No new driver, no new LiteLLM route, no new env var.
 
 2. **Cascade wraps generative nodes whose output is read downstream.** A node's output qualifies if it is consumed by another graph node or surfaced to the user. Scratchpad / explore-only output is **out of scope** — auditing it would erase the cost rationale of the small tier.
 
@@ -37,7 +37,7 @@ The M9 T04 close-out live smoke (2026-04-21) surfaced the adjacent UX concern th
 
 6. **Telemetry is load-bearing.** Each cascade step records `TokenUsage` with a `role` tag (`"author"` / `"auditor"` / `"verdict"`) so the existing ledger surfaces *Opus vs Sonnet vs small-tier* usage per run. Aggregation queries (`by_role`, `by_audit_outcome`) feed the empirical-tuning loop that decides when to flip a workflow's `audit_cascade_enabled` default to `True`, widen/narrow the scope rule, or promote/demote an auditor tier.
 
-7. **Standalone invocation surface.** A new MCP tool `run_audit_cascade(artefact_ref, tier_ceiling?) → AuditReport` plus a companion slash-command entry in `.claude/skills/ai-workflows/SKILL.md` lets a caller run the cascade over an **existing** artefact (a completed plan, a draft spec, a generated code slice) without kicking off a full workflow. Internal routing reuses the same `AuditCascadeNode`; the MCP tool is a thin surface wrapper. The standalone surface is for ad-hoc auditing (spot-check a plan before committing it, audit a doc change before push) and is load-bearing for end-to-end testing of the cascade independently of any workflow.
+7. **Standalone invocation surface.** A new MCP tool `run_audit_cascade(artefact_ref, tier_ceiling?) → AuditReport` plus a companion slash-command entry in `.claude/skills/ai-workflows/SKILL.md` lets a caller run the cascade over an **existing** artefact (a completed plan, a draft spec, a generated code slice) without kicking off a full workflow. T05 chose Option A (H1 locked 2026-04-27): `run_audit_cascade` bypasses `AuditCascadeNode` entirely and invokes the auditor `TieredNode` directly via four private `_build_standalone_*` helpers in `mcp/server.py` — the tool is a standalone re-implementation, not a thin surface wrapper over the sub-graph primitive. `AuditCascadeNode` remains the inline-workflow composition surface (workflows embed it as a sub-graph); only the standalone MCP tool takes the direct path. The standalone surface is for ad-hoc auditing (spot-check a plan before committing it, audit a doc change before push) and is load-bearing for end-to-end testing of the cascade independently of any workflow.
 
 ## Rationale
 
@@ -51,7 +51,7 @@ The M9 T04 close-out live smoke (2026-04-21) surfaced the adjacent UX concern th
 
 ## Consequences
 
-- **New primitive.** `AuditCascadeNode` lands in `ai_workflows/graph/audit_cascade.py` (M12 T02). Fits the existing four-layer contract (graph imports only primitives; workflows / surfaces import graph). No import-linter edit needed.
+- **New primitive.** `AuditCascadeNode` lands in `ai_workflows/graph/audit_cascade.py` (M12 T02). Fits the existing four-layer contract (graph imports only primitives; workflows / surfaces import graph). T02 added a fifth `lint-imports` contract to pin `audit_cascade.py` as a graph-layer module, bringing the contract count from 4 to 5 — an import-linter edit was needed.
 - **New TierConfigs.** `auditor-sonnet` + `auditor-opus` land in `ai_workflows/primitives/tiers.py` (M12 T01) with matching pricing entries. Pricing is **$0 per million tokens** — Max is flat-rate; the zero price keeps `CostTracker`'s ledger shape intact without introducing a fiction about per-call cost. Usage is still recorded in tokens for the empirical-tuning loop.
 - **New MCP tool.** `run_audit_cascade` lands in `ai_workflows/mcp/server.py` (M12 T05) with paired pydantic input/output schemas. Skill gets a matching natural-language entry.
 - **Workflow opt-in field.** Each existing workflow's config model grows an `audit_cascade_enabled: bool = False` field (M12 T03). Landing the field without any workflow flipping it on preserves backwards compatibility.

@@ -22,7 +22,7 @@ This roadmap replaces the archived milestone plan at `archive/pre_langgraph_pivo
 | M9 | Claude Code skill packaging | [phases/milestone_9_skill/](phases/milestone_9_skill/README.md) | ✅ complete (2026-04-21) |
 | M10 | Ollama fault-tolerance hardening | [phases/milestone_10_ollama_hardening/](phases/milestone_10_ollama_hardening/README.md) | planned |
 | M11 | MCP gate-review surface | [phases/milestone_11_gate_review/](phases/milestone_11_gate_review/README.md) | ✅ complete (2026-04-22) |
-| M12 | Tiered audit cascade | [phases/milestone_12_audit_cascade/](phases/milestone_12_audit_cascade/README.md) | planned |
+| M12 | Tiered audit cascade | [phases/milestone_12_audit_cascade/](phases/milestone_12_audit_cascade/README.md) | ✅ complete (2026-04-29) |
 | M14 | MCP HTTP transport | [phases/milestone_14_mcp_http/](phases/milestone_14_mcp_http/README.md) | ✅ complete (2026-04-22) |
 | M13 | v0.1.0 release + PyPI packaging | [phases/milestone_13_v0_release/](phases/milestone_13_v0_release/README.md) | ✅ complete (2026-04-22) |
 | M15 | Tier overlay + fallback chains | [phases/milestone_15_tier_overlay/](phases/milestone_15_tier_overlay/README.md) | 📝 planned (drafted 2026-04-23; next load-bearing milestone) |

@@ -582,6 +582,30 @@ Activate Anthropic's beta `compact_20260112` strategy in `context_management.edi
 
 ---
 
+## 25. EvalRunner replay for cascade author/auditor fixtures
+
+**What this would add:**
+
+`EvalRunner` replay mode for cascade author/auditor nodes — either by extending `EvalRunner._resolve_node_scope` to recognise `_primary` / `_auditor` suffixes and skip the `<node>_validator` pair-lookup on the auditor side (the cascade's validator is `<cascade_name>_validator`, not `<cascade_name>_auditor_validator`), or by introducing a `CascadeEvalRunner` subclass that overrides `_resolve_node_scope` while leaving the base `EvalRunner` untouched.
+
+**Why deferred:**
+
+`EvalRunner._resolve_node_scope` requires a `<node>_validator` pair per KDR-004. Cascade auditor nodes do not provide a paired validator (the verdict node handles schema parsing directly via `AuditVerdict.model_validate_json`). Extending `_resolve_node_scope` with a by-suffix convention needs design work and a new ADR recording the KDR-004 carve-out before it lands.
+
+**Trigger to adopt — both conditions must hold:**
+
+A workflow flips `audit_cascade_enabled` to `True` as a production default AND the team wants CI-gated regression coverage of the auditor's verdict quality (not just the primary node's output shape via the existing hermetic eval suite).
+
+**Integration sketch:**
+
+Either (a) extend `EvalRunner._resolve_node_scope` to recognise `_primary` / `_auditor` suffixes as cascade-internal node-name conventions and skip the validator-pair lookup for the `_auditor` side, or (b) introduce a `CascadeEvalRunner` subclass that overrides `_resolve_node_scope` for cascade fixtures while leaving the base `EvalRunner` untouched. Touchpoints: `ai_workflows/evals/runner.py` (`_resolve_node_scope` + `_invoke_replay`), `tests/evals/test_runner.py` (new test cases for cascade-replay path). New ADR required per KDR-004. Effort: MEDIUM (1–2 days).
+
+**Related:**
+
+M12 T06 (fixture-capture convention), `evals/README.md` §"Cascade fixture convention (M12 T06)", KDR-004, `EvalRunner._resolve_node_scope`.
+
+---
+
 ## Revisit cadence
 
 Re-read this file:

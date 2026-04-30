@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [M12 Tiered Audit Cascade] - 2026-04-29
+
+### Changed
+- M12 Task 07: Milestone close-out — ADR-0004 amendment (CO-1: landing-site framing, CO-2: lint-imports contract count, CO-3: standalone-tool bypass), architecture.md §4.4 cascade-reuse framing (CO-4), and nice_to_have.md §25 EvalRunner cascade-fixture replay entry (CO-5). Status surfaces flipped: M12 ✅ complete, roadmap.md updated, root README.md updated. Docs-only: zero ai_workflows/ diff. Gates: uv run pytest ✅ · uv run lint-imports ✅ (5 contracts) · uv run ruff check ✅.
+
+**Files touched:**
+- `design_docs/adr/0004_tiered_audit_cascade.md` — CO-1: §Decision item 1 landing-site corrected (workflow-scoped registries, not `primitives/tiers.py`); CO-2: §Consequences "New primitive" bullet updated (lint-imports edit was needed, 4→5 contracts); CO-3: §Decision item 7 standalone-tool reuse claim replaced with Option A bypass description.
+- `design_docs/architecture.md` — CO-4: §4.4 `run_audit_cascade` bullet updated (invokes auditor TieredNode directly, bypasses AuditCascadeNode per T05 Option A).
+- `design_docs/nice_to_have.md` — CO-5: §25 EvalRunner cascade-fixture replay entry added (before §Revisit cadence).
+- `design_docs/phases/milestone_12_audit_cascade/README.md` — Status ✅ Complete; T07 row ✅; exit-criteria item 10 ✅; CO-5 added to cumulative carry-over list; Outcome section appended.
+- `design_docs/roadmap.md` — M12 row flipped to ✅ complete (2026-04-29).
+- `README.md` — M12 table row flipped to Complete (2026-04-29).
+- `CHANGELOG.md` — [Unreleased] M12 entries promoted to this dated section; T07 entry added at top.
+
+**KDR cited:** KDR-011 (tiered audit cascade close-out; docs-only amendment to ADR-0004 + architecture.md).
+
 ### Added — M12 Task 06: eval-harness fixture convention for cascade author/auditor node pairs (2026-04-29)
 
 Documents and locks the eval-fixture convention for cascade-enabled workflow runs, plus

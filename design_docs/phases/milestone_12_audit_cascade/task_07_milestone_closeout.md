@@ -1,6 +1,6 @@
 # Task 07 — Milestone Close-out
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done (2026-04-29).
 **Grounding:** [milestone README](README.md) · [CLAUDE.md](../../../CLAUDE.md) close-out conventions · [M11 T02](../milestone_11_gate_review/task_02_milestone_closeout.md) (pattern mirrored).
 
 ## What to Build

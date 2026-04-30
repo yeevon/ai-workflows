@@ -1,6 +1,6 @@
 # Milestone 12 — Tiered Audit Cascade
 
-**Status:** 📝 Planned (drafted 2026-04-21).
+**Status:** ✅ Complete (2026-04-29).
 **Grounding:** [ADR-0004](../../adr/0004_tiered_audit_cascade.md) · [architecture.md §4.2 / §4.4 / §9 KDR-011](../../architecture.md) · [roadmap.md](../../roadmap.md) · [M11 README](../milestone_11_gate_review/README.md) (precondition).
 
 ## Why this milestone exists
@@ -32,7 +32,7 @@ The mechanism to close this is a **tiered audit cascade**: pair every generative
 7. [x] (T05 complete 2026-04-28) `ai_workflows/mcp/server.py` — new `@mcp.tool()` `run_audit_cascade(input: RunAuditCascadeInput) -> RunAuditCascadeOutput`. Input: `artefact_ref: str` (a completed `run_id`, or a file path under a sandboxed root, or an inline dict — one-of); optional `tier_ceiling: Literal["sonnet", "opus"] = "opus"`. Output: `passed: bool`, `verdicts_by_tier: dict[str, AuditVerdict]`, `suggested_approach: str | None`, `total_cost_usd: float`. Implementation: Option A (H1 locked 2026-04-27) — bypasses `AuditCascadeNode`, invokes auditor `tiered_node` directly; caller supplies `artefact_kind` (H2 Option A). See T05 spec.
 8. [x] (T05 complete 2026-04-28) `.claude/skills/ai-workflows/SKILL.md` — new "Ad-hoc artefact audit" section documenting when + how to call `run_audit_cascade`.
 9. [x] (T06 complete 2026-04-29) `evals/<workflow>/<node>/` fixture convention gains an author/auditor split: `author_<case_id>.json` + `auditor_<case_id>.json` land as two independent fixtures captured by the `CaptureCallback` whose existing role-tag can be read. No change to `EvalRunner`'s engine; fixture-naming convention only. One golden test per workflow that opts into the cascade.
-10. `tests/graph/test_audit_cascade.py` + `tests/workflows/test_audit_cascade_wiring.py` — hermetic coverage of: cascade pass-through (auditor passes on first try), cascade re-fire (auditor fails → primary re-prompts with enriched context → auditor passes), cascade escalation (retries exhausted → strict gate fires with transcript), opt-out default (`audit_cascade_enabled=False` compiles an identical-to-M11 graph), opt-in roundtrip (`audit_cascade_enabled=True` compiles the cascade sub-graph in place of raw `TieredNode`).
+10. ✅ (T02/T03 complete 2026-04-27) `tests/graph/test_audit_cascade.py` + `tests/workflows/test_audit_cascade_wiring.py` — hermetic coverage of: cascade pass-through (auditor passes on first try), cascade re-fire (auditor fails → primary re-prompts with enriched context → auditor passes), cascade escalation (retries exhausted → strict gate fires with transcript), opt-out default (`audit_cascade_enabled=False` compiles an identical-to-M11 graph), opt-in roundtrip (`audit_cascade_enabled=True` compiles the cascade sub-graph in place of raw `TieredNode`).
 11. ✅ (T02 complete 2026-04-27) Gates green: `uv run pytest` + `uv run lint-imports` (**5 contracts kept** — a new contract is added at M12 T02 to pin the cascade primitive as graph-layer; see T02 spec) + `uv run ruff check`. Count jumps from 4 to 5 because the cascade adds a new cross-file dependency that the contract pins against drift.
 12. ✅ (T02 complete 2026-04-27) No `anthropic` SDK import anywhere. No `ANTHROPIC_API_KEY` read. Hermetic grep test extended over the new modules.
 
@@ -67,7 +67,7 @@ The mechanism to close this is a **tiered audit cascade**: pair every generative
 | 04 | [Telemetry — `TokenUsage.role` tag + `CostTracker.by_role` + cascade-step records](task_04_telemetry_role_tag.md) | code + test | ✅ Complete (2026-04-27) |
 | 05 | [`run_audit_cascade` MCP tool + SKILL.md ad-hoc-audit section](task_05_run_audit_cascade_mcp_tool.md) | code + test + doc | ✅ Complete (2026-04-28) |
 | 06 | Eval harness — author/auditor fixture convention + golden cases for one opt-in workflow | code + test + doc | ✅ Complete (2026-04-29) |
-| 07 | Milestone close-out | doc | 📝 Planned |
+| 07 | Milestone close-out | doc | ✅ Complete (2026-04-29) |
 | 08 | [T02 amendment — `audit_cascade_node(skip_terminal_gate=True)` for cascade-exhaustion-without-interrupt path](task_08_audit_cascade_skip_terminal_gate.md) | code + test | ✅ Complete (2026-04-27) |
 
 Per-task spec files land as each predecessor closes (same convention as M10 / M11 — scope stays calibrated against landed surface). **Sequencing exception:** T08 is a T02 amendment surfaced during T03 spec hardening (round-4 H1 — slice_refactor's parallel fan-out cannot tolerate the cascade's hard-wired terminal `human_gate` triggering N parallel operator interrupts). T08 ships **before** T03 even though its number is higher — the roadmap-selector's sequential default rule defers to T03's explicit `## Dependencies` declaration. Adding the parameter is backward-compatible (default `False` preserves T02's existing behaviour); land as an isolated T02-amendment commit per autonomy decision 2.
@@ -133,6 +133,7 @@ T07 should bundle a single ADR-0004 amendment commit covering all 4 stale-framin
 - **ADR-0004 §Consequences line 54** ("No import-linter edit needed" — superseded by T02's audit_cascade contract) — from T02 `M12-T02-MED-01`.
 - **ADR-0004 §Decision item 7** ("internal routing reuses the same `AuditCascadeNode`" — superseded by T05's Option A bypass) — from T05 spec §Propagation status.
 - **`architecture.md:105`** cascade-reuse framing (matching ADR-0004 §Decision item 7 stale-framing fix) — from T05 round-2 `TA-T05-LOW-02`. (Task-number `M12 T04 → M12 T05` was already fixed at T05 close; only the cascade-reuse framing rewrite remains.)
+- **`nice_to_have.md` §25** EvalRunner cascade-fixture replay — from T06 spec / KDR-004 carve-out (T07 bundled).
 
 The `_DynamicState["slice"]` workflow-name leak (T03 audit `M12-T03-LOW-05`) is its own future task triggered by "first non-`slice` embedding workflow"; NOT bundled with T07.
 
@@ -144,3 +145,18 @@ The `_DynamicState["slice"]` workflow-name leak (T03 audit `M12-T03-LOW-05`) is 
 4. **T07 close-out** — doc-only task. Bundles the 4 ADR-0004 amendments above + architecture.md framing fix + final M12 status flip in roadmap.
 
 Memory entry capturing this checkpoint: `project_m12_autopilot_2026_04_27_checkpoint.md`.
+
+## Outcome
+
+*(Bullets ordered chronologically per landing date — T08 amends T02 and ships before T03 per §"Task order" sequencing exception above.)*
+
+- **T01 — Auditor TierConfigs** (2026-04-27, commit `a7f3e8f`): `auditor-sonnet` + `auditor-opus` TierConfig entries in workflow-scoped registries (`planner.py`, `summarize_tiers.py`; `slice_refactor.py` inherits via composition). KDR-003 hermetic grep extended over new modules.
+- **T02 — `AuditCascadeNode` graph primitive** (2026-04-27, commit `fc8ef19`): `AuditCascadeNode` + `AuditFailure` exception + re-prompt template + `AuditVerdictNode`; `RetryingEdge` integration; `HumanGate` escalation path. lint-imports contract count 4 → 5.
+- **T08 — `skip_terminal_gate=True` (T02 amendment)** (2026-04-27, commit `e7e8a31`): `audit_cascade_node(skip_terminal_gate=True)` parameter for non-interruptible fan-out contexts (slice_refactor parallel branches). Backward-compatible (default `False` preserves T02 behaviour).
+- **T03 — Workflow wiring** (2026-04-27, commit `1677889`): module-constant cascade enable + `AIW_AUDIT_CASCADE*` env-var overrides for `planner` + `slice_refactor`. KDR-014 / ADR-0009 locked decision (framework owns quality policy; operator override is env-var).
+- **T04 — Telemetry** (2026-04-27, commit `f6904cb`): `TokenUsage.role` tag + `CostTracker.by_role(run_id)` aggregation; role-tagged records in existing ledger. KDR-009 preserved.
+- **T05 — `run_audit_cascade` MCP tool** (2026-04-28, commit `8c664f6`): standalone artefact audit MCP tool + SKILL.md ad-hoc-audit section. Option A (bypasses `AuditCascadeNode`; invokes auditor TieredNode directly). `_strip_code_fence` helper closes latent T02 fenced-JSON bug.
+- **T06 — Eval harness fixture convention** (2026-04-29, commit `d472255`): author/auditor fixture split (`<cascade_name>_primary/` / `<cascade_name>_auditor/`); `evals/README.md`; 5 hermetic tests + 2 golden tests for planner + slice_refactor. KDR-004 EvalRunner carve-out.
+- **T07 — Milestone close-out** (2026-04-29): ADR-0004 amendment (CO-1/CO-2/CO-3) + architecture.md §4.4 framing fix (CO-4) + `nice_to_have.md` §25 (CO-5) + status surfaces flipped.
+- **KDR additions:** KDR-011 (tiered audit cascade per ADR-0004), KDR-014 (framework owns quality policy per ADR-0009).
+- **Green-gate snapshot:** `uv run pytest` ✅ · `uv run lint-imports` ✅ (5 contracts) · `uv run ruff check` ✅.
