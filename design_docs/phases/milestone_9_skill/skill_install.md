@@ -232,3 +232,121 @@ breaker's `cooldown_s` (default 60 s — see
 Resuming sooner re-trips the gate immediately because the breaker is
 still OPEN. See [M8 milestone Outcome](../milestone_8_ollama/README.md)
 for the full design.
+
+## 7. Generating your own workflow
+
+M17's `scaffold_workflow` meta-workflow generates a `WorkflowSpec` +
+`register_workflow(spec)` `.py` file from a plain-English goal. The
+generated file is user-owned from the moment it is written to disk;
+ai-workflows validates the schema only (parseable Python +
+`register_workflow()` call — KDR-004 + ADR-0010) and does not lint or
+test the generated code.
+
+### Invocation
+
+```bash
+aiw run scaffold_workflow \
+  --input goal="generate exam questions from a textbook chapter" \
+  --input target_path=~/my-workflows/question_gen.py \
+  --run-id scaffold-qg-1
+```
+
+Or via the `run-scaffold` alias (shorter form):
+
+```bash
+aiw run-scaffold \
+  --goal "generate exam questions from a textbook chapter" \
+  --target ~/my-workflows/question_gen.py \
+  --run-id scaffold-qg-1
+```
+
+Pass `--input force=true` / `--force` to overwrite an existing file.
+
+### Review at the gate
+
+The scaffold runs a synthesis step (Claude Opus via OAuth subprocess —
+KDR-003) then pauses at a `HumanGate`. The gate surfaces:
+
+- The full `spec_python` content (the `.py` file the scaffold will write).
+- A structured summary: target path, inferred workflow name, write mode
+  (new vs. overwrite).
+
+Via CLI, the gate pause is reported in the `aiw run` stdout (which prints
+the `run_id` and the `spec_python` preview). Paused runs can also be found
+with `aiw list-runs --workflow scaffold_workflow --status gate`. Via MCP
+(`run_workflow` + `resume_run`), `RunWorkflowOutput.gate_context` carries
+the same content for the operator or an MCP-host reviewer.
+
+### Approve or reject
+
+```bash
+# Approve — writes the file atomically to the target path:
+aiw resume scaffold-qg-1 --gate-response approved
+
+# Reject — aborts without writing; start a new run with refined guidance:
+aiw resume scaffold-qg-1 --gate-response rejected
+```
+
+On approval the scaffold writes `spec_python` to the target path using
+`tempfile.mkstemp` + `os.replace` (atomic) and returns a `WriteOutcome`
+containing the target path and the `sha256` of the written content.
+
+On rejection, no file is written. To iterate, start a new
+`scaffold_workflow` run with a more specific `--goal` or additional
+context in `existing_workflow_context`.
+
+### Write path
+
+The write-to-disk node enforces four safety guards (ADR-0010 Rule 2):
+
+1. Target must not resolve inside `ai_workflows/` (package-safety guard).
+2. Parent directory must exist and be writable.
+3. Existing files require `--force` / `force=true`.
+4. Write is atomic (`mkstemp` + `os.replace`).
+
+Relative paths are rejected at input-validation time; paths are
+expanded via `Path.expanduser().resolve()`.
+
+### `AIW_EXTRA_WORKFLOW_MODULES` handoff
+
+After the scaffold writes the file, add the module to
+`AIW_EXTRA_WORKFLOW_MODULES` before starting the next `aiw` / `aiw-mcp`
+process. The module name is the file stem (no `.py`):
+
+```bash
+# The file was written to ~/my-workflows/question_gen.py.
+# Module stem = "question_gen".  PYTHONPATH must include the parent dir.
+
+PYTHONPATH=~/my-workflows \
+  AIW_EXTRA_WORKFLOW_MODULES=question_gen \
+  aiw run question_gen \
+    --input chapter_text="Chapter 4 content here" \
+    --input num_questions=10 \
+    --run-id qg-1
+
+# Or, if your module is editable-installed in the same venv:
+uv pip install -e ~/my-workflows
+AIW_EXTRA_WORKFLOW_MODULES=question_gen aiw run question_gen ...
+```
+
+ai-workflows surfaces import errors at startup via
+`ExternalWorkflowImportError` (ADR-0007 + KDR-013) — a broken import
+aborts startup and shows the chained Python traceback.
+
+### Where to iterate
+
+Once the file is loaded and working:
+
+- **Edit directly:** the generated file is plain Python + the
+  `WorkflowSpec` declarative API. Open it, change a step, restart
+  `aiw` / `aiw-mcp` to re-register.
+- **Regenerate from scratch:** run `scaffold_workflow` again with
+  `--force` / `force=true` to overwrite the existing file. A new
+  synthesis run gives the LLM a fresh attempt with any additional
+  context you supply.
+- **Reference docs:** for step types, tier config, and the declarative
+  API, see
+  [`docs/writing-a-workflow.md`](../../../docs/writing-a-workflow.md).
+
+No auto-registration or hot-reload fires after the scaffold writes.
+The user restarts `aiw` / `aiw-mcp` to pick up the new or updated module.

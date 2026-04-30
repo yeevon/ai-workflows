@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M17 Task 03: ADR-0010 + skill-install doc + docs/writing-a-workflow.md §Scaffolding (2026-04-30)
+
+Files touched:
+- `design_docs/adr/0010_user_owned_generated_code.md` — NEW: ADR-0010 records the risk-ownership framing, validator-scope decision (schema-only, Rule 1), write-target safety rules (Rule 2), `AIW_EXTRA_WORKFLOW_MODULES` handoff (Rule 3), no-auto-registration (Rule 4), and three rejected alternatives (lint-before-handover, sandbox-scaffold-runtime, keep-generated-code-inside-package). Cites KDR-004, KDR-013, ADR-0007.
+- `design_docs/phases/milestone_9_skill/skill_install.md` — §7 Generating your own workflow appended: invocation (`aiw run-scaffold`), gate review, approve/reject, write-path safety guards, `AIW_EXTRA_WORKFLOW_MODULES` handoff, iteration guidance.
+- `docs/writing-a-workflow.md` — `## Scaffolding a workflow` section inserted immediately after `### Minimum viable spec` (TA-LOW-03): frames scaffold as alternative entry point, notes validator scope + user ownership, cross-references skill_install.md §7.
+- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — task row 03 → ✅ Done; exit-criteria checkboxes for ADR-0010 + skill-install ticked; `(M16 T03)` reference for ADR-0007 corrected to `(M16 T01)` (TA-LOW-01).
+- `design_docs/phases/milestone_17_scaffold_workflow/task_03_adr_and_docs.md` — **Status:** → ✅ Done (2026-04-30); TA-LOW-01 + TA-LOW-03 carry-over checkboxes ticked.
+- `CHANGELOG.md` — this entry.
+
+ACs satisfied: AC-1 (ADR-0010 created), AC-2 (skill_install.md extended), AC-3 (docs/writing-a-workflow.md §Scaffolding placed after §Minimum viable spec), AC-4 (status surfaces flipped), AC-5 (CHANGELOG updated), AC-6 (gates green — doc-only task, no source changes).
+Carry-over satisfied: TA-LOW-01 (ADR-0007 attribution corrected M16 T03 → M16 T01), TA-LOW-03 (§Scaffolding placed after §Minimum viable spec).
+Deviations from spec: only one `(M16 T03)` reference remained in the README at build time (the §What M17 ships item 8 reference had already been cleared by prior work); the single remaining instance in §Risk-ownership-boundary was corrected.
+
 ### Added — M17 Task 02: prompt template iteration + live-mode smoke + carry-over items (2026-04-30)
 
 Files touched:

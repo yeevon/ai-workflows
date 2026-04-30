@@ -1,6 +1,6 @@
 # Task 03 — ADR-0010 + skill-install §Generating-your-own-workflow + docs §Scaffolding
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done (2026-04-30).
 **Grounding:** [milestone README](README.md) · [design_docs/adr/](../../../design_docs/adr/) (ADR slot 0010 reserved for M17) · [design_docs/phases/milestone_9_skill/skill_install.md](../milestone_9_skill/skill_install.md) (skill-install doc to extend) · [docs/writing-a-workflow.md](../../../docs/writing-a-workflow.md) (§Scaffolding section to append) · [M16 task_01](../milestone_16_external_workflows/task_01_external_workflow_modules.md) (KDR-013 + ADR-0007 — user-owned code framing this ADR extends).
 
 ## What to Build
@@ -81,11 +81,11 @@ Append a new section (e.g. `## Scaffolding a workflow`) to `docs/writing-a-workf
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — ADR-0007 attribution** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-01 — ADR-0007 attribution** (severity: LOW, source: task_analysis.md round 1)
       When updating the M17 milestone README, replace the two `(M16 T03)` references for ADR-0007 with `(M16 T01)`. M16 only shipped T01; ADR-0007 landed there (the milestone had no T03).
       **Recommendation:** Fix as part of T03's doc edits. Specifically: §What M17 ships item 8 and §Risk-ownership-boundary first paragraph in `design_docs/phases/milestone_17_scaffold_workflow/README.md`.
 
-- [ ] **TA-LOW-03 — §Scaffolding placement hint** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-03 — §Scaffolding placement hint** (severity: LOW, source: task_analysis.md round 1)
       When appending §Scaffolding to `docs/writing-a-workflow.md`, place it after the existing §Minimum viable spec section (around line 68) since both teach the `WorkflowSpec` + `register_workflow(spec)` shape. The §Scaffolding section frames the meta-workflow as an alternative entry point for the same target API.
       **Recommendation:** Builder places the new section immediately after §Minimum viable spec.
 

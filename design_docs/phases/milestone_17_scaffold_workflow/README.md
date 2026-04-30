@@ -33,7 +33,7 @@ Concretely:
 - Once written to disk, the file is a user-owned Python module. The user loads it by adding its dotted name to `AIW_EXTRA_WORKFLOW_MODULES` per M16's load path. M16's loader surfaces import errors at startup (so the user sees their own broken code's stack trace), but ai-workflows does not try to fix or sandbox it.
 - The scaffold never writes to `ai_workflows/` inside the installed package. Target paths must be user-writable locations; attempting to target a package-relative path fails fast with a clear error.
 
-This framing shapes T01's deliverables and is recorded in **ADR-0007** (M16 T03) + **ADR-0010** (this milestone's T03).
+This framing shapes T01's deliverables and is recorded in **ADR-0007** (M16 T01) + **ADR-0010** (this milestone's T03).
 
 ## What M17 ships
 
@@ -85,8 +85,8 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 - [x] **Prompt template.** A structured prompt at `ai_workflows/workflows/scaffold_workflow_prompt.py` (module-level constant or pydantic-model-driven). Fields: goal, target_path, existing_workflow_context (optional — if the user wants the scaffold to mimic an existing workflow's shape). The prompt teaches the LLM the `TieredNode` / `ValidatorNode` / `HumanGate` / `RetryingEdge` primitives + the four-layer contract + the `register_workflow(spec)` convention. Prompt engineering is the load-bearing work of T01; the validator is the safety net.
 - [x] **MCP exposure.** `run_workflow(workflow="scaffold_workflow", goal=..., target_path=..., force=False)` works identically on stdio + HTTP. Gate-pause projection (M11) carries the preview content. Resume via `resume_run(run_id=..., gate_response="approved")` writes the file; `gate_response="rejected"` aborts without writing.
 - [x] **CLI surface.** `aiw run-scaffold --goal ... --target ~/path/file.py [--force]` alias added. Also works via `aiw run scaffold_workflow --input goal=... --input target_path=...`.
-- [ ] **Skill-install doc extension.** New `§Generating your own workflow` section in [`skill_install.md`](../milestone_9_skill/skill_install.md) — T03 deliverable.
-- [ ] **ADR-0010 added** under `design_docs/adr/0010_user_owned_generated_code.md`. Full text drafted at T03.
+- [x] **Skill-install doc extension.** New `§Generating your own workflow` section in [`skill_install.md`](../milestone_9_skill/skill_install.md) — T03 deliverable.
+- [x] **ADR-0010 added** under `design_docs/adr/0010_user_owned_generated_code.md`. Full text drafted at T03.
 - [ ] **CS300 dogfood smoke.** T02 deliverable (live run + CHANGELOG entry operator-dependent; smoke file + prompt iteration landed at T02).
 - [x] **Hermetic tests.** New `tests/workflows/test_scaffold_workflow.py` covering:
     - Validator: parseable Python passes; unparseable Python rejects; missing `register_workflow()` call rejects; valid `register_workflow(SPEC)` with Name-reference passes.
@@ -126,7 +126,7 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 |---|---|---|---|
 | 01 | [`scaffold_workflow` graph + validator + write-safety + CLI/MCP wiring](task_01_scaffold_workflow.md) | code + test | ✅ Built (cycle 1) |
 | 02 | Prompt template iteration + live-mode smoke + CS300 dogfood | prompt + test | ✅ Built (cycle 1) |
-| 03 | ADR-0010 + skill-install §Generating-your-own-workflow + `docs/writing-a-workflow.md` §Scaffolding | doc | 📝 Planned |
+| 03 | ADR-0010 + skill-install §Generating-your-own-workflow + `docs/writing-a-workflow.md` §Scaffolding | doc | ✅ Done |
 | 04 | Milestone close-out | doc | 📝 Planned |
 
 Per-task specs land as each predecessor closes.
