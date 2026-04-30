@@ -95,14 +95,17 @@ Existing loader tests stay green without modification. AC-4 verifies this passiv
 - [x] **TA-LOW-01 — Spec filename retains dropped concept** (severity: LOW, source: task_analysis.md round 1)
       Satisfied at orchestrator-rename time (2026-04-30): old file `task_01_overlay_and_fallback_schema.md` removed; README line 83 updated to `task_01_fallback_schema.md`. No Builder action needed.
 
-- [ ] **TA-LOW-02 — Reuse `Route` alias (not re-declare discriminator union)** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-02 — Reuse `Route` alias (not re-declare discriminator union)** (severity: LOW, source: task_analysis.md round 1)
       `fallback` field type **must** reuse the existing `Route = Annotated[…]` alias on `tiers.py:80` — do not re-declare `Annotated[LiteLLMRoute | ClaudeCodeRoute, Field(discriminator="kind")]` inline. Already enforced in §1 above.
       **Recommendation:** Builder verifies it uses `list[Route]`, not a freshly declared union. Ruff/mypy catch any inline drift.
+      **Verified at task-analyzer round 1, 2026-04-30:** `tiers.py:81` confirms `list[Route]` is used. ✓
 
-- [ ] **TA-LOW-03 — Nested-fallback error message index** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-03 — Nested-fallback error message index** (severity: LOW, source: task_analysis.md round 1)
       `_reject_nested_fallback` validator error message must include the offending entry's index. Already addressed in §1 above (`f'nested fallback is not allowed: fallback[{i}] declares its own fallback field.'`).
       **Recommendation:** AC-2's nested-rejection test must assert the index appears. Already specified in §2.
+      **Verified at task-analyzer round 1, 2026-04-30:** `tiers.py:119` emits `fallback[{i}]`; `test_tierconfig_fallback.py:76` asserts `"fallback[0]"` in error text. ✓
 
-- [ ] **TA-LOW-04 — `field_validator` import not in `tiers.py`** (severity: LOW, source: task_analysis.md round 2)
+- [x] **TA-LOW-04 — `field_validator` import not in `tiers.py`** (severity: LOW, source: task_analysis.md round 2)
       `ai_workflows/primitives/tiers.py:47` currently imports `from pydantic import BaseModel, Field` only. `field_validator` is not imported. The `_reject_nested_fallback` validator requires it.
       **Recommendation:** Builder extends the import line to `from pydantic import BaseModel, Field, field_validator` when adding the `fallback` field.
+      **Verified at task-analyzer round 1, 2026-04-30:** `tiers.py:48` imports `field_validator`. ✓
