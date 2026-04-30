@@ -19,13 +19,15 @@ A LangGraph-native workflow framework for solo developers. Orchestrates multi-st
 | **M9 — Claude Code skill packaging** | Complete (2026-04-21) |
 | M10 — Ollama fault-tolerance hardening | Planned |
 | **M11 — MCP gate-review surface** | Complete (2026-04-22) |
-| M12 — Tiered audit cascade | Planned |
+| **M12 — Tiered audit cascade** | Complete (2026-04-29) |
 | **M13 — v0.1.0 release + PyPI packaging** | Complete (2026-04-22) |
 | **M14 — MCP HTTP transport** | Complete (2026-04-22) |
-| M15 — Tier overlay + fallback chains | Planned |
+| **M15 — Tier overlay + fallback chains** | Complete (2026-04-30) |
 | **M16 — External workflows + primitives load path** | Complete (2026-04-24) |
-| M17 — `scaffold_workflow` meta-workflow | Planned |
+| **M17 — `scaffold_workflow` meta-workflow** | Complete (2026-04-30) |
 | **M19 — Declarative authoring surface** | Complete (2026-04-26) |
+| **M20 — Autonomy loop optimization** | Complete (2026-04-28) |
+| **M21 — Autonomy loop continuation** | Complete (2026-04-29) |
 
 ## What it is
 
@@ -126,7 +128,7 @@ Clone the repo for development or to modify the framework itself:
 git clone https://github.com/yeevon/ai-workflows.git
 cd ai-workflows
 uv sync              # install runtime + dev dependencies
-uv run aiw version   # prints the current __version__ (0.3.0 at M19 close)
+uv run aiw version   # prints the current __version__ (0.4.0 at M17 close)
 ```
 
 For the full builder/auditor workflow — task specs, audit issue files, Builder / Auditor mode conventions — switch to the `design_branch`.
@@ -142,5 +144,7 @@ uv run ruff check     # style + basic correctness
 ```
 
 ## Next
+
+M21 is complete. The next planned milestone is **M22**, which will address any operator-resume items from M20/M21 (including T06/T07 dynamic model dispatch if the GO/NO-GO verdict fires) and further autonomy-loop improvements identified from M21's empirical baseline.
 
 Roadmap + per-milestone task files live at [design_docs/roadmap.md](design_docs/roadmap.md) (builder-only, on design branch).

@@ -27,7 +27,8 @@ dist/
 htmlcov/
 
 # ai-workflows runtime (local only, never committed)
-runs/
+runs/*
+!runs/.gitkeep
 *.db
 *.db-wal
 *.db-shm
@@ -42,3 +43,5 @@ tiers.local.yaml
 
 # Claude Code runtime
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/worktrees/

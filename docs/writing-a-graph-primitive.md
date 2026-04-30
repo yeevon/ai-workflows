@@ -1,6 +1,6 @@
 # Writing a Graph Primitive
 
-> **Audience:** This guide is for **framework contributors** authoring new graph-layer primitives — not for downstream consumers. If you're an external workflow author, see [`writing-a-workflow.md`](writing-a-workflow.md) (Tier 1 + Tier 2) and [`writing-a-custom-step.md`](writing-a-custom-step.md) (Tier 3) instead. The four-tier extension model is documented in [`design_docs/architecture.md` §Extension model](https://github.com/yeevon/ai-workflows/blob/design_branch/design_docs/architecture.md#extension-model-extensibility-is-a-first-class-capability) (builder-only, on design branch).
+> **Audience:** This guide is for **framework contributors** authoring new graph-layer primitives — not for downstream consumers. If you're an external workflow author, see [`writing-a-workflow.md`](writing-a-workflow.md) (Tier 1 + Tier 2) and [`writing-a-custom-step.md`](writing-a-custom-step.md) (Tier 3) instead. The four-tier extension model is documented in [`design_docs/architecture.md` §Extension model](../design_docs/architecture.md#extension-model-extensibility-is-a-first-class-capability) (builder-only, on design branch).
 
 A walkthrough for extending the graph layer itself — adding a new adapter under `ai_workflows/graph/` that composes existing primitives. The "graph primitives" referred to here are the nodes, edges, and callbacks that LangGraph workflows compose: `TieredNode`, `ValidatorNode`, `HumanGate`, `RetryingEdge`, `CostTrackingCallback`, and the `SqliteSaver` checkpointer wrapper.
 
@@ -12,7 +12,7 @@ This is the **Tier 3 → graph-layer graduation path**: when a custom step type 
 
 Heuristic: **if the same wiring pattern appears in two or more workflows**, promote it to `ai_workflows/graph/`. Solo usage stays inline in the workflow module. This keeps the graph layer small and every primitive earn-its-weight-tested.
 
-See [`design_docs/architecture.md` §Extension model](https://github.com/yeevon/ai-workflows/blob/design_branch/design_docs/architecture.md#extension-model-extensibility-is-a-first-class-capability) (builder-only, on design branch) for the full four-tier framing: Tier 1 (compose) → Tier 2 (parameterise) → Tier 3 (custom step) → Tier 4 (this guide, graph-layer extension for framework contributors).
+See [`design_docs/architecture.md` §Extension model](../design_docs/architecture.md#extension-model-extensibility-is-a-first-class-capability) (builder-only, on design branch) for the full four-tier framing: Tier 1 (compose) → Tier 2 (parameterise) → Tier 3 (custom step) → Tier 4 (this guide, graph-layer extension for framework contributors).
 
 Counter-indicators — do not promote if:
 

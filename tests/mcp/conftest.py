@@ -41,7 +41,19 @@ def _hermetic_registry() -> dict[str, TierConfig]:
 
 @pytest.fixture(autouse=True)
 def _stub_planner_tier_registry(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin ``planner_tier_registry`` to a LiteLLM-only pair for MCP tests."""
+    """Pin ``planner_tier_registry`` to a LiteLLM-only pair for MCP tests.
+
+    IMPORTANT: This fixture also implicitly stubs out ``auditor_tier_registry``
+    because ``workflows.__init__.auditor_tier_registry`` delegates to
+    ``planner.planner_tier_registry``.  Any test in this directory that
+    exercises ``run_audit_cascade`` must either (a) additionally monkeypatch
+    ``mcp_server_module.auditor_tier_registry`` to a hermetic auditor registry,
+    or (b) restore the real ``planner.planner_tier_registry`` on
+    ``planner_module``.  Forgetting this raises ``KeyError`` at the
+    auditor-tier lookup with no breadcrumb back to this autouse stub.
+    See ``test_run_audit_cascade.py::_reset_stub`` (option a) and
+    ``test_run_audit_cascade_e2e.py`` (option b) for the established patterns.
+    """
     monkeypatch.setattr(
         planner_module, "planner_tier_registry", _hermetic_registry
     )

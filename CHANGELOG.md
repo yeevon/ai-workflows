@@ -7,6 +7,1755 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+<!-- next release entries go here -->
+
+### Added — M15 Task 05: Milestone close-out (2026-04-30)
+
+M15 milestone closed. All five tasks shipped.
+
+**Files touched:**
+- `design_docs/architecture.md` — §4.1 TierConfig row: stale `tiers.yaml` reference removed; `docs/tiers.example.yaml` (schema-reference example, not loaded at dispatch time) noted; `pricing.yaml` reference preserved (CO-1 / M15-T04-LOW-02).
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — Status flipped to ✅ Complete; task-05 row updated; exit criterion #10 lint-imports count corrected from 4 to 5 contracts; all 10 exit criteria annotated with satisfying task (T01–T04/T05); **Outcome** section added (T01–T05 summaries + gate snapshot).
+- `design_docs/roadmap.md` — M15 §Milestones table row flipped to ✅ complete (2026-04-30); §Deferred narrative entry prefixed with ✅ Shipped and rewritten to past tense.
+- `README.md` — M15 row updated to Complete (2026-04-30).
+- `CHANGELOG.md` — this entry.
+- `design_docs/phases/milestone_15_tier_overlay/task_05_milestone_closeout.md` — Status flipped to ✅ Complete.
+- `design_docs/phases/milestone_15_tier_overlay/issues/task_05_issue.md` — issue file created.
+
+**ACs satisfied:** AC-1 (architecture.md TierConfig row corrected), AC-2 (milestone README Status flipped), AC-3 (task-05 row updated), AC-4 (exit criterion #10 corrected; all 10 annotated), AC-5 (Outcome section added), AC-6 (roadmap.md updated), AC-7 (root README.md updated), AC-8 (CHANGELOG updated), AC-9 (zero ai_workflows/ diff), AC-10 (pytest 1532 passed), AC-11 (lint-imports 5 contracts), AC-12 (ruff check passes).
+
+**Deviations from spec:** None.
+
+### Added — M15 Task 04: ADR-0006 + tiers.yaml relocation + writing-a-workflow.md tier-config section (2026-04-30)
+
+**Deliverable A — ADR-0006:**
+
+New `design_docs/adr/0006_tier_fallback_cascade_semantics.md`. Records the decisions made
+and alternatives rejected when designing the M15 fallback cascade: trigger condition
+(retry-budget exhaustion after `RetryingEdge` three-bucket cycle), cost-accounting posture
+(truthful — every attempted route logs `TokenUsage`), validator interaction (against successful
+route only; semantic-validation failure is a primary-route concern — KDR-004 preserved), nesting
+limit (flat — nested fallbacks explicitly rejected), and four rejected alternatives
+(immediate-fail-over on first `NonRetryable`, score-based routing, provider-health probes,
+YAML overlay). Explicitly notes YAML-overlay rejection due to KDR-014.
+
+**Deliverable B — `tiers.yaml` → `docs/tiers.example.yaml`:**
+
+Repo-root `tiers.yaml` relocated to `docs/tiers.example.yaml`. Header comment updated to remove
+stale "Forward-looking: M15 introduces..." sentence; replaced with "M15 shipped: this file has
+been relocated..." note. `tiers.yaml` deleted from repo root. All four tier entries
+(`local_coder`, `opus`, `sonnet`, `haiku`) unchanged.
+
+**Deliverable C — `docs/writing-a-workflow.md` fallback section:**
+
+New `### Fallback chains` subsection added after `### Tier registry (\`tiers=\`)` and before
+`### Minimum viable spec` under `## The WorkflowSpec shape`. Documents `TierConfig.fallback`
+field, flat-only semantics, cascade-trigger semantics, cost-attribution note, validator
+interaction, `ClaudeCodeRoute` → `LiteLLMRoute` example, cross-links to `docs/tiers.example.yaml`
+and ADR-0006.
+
+**Files touched:**
+- `design_docs/adr/0006_tier_fallback_cascade_semantics.md` — new ADR file.
+- `docs/tiers.example.yaml` — new file (relocated from `tiers.yaml`).
+- `tiers.yaml` — deleted.
+- `docs/writing-a-workflow.md` — `### Fallback chains` subsection added.
+- `tests/primitives/test_tiers_loader.py` — `DOCS_DIR` constant + `_load_example_tiers()`
+  helper added; four committed-file tests updated to use `_load_example_tiers()`.
+- `tests/test_scaffolding.py` — parametrize entry updated from `"tiers.yaml"` to
+  `"docs/tiers.example.yaml"`.
+- `tests/test_wheel_contents.py` — stale `tiers.yaml` strings updated (TA-LOW-04).
+- `design_docs/phases/milestone_15_tier_overlay/task_04_adr_0006_and_tiers_doc_relocation.md` —
+  Grounding line updated to cite `docs/tiers.example.yaml`; Status flipped to Built.
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — task-04 row updated.
+- `design_docs/phases/milestone_15_tier_overlay/issues/task_04_issue.md` — issue file created.
+
+**ACs satisfied:** AC-1 (ADR-0006 exists, seven decision points + four alternatives covered),
+AC-2 (`docs/tiers.example.yaml` exists with four tiers, stale sentence removed), AC-3
+(`tiers.yaml` deleted from repo root), AC-4 (four `test_tiers_loader.py` tests + one
+`test_scaffolding.py` entry updated), AC-5 (`### Fallback chains` section added with all
+required content + ADR-0006 cross-link), AC-6 (CHANGELOG updated), AC-7 (pytest passes),
+AC-8 (lint-imports passes), AC-9 (ruff check passes).
+
+**Carry-over items resolved:** TA-LOW-01 (Grounding line updated), TA-LOW-02 (ADR-0006 link
+includes `(builder-only, on design branch)` suffix), TA-LOW-04 (`test_wheel_contents.py`
+stale strings updated). TA-LOW-03 already resolved inline in task analysis.
+
+### Added — M15 Task 03: aiw list-tiers command + HTTP CircuitOpen cascade test — cycle 2 (2026-04-30)
+
+**Deliverable A — `aiw list-tiers` CLI command:**
+
+New `@app.command("list-tiers")` subcommand in `ai_workflows/cli.py`. Reads
+`workflows.list_workflows()` and `workflows.get_spec(name).tiers` to print a tier table with
+columns: workflow, tier, kind (LiteLLM/ClaudeCode), model/flag, concurrency, timeout_s, fallback
+(em-dash when empty, comma-joined route identifiers when non-empty). Accepts `--workflow`/`-w`
+to filter to a single workflow; unknown workflow name raises `typer.BadParameter` (exit code 2).
+Imperative workflows (registered via `register()` only, no `WorkflowSpec`) appear with a
+`"(no tier registry exported)"` row. Fully synchronous — no `asyncio.run`, no `_async` helper
+(TA-LOW-01).
+
+**Deliverable B — HTTP CircuitOpen cascade test:**
+
+New `tests/mcp/test_http_fallback_on_circuit_open.py` with one hermetic test
+`test_http_run_workflow_fallback_cascade_on_circuit_open`. Starts the MCP HTTP server in a
+background daemon thread, installs `_FallbackStubLiteLLMAdapter` (primary raises `CircuitOpen`,
+fallback returns valid JSON), invokes `run_workflow` via `fastmcp.Client` over HTTP, and asserts
+conjunctively: (a) `error=None`, (b) `run_id` present, (c) no `AllFallbacksExhaustedError` in
+payload. Pins the HTTP-envelope shape when cascade fires under a tripped circuit breaker
+(M15 exit criterion #5).
+
+**Files touched:**
+- `ai_workflows/cli.py` — `list_tiers()` command + `_emit_list_tiers_table()` helper added;
+  `ClaudeCodeRoute, LiteLLMRoute` imports added from `ai_workflows.primitives.tiers`.
+  Cycle 2: `_eager_import_in_package_workflows()` called before registry read; bare `typer.echo`
+  before `raise typer.BadParameter` dropped (LOW-02).
+- `ai_workflows/workflows/__init__.py` — `_eager_import_in_package_workflows()` helper added;
+  handles both fresh-import and already-loaded-registry-cleared cases (Decision 1 / MED-01).
+- `tests/cli/test_list_tiers.py` — restructured: 4 original tests + LOW-01 test moved into
+  `TestListTiersIsolated` class with class-scoped autouse; MED-01 test added at module level
+  (outside autouse scope); 6 total CLI tests.
+- `tests/mcp/test_http_fallback_on_circuit_open.py` — 1 HTTP-transport cascade test (cycle 1,
+  unchanged in cycle 2).
+
+**ACs satisfied:** AC-1 (list-tiers registered), AC-2 (tier table output), AC-3 (--workflow filter
++ exit code 2 / LOW-02: bare echo dropped), AC-4 (imperative workflows handled + LOW-01 test),
+AC-5 (HTTP CircuitOpen cascade test), AC-6 (6 CLI tests green), AC-7 (1532 existing tests
+unchanged in cycle 2), AC-8 (5 lint-imports contracts kept), AC-9 (all gates green), AC-10 (this
+entry). MED-01: `aiw list-tiers` smoke test now passes.
+
+**Carry-over absorbed:** TA-LOW-01 (sync implementation, no asyncio.run); TA-LOW-02 (register_workflow
+pattern from tests/workflows/test_compiler.py:215 and tests/workflows/test_spec.py:235); MED-01
+(eager-import path); LOW-01 (imperative workflow test coverage); LOW-02 (duplicate echo dropped).
+
+**Deviations from spec:** None.
+
+### Added — M15 Task 02: TieredNode fallback-cascade dispatch + cost attribution (2026-04-30)
+
+Wires the fallback cascade into `TieredNode`. When `_dispatch()` raises an infrastructure-level
+exception (`RetryableTransient`, `NonRetryable`, or `CircuitOpen`) for the primary route,
+`_node()` walks `tier_config.fallback` in order, attempting each route once. First successful
+call returns normally; cost attribution fires for every successful attempt. If all routes fail,
+raises `AllFallbacksExhaustedError` (a `NonRetryable` subclass). `RetryableSemantic` bypasses
+the cascade entirely (defensive pass-through; KDR-004 unchanged). Empty fallback (`fallback=[]`)
+preserves existing behaviour exactly.
+
+**Files touched:**
+- `ai_workflows/graph/tiered_node.py` — `TierAttempt` dataclass + `AllFallbacksExhaustedError`
+  added; `__all__` updated to export both; `_emit_failed_log` helper extracted; `_node()` closure
+  refactored to drive the cascade loop; `CircuitOpen` pre-dispatch guard extended to fire cascade
+  when `fallback` is non-empty; module docstring "Exactly-once invariants" bullet updated to
+  per-attempt wording (§1.6). `dataclasses.dataclass`/`field` added to stdlib imports.
+- `tests/graph/test_tiered_node_fallback.py` — 9 new hermetic tests covering all cascade ACs
+  (cascade success, all-exhausted, semantic pass-through, cost attribution, empty-fallback compat,
+  per-attempt logs, type/inheritance assertions).
+
+**ACs satisfied:** AC-1 (AllFallbacksExhaustedError), AC-2 (TierAttempt), AC-3 (cascade dispatch),
+AC-4 (RetryableSemantic pass-through), AC-5 (cost attribution), AC-6 (empty-fallback compat),
+AC-7 (9 hermetic tests green), AC-8 (existing 1514 tests unchanged), AC-9 (5 lint-imports contracts),
+AC-10 (all gates green), AC-11 (this entry), AC-12 (CircuitOpen triggers cascade), AC-13 (per-attempt logs).
+
+**Carry-over absorbed:** TA-LOW-01 (defensive comment on RetryableSemantic guard), TA-LOW-02
+(TierAttempt.usage forward-reserved with comment), TA-LOW-03 (timeout inheritance comment),
+TA-LOW-04 (breaker bypass comment for fallback dispatches).
+
+### Added — M15 Task 02: cycle-2 carry-over tests (2026-04-30)
+
+Two tests added to `tests/graph/test_tiered_node_fallback.py` per locked terminal decisions:
+- `test_cascade_triggers_on_retryable_transient_primary_fail` — AC-3: `RetryableTransient` from
+  primary triggers cascade; fallback succeeds; cost recorded.
+- `test_cascade_retryable_semantic_from_fallback_propagates_unchanged` — AC-4: primary
+  `NonRetryable` enters cascade; fallback raises `RetryableSemantic`; exception propagates
+  unchanged (not wrapped in `AllFallbacksExhaustedError`); `cost_tracker.total == 0`.
+
+Also added `_RetryableTransientAdapter` stub and `RetryableTransient` import to the test file.
+
+**Files touched:** `tests/graph/test_tiered_node_fallback.py`
+
+**ACs satisfied (cycle 2):** AC-3 (RetryableTransient cascade trigger), AC-4 (fallback
+RetryableSemantic pass-through). No code changes to `tiered_node.py`.
+
+**Deviations from spec:** None.
+
+### Added — M15 Task 01: TierConfig.fallback schema + hermetic tests (2026-04-30)
+
+Adds `fallback: list[Route]` field to `TierConfig` in `ai_workflows/primitives/tiers.py`
+with a `_reject_nested_fallback` pydantic `field_validator` that rejects nested fallbacks
+at schema-validation time (architecturally forbidden per ADR-0006). Ships schema + tests only;
+cascade dispatch lives in M15 T02.
+
+**Files touched:**
+- `ai_workflows/primitives/tiers.py` — `field_validator` added to pydantic import; `TierConfig`
+  extended with `fallback: list[Route] = Field(default_factory=list)` + `_reject_nested_fallback`
+  validator; module + class docstrings updated.
+- `tests/primitives/test_tierconfig_fallback.py` — 4 new hermetic tests (flat acceptance,
+  nested rejection with index assertion, empty default, round-trip via `model_dump` + `TypeAdapter`).
+- `design_docs/phases/milestone_15_tier_overlay/task_01_fallback_schema.md` — Status ✅ Built.
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — T01 row ✅ Built (cycle 1).
+
+**ACs satisfied:** AC-1 (fallback field + nested rejection), AC-2 (4 hermetic tests green),
+AC-3 (existing 1514 tests unchanged), AC-4 (TierConfig round-trip preserved), AC-5 (5 lint-imports
+contracts kept, 0 broken), AC-6 (gates green), AC-7 (this entry).
+
+**Carry-over absorbed:** TA-LOW-02 (Route alias reused), TA-LOW-03 (index in error message),
+TA-LOW-04 (field_validator import added).
+
+**Deviations from spec:** None.
+
+## [M12 Tiered Audit Cascade] - 2026-04-29
+
+### Changed
+- M12 Task 07: Milestone close-out — ADR-0004 amendment (CO-1: landing-site framing, CO-2: lint-imports contract count, CO-3: standalone-tool bypass), architecture.md §4.4 cascade-reuse framing (CO-4), and nice_to_have.md §25 EvalRunner cascade-fixture replay entry (CO-5). Status surfaces flipped: M12 ✅ complete, roadmap.md updated, root README.md updated. Docs-only: zero ai_workflows/ diff. Gates: uv run pytest ✅ · uv run lint-imports ✅ (5 contracts) · uv run ruff check ✅.
+
+**Files touched:**
+- `design_docs/adr/0004_tiered_audit_cascade.md` — CO-1: §Decision item 1 landing-site corrected (workflow-scoped registries, not `primitives/tiers.py`); CO-2: §Consequences "New primitive" bullet updated (lint-imports edit was needed, 4→5 contracts); CO-3: §Decision item 7 standalone-tool reuse claim replaced with Option A bypass description.
+- `design_docs/architecture.md` — CO-4: §4.4 `run_audit_cascade` bullet updated (invokes auditor TieredNode directly, bypasses AuditCascadeNode per T05 Option A).
+- `design_docs/nice_to_have.md` — CO-5: §25 EvalRunner cascade-fixture replay entry added (before §Revisit cadence).
+- `design_docs/phases/milestone_12_audit_cascade/README.md` — Status ✅ Complete; T07 row ✅; exit-criteria item 10 ✅; CO-5 added to cumulative carry-over list; Outcome section appended.
+- `design_docs/roadmap.md` — M12 row flipped to ✅ complete (2026-04-29).
+- `README.md` — M12 table row flipped to Complete (2026-04-29).
+- `CHANGELOG.md` — [Unreleased] M12 entries promoted to this dated section; T07 entry added at top.
+
+**KDR cited:** KDR-011 (tiered audit cascade close-out; docs-only amendment to ADR-0004 + architecture.md).
+
+### Added — M12 Task 06: eval-harness fixture convention for cascade author/auditor node pairs (2026-04-29)
+
+Documents and locks the eval-fixture convention for cascade-enabled workflow runs, plus
+one golden test per opt-in workflow (planner + slice_refactor) exercising the convention
+end-to-end (cascade-enabled run → fixtures captured → fixtures loadable as `EvalCase`
+instances).
+
+**Files touched:**
+- `evals/README.md` — NEW: `## Layout reference` section (two-shape coexistence: seed M7 T05
+  vs capture M7 T02) + `## Cascade fixture convention (M12 T06)` section. Documents the
+  `<cascade_name>_primary` / `<cascade_name>_auditor` directory split, the per-workflow
+  cascade-name table (`planner_explorer_audit` / `slice_worker_audit`), the verdict-node
+  no-fixture rule, the `EvalRunner` replay carve-out (validator-pair mismatch with KDR-004),
+  and the `TokenUsage.role` (factory-time; persistent telemetry) vs `state['cascade_role']`
+  (debug-only) distinction with `audit_cascade.py:313, 349` references.
+- `.claude/skills/ai-workflows/SKILL.md` — one-bullet cross-reference added under §Primary
+  surface — MCP for the cascade fixture layout convention; names both opt-in workflows'
+  `<cascade_name>` literals.
+- `tests/evals/test_cascade_fixture_convention.py` — NEW: 4 hermetic tests covering
+  (1) primary+auditor fixture emission, (2) primary fixture provenance + `tracker.by_role`
+  "author" key, (3) auditor fixture provenance + "auditor" key, (4) independent `load_case`
+  loadability of both fixtures with expected `node_name`/`workflow_id`/`captured_from_run_id`.
+- `tests/workflows/test_planner_cascade_fixture_golden.py` — NEW: 1 golden hermetic test;
+  drives `planner_explorer_audit` cascade with `ExplorerReport` schema + stub adapters;
+  asserts fixtures at `planner/planner_explorer_audit_primary/` and `_auditor/`.
+- `tests/workflows/test_slice_refactor_cascade_fixture_golden.py` — NEW: 1 golden hermetic
+  test; drives `slice_worker_audit` cascade with `SliceResult` schema + stub adapters;
+  asserts fixtures at `slice_refactor/slice_worker_audit_primary/` and `_auditor/`.
+
+**KDR cited:** KDR-011 (audit cascade eval-fixture surface documented and tested).
+KDR-004 (constraint carve-out: cascade-fixture replay through `EvalRunner._resolve_node_scope`
+is known-broken — `<cascade_name>_validator` single-segment vs `<node>_validator` lookup
+mismatch — and forward-deferred; T06 scopes verification to `load_case` loading only).
+
+**Note:** documentation + golden tests only. No production code change — the convention
+is realised by T02 (`_primary`/`_auditor` node-name suffixes) and T04 (factory-time
+`role="author"` / `role="auditor"` binding on `tiered_node`) surfaces already shipped.
+
+### Added — M12 Task 05: run_audit_cascade MCP tool + SKILL.md ad-hoc-audit section (2026-04-28)
+
+Adds a standalone `run_audit_cascade` MCP tool that audits an existing artefact via a
+single-pass auditor-tier `tiered_node` invocation, outside any workflow run.
+
+**Files touched:**
+- `ai_workflows/mcp/schemas.py` — new `RunAuditCascadeInput` + `RunAuditCascadeOutput` pydantic
+  models added to `__all__`. `AuditVerdict` imported from `graph/audit_cascade.py` for the
+  `verdicts_by_tier` type hint only — NOT added to `__all__` (canonical owner stays
+  `graph/audit_cascade.py:75`). `model_validator` import added.
+- `ai_workflows/mcp/server.py` — new `@mcp.tool() async def run_audit_cascade(payload) ->
+  RunAuditCascadeOutput` (fifth tool). Four private helpers: `_resolve_audit_artefact`,
+  `_build_standalone_audit_config`, `_build_audit_configurable`,
+  `_make_standalone_auditor_prompt_fn`. Updated imports: `uuid`, `json`, `CostTracker`,
+  `CostTrackingCallback`, `tiered_node`, `AuditVerdict`, `NonRetryable`, `RetryableSemantic`,
+  `RetryPolicy`, `TierConfig`, `auditor_tier_registry`.
+- `ai_workflows/workflows/__init__.py` — new `auditor_tier_registry()` helper returning
+  `{"auditor-sonnet": ..., "auditor-opus": ...}` extracted from `planner_tier_registry()` at
+  call time. Added `TierConfig` import and `"auditor_tier_registry"` to `__all__`.
+- `.claude/skills/ai-workflows/SKILL.md` — new "Ad-hoc artefact audit" section under §Primary
+  surface — MCP, after the existing four tool sections.
+- `tests/mcp/test_run_audit_cascade.py` — NEW: 6 hermetic tests covering all 4 validator edge
+  cases + inline-artefact happy path + storage-backed artefact with H2 decode check.
+- `tests/mcp/test_run_audit_cascade_e2e.py` — NEW: 1 AIW_E2E-gated wire-level smoke against
+  real `auditor-sonnet` Claude CLI.
+- `tests/mcp/test_scaffold.py` — updated `EXPECTED_TOOLS` set from 4 to 5 tools;
+  `test_all_four_tools_registered` → `test_all_five_tools_registered`.
+- `design_docs/architecture.md:105` — `M12 T04` → `M12 T05` (stale task-number fix).
+- `design_docs/adr/0004_tiered_audit_cascade.md:56` — `M12 T04` → `M12 T05`.
+- `design_docs/adr/0004_tiered_audit_cascade.md:73` — `M12 T04` → `M12 T05`.
+
+**KDR cited:** KDR-008 (FastMCP pydantic schema as public contract; tool additions purely
+additive — existing 4 tools' schemas unchanged). KDR-011 (auditor tier telemetry via
+`CostTracker.by_role(audit_run_id)` with factory-time `role="auditor"` on `tiered_node`).
+
+**Locked decisions applied:**
+- H1 Option A (bypass cascade primitive): tool instantiates `tiered_node(role="auditor")`
+  directly, does NOT call `audit_cascade_node()`. Round-2 explicit parse:
+  `AuditVerdict.model_validate_json(raw_text)` added between auditor node call and verdict check.
+- H2 Option A (caller supplies `artefact_kind`): `storage.read_artifact(run_id, kind)` + 
+  `json.loads(row["payload_json"])` decode — `read_artifact` returns the SQL row wrapper, not
+  the artefact payload.
+
+**Stale references fixed:** 3 `M12 T04` → `M12 T05` occurrences across `architecture.md` and
+`adr/0004_tiered_audit_cascade.md` (TA-T05-LOW-02 partial — only the task-number fix; cascade-
+reuse framing rewrite forward-deferred to M12 T07 close-out per spec carry-over).
+
+**Carry-over satisfied:**
+- TA-T04-LOW-04: `by_role: dict[str, float] | None` on `RunAuditCascadeOutput` — landed.
+- TA-T05-LOW-01: validator error-message ordering — informational, no action.
+- TA-T05-LOW-02: only task-number fix applied; framing rewrite deferred to T07.
+- TA-T05-LOW-03: `pricing={}` inline comment softened from "required/raises KeyError" to
+  "explicit per spec — Max flat-rate computes $0 with empty pricing".
+
+**AIW_E2E smoke result (cycle 1 — RETRACTED):** Cycle 1 claimed PASSED; auditor
+re-ran and found 1 FAILED — `ToolError: auditor produced unparseable output` because
+real `auditor-sonnet` wraps JSON in a markdown code fence (```` ```json…``` ````).
+
+**Cycle 2 fix (HIGH-01) — markdown code-fence strip:**
+- Added `_strip_code_fence(raw_text: str) -> str` helper to
+  `ai_workflows/graph/audit_cascade.py` (alongside `AuditVerdict`; exported in
+  `__all__`). Strips a leading/trailing ```` ```json…``` ```` markdown fence before
+  calling `model_validate_json`. Both fenced and unfenced shapes accepted.
+- Updated `_audit_verdict_node` in `audit_cascade.py` to call
+  `AuditVerdict.model_validate_json(_strip_code_fence(auditor_raw))` — same latent
+  bug fixed in the cascade primitive so workflows with `audit_cascade_enabled=True`
+  don't re-discover it independently (cross-task observation from T05 audit).
+- Updated `run_audit_cascade` tool body in `mcp/server.py` to import and call
+  `_strip_code_fence` before `model_validate_json`.
+- Added 2 hermetic regression tests to `tests/graph/test_audit_cascade.py` (tests
+  14-15): fenced-JSON shape parses cleanly; unfenced raw JSON passes through
+  unchanged.
+- Added hazard note to `tests/mcp/conftest.py` docstring documenting that the
+  autouse `_stub_planner_tier_registry` also implicitly stubs `auditor_tier_registry`
+  and explaining the two established workaround patterns (MED-02 fix, Option B).
+
+**Cycle 3 defect-fix (SR-DEV-BLOCK-01 / SR-SDET-BLOCK-01 + SR-SDET-FIX-01 + SR-SDET-FIX-02):**
+`RetryableTransient` added to the `except` tuple in `run_audit_cascade` (`server.py:485`)
+and to the import at `server.py:109`. Two new hermetic tests: test 7 seeds
+`RetryableTransient` into the stub and asserts `ToolError`; test 8 seeds `_AUDIT_FAIL_JSON`
+and asserts the `passed=False` / `suggested_approach` / `failure_reasons` shape. Test 5's
+`by_role.get("auditor", 0.0)` tautological assertion tightened to `"auditor" in output.by_role`.
+
+**AIW_E2E smoke result (cycle 2):** `1 passed in 16.00s`
+(`AIW_E2E=1 uv run pytest tests/mcp/test_run_audit_cascade_e2e.py -v`,
+`test_inline_artefact_audited_by_real_sonnet_e2e PASSED`, real `auditor-sonnet`
+Claude CLI subprocess, inline artefact `{"sample": "tiny artefact"}`,
+`output.passed` returned, `by_role["auditor"]` populated).
+
+### Added — M12 Task 04: Telemetry — TokenUsage.role tag + CostTracker.by_role + cascade-step records (2026-04-27)
+
+Adds `role` attribution to the cost ledger so cascade-enabled runs can surface the
+author-vs-auditor cost split per run via `CostTracker.by_role(run_id)` (KDR-011 telemetry
+surface for ADR-0004 §Decision item 6 empirical-tuning loop).
+
+**Files touched:**
+- `ai_workflows/primitives/cost.py` — `TokenUsage.role: str = ""` field (with docstring
+  citing M12 T04 / KDR-011); `CostTracker.by_role(run_id) -> dict[str, float]` method added
+  after `by_model`, mirroring `by_tier`'s shape. Sub-model costs roll into the parent
+  entry's role (via the unchanged `_roll_cost` helper). Existing `by_tier` / `by_model`
+  aggregations unchanged.
+- `ai_workflows/graph/tiered_node.py` — `role: str = ""` keyword-only kwarg added to
+  `tiered_node()` factory signature (mirrors the existing `tier` kwarg pattern exactly).
+  `usage_with_role` stamp inserted immediately after the existing `tier` stamp: respects
+  any role the adapter may have set; non-cascade callers get `role=""` by default.
+  Factory-time role binding (Option 4, locked 2026-04-27 by user arbitration on round-1 H1)
+  — NOT read from `state['cascade_role']`. Default `""` preserves all 25+ existing
+  T01-T03 + T08 callers byte-for-byte.
+- `ai_workflows/graph/audit_cascade.py` — primary `tiered_node()` construction now passes
+  `role="author"`; auditor `tiered_node()` construction now passes `role="auditor"`. Verdict
+  node is a pure parse (no LLM call, no `tiered_node` involvement) — no `role="verdict"`
+  passed. The existing `_stamp_role_on_success` state-channel wrapper is left in place
+  unchanged (serves `test_cascade_role_tags_stamped_on_state` which reads final state,
+  independent of the ledger role stamp).
+- `tests/primitives/test_cost_by_role.py` — NEW: 5 hermetic tests for `by_role`:
+  `test_by_role_empty_run`, `test_by_role_single_role`, `test_by_role_multiple_roles`,
+  `test_by_role_sub_models_inherit_parent_role`, `test_by_role_includes_empty_string_bucket_for_non_cascade_calls`.
+- `tests/graph/test_audit_cascade.py` — EXTENDED: 2 new T04 tests:
+  `test_cascade_records_role_tagged_token_usage_per_step` (wire-level smoke, asserts
+  exactly 2 records with correct roles); `test_cascade_role_attribution_survives_audit_retry_cycle`
+  (pins H2 mitigation: factory-time binding immune to state-channel stale reads across retry).
+- `design_docs/phases/milestone_12_audit_cascade/task_04_telemetry_role_tag.md` — TA-LOW-06
+  §Out-of-scope bullet reworded to clarify `tiered_node` (not `audit_cascade_node`) gained
+  the `role` kwarg.
+
+**KDR cited:** KDR-011 (cascade telemetry is the empirical surface for post-M12 tuning decisions).
+
+**Backward-compatibility:**
+- `TokenUsage()` construction without `role` arg still works (defaults to `""`).
+- Existing `by_tier` / `by_model` aggregations return identical values.
+- All existing `tiered_node()` callers across T01-T03 + T08 work without passing `role`.
+
+**Locked decision applied:** Option 4 (factory-time role binding). Options 1 and 3 rejected
+per spec §Locked decisions (state-channel timing infeasible / excess plumbing).
+
+**ACs satisfied:** all 15 ACs from task spec + all 6 TA-LOW carry-overs satisfied
+(TA-LOW-01: verified live source; TA-LOW-02: `### Added` framing; TA-LOW-03: verdict-node
+no-dispatch confirmed; TA-LOW-04: T05 carry-over pending T05 draft; TA-LOW-05: role stamp
+lands between tier stamp and cost_callback call as specified; TA-LOW-06: §Out-of-scope
+reworded at implement time).
+
+## [M21 Autonomy Loop Continuation] - 2026-04-29
+
+### Added — M21 Task ZZ: Milestone close-out (2026-04-29)
+
+Doc-only milestone close-out. No `ai_workflows/` package changes.
+
+Closes M21 — Autonomy Loop Continuation. Flips all status surfaces, promotes all M21 `[Unreleased]`
+CHANGELOG entries into this dated section, adds M21 row to `roadmap.md` and root `README.md`, appends
+Outcome + Propagation status to the milestone README.
+
+**Shipped tasks (14 of 14 — all tasks complete):**
+- T10 (common-rules extraction — `_common/non_negotiables.md` + `_common/verification_discipline.md`)
+- T11 (CLAUDE.md slim — 39% reduction, 136→83 lines)
+- T12 (Skills extraction — `dep-audit` Skill; `_common/skills_pattern.md` pattern locked)
+- T13 (/triage post-halt diagnosis Skill)
+- T14 (/check on-disk vs pushed-state Skill)
+- T15 (/ship manual happy-path Skill, host-only)
+- T16 (/sweep ad-hoc reviewer Skill)
+- T17 (spec format extension — per-slice `## Slice scope` + `PARALLEL_ELIGIBLE` flag)
+- T18 (worktree-coordinated parallel Builder spawn — operator-authorized stretch)
+- T19 (orchestrator-owned close-out — operator-authorized stretch)
+- T24 (MD-file discoverability rubric + `scripts/audit/md_discoverability.py`)
+- T25 (/audit-skills + `scripts/audit/skills_efficiency.py` + CI hookup)
+- T26 (two-prompt long-running pattern + `agent_docs/long_running_pattern.md`)
+- ZZ (this close-out)
+
+**DEFER verdicts:** None. All tasks including stretch T18 + T19 landed.
+
+**Exit criteria G1–G6:** All ✅ verified.
+
+**Autopilot baseline:**
+- Branch: `workflow_optimization`
+- Total tasks: 14 shipped. Stretch T18 + T19 included (operator authorized 2026-04-29).
+- No runtime (`ai_workflows/`) changes across all M21 tasks.
+- Gates green at close: `uv run pytest` passed; `uv run lint-imports` green; `uv run ruff check` clean.
+
+**Files touched:** `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (Status → ✅ Complete; ZZ row → Done; Outcome + Propagation status appended), `design_docs/roadmap.md` (M21 row added; M21 narrative summary added; header updated to M2–M21), `README.md` (M21 row added; §Next updated to name M22), `CHANGELOG.md` (this entry; all M21 [Unreleased] entries promoted to dated section), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_zz_milestone_closeout.md` (Status → Done; TA-LOW-04 → [x] N/A), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_zz_issue.md` (new — decisions + N/A record for TA-LOW-04).
+
+ACs satisfied: AC-1 (milestone README Status ✅ Complete; Outcome covers all shipped tasks + no DEFER verdicts + autopilot baseline), AC-2 (all 6 exit criteria G1–G6 verified ✅ in README), AC-3 (roadmap.md M21 row ✅ Complete + one-line narrative), AC-4 (CHANGELOG dated M21 section with all Unreleased entries promoted + ZZ entry), AC-5 ([Unreleased] section retained), AC-6 (README.md M21 row Complete + §Next updated to M22), AC-7 (ZZ spec Status → ✅ Done; M21 README ZZ row → ✅ Done; TA-LOW-04 [x]), AC-8 (no ai_workflows/ change), AC-9 (N/A — T18+T19 landed; no nice_to_have.md entries needed), AC-10 (gates green).
+
+Deviations: none. TA-LOW-04 marked N/A per context brief (T18+T19 shipped in M21).
+
+### Added — M21 Task 19: Orchestrator-owned close-out (post-parallel-Builder merge) (2026-04-29)
+
+Files touched: `.claude/commands/auto-implement.md` (§Functional loop Step 1 extended with post-parallel merge block (T19): apply each worktree's diff in slice order, HARD HALT on conflict, Auditor sees combined diff, terminal gate runs once, status-surface flips once; §Commit ceremony Step C3 extended with Parallel-build: annotation line for parallel-built tasks — single commit, no per-slice commits), `tests/test_t19_closeout.py` (new — 18 test assertions across 4 classes: TC-1 post-parallel merge applies all worktree diffs + TC-3 status-surface single-flip folded in (TA-LOW-03), TC-2 Parallel-build: commit annotation, TC-4 HARD HALT on merge conflict), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_19_issue.md` (new — TA-LOW-03 resolution documented), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_19_orchestrator_closeout.md` (Status → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T19 row → Done), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (auto-implement.md has post-parallel merge step (T19 §Post-parallel merge block after Step 7) and commit ceremony annotation (§C3 Parallel-build: line); smoke 1+2 pass), AC2 (tests/test_t19_closeout.py passes — 18 assertions, 4 classes: TC-1+TC-3 merged per TA-LOW-03 decision, TC-2 commit annotation, TC-4 HARD HALT; smoke 3 passes), AC3 (CI gates green; smoke 4 passes), AC4 (CHANGELOG updated; smoke 5 passes), AC5 (status surfaces flipped: T19 spec → Done, M21 README T19 row → Done). TA-LOW-03 resolved: TC-3 folded into TC-1 coverage (documented in issue file).
+
+Deviations: none.
+
+### Added — M21 Task 18: Worktree-coordinated parallel Builder spawn (2026-04-29)
+
+Files touched: `.claude/commands/auto-implement.md` (§Functional loop Step 1 extended with parallel-Builder dispatch branch: PARALLEL_ELIGIBLE=true path with isolation: "worktree", concurrency cap ≤4 slices, overlap detection via git diff --name-only cross-check, worktree cleanup for empty-diff case (TA-LOW-02), telemetry builder-slice-<N> naming; PARALLEL_ELIGIBLE=false path unchanged), `tests/test_t18_parallel_dispatch.py` (new — 6 test classes covering TC-1 through TC-6), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (G4 prose updated: T18 parallel-Builder dispatch landed; T18 row → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_18_parallel_builder_spawn.md` (Status → Done), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (auto-implement.md parallel-Builder dispatch: reads PARALLEL_ELIGIBLE, spawns slice-isolated Builders with isolation: "worktree", cap ≤4 slices, overlap detection, worktree cleanup for empty-diff case), AC2 (tests/test_t18_parallel_dispatch.py passes — 6 test classes: TC-1 PARALLEL_ELIGIBLE=true, TC-2 PARALLEL_ELIGIBLE=false, TC-3 slice cap 5→4, TC-4 overlap detection, TC-5 worktree cleanup, TC-6 telemetry naming), AC3 (CI gates green), AC4 (CHANGELOG updated), AC5 (status surfaces flipped: T18 spec → Done, M21 README T18 row → Done). TA-LOW-02 applied: explicit git worktree remove <path> step documented for empty-diff case; TC-5 covers it.
+
+Deviations: none.
+
+Cycle 2 terminal-gate fixes (2026-04-29): sr-dev FIX-1 — removed misleading `git diff --name-only` bash block from Step 5 (main tree has no pending changes under worktree isolation); replaced with prose directing per-worktree `git -C <worktree-path> diff --name-only HEAD`. sr-dev FIX-2 — added explicit `git worktree remove <worktree-path>` at end of Step 6 for merged worktrees; Step 7 updated to cover both empty-diff and merged cleanup cases (removed incorrect "automatically" claim). sr-sdet FIX-1 — added `TestDocAnchors` class (3 assertions: concurrency-cap pin, exact BLOCKED prefix verbatim, worktree cleanup + empty-diff present). sr-sdet FIX-2 — added `test_round_trip_spec_to_flag` in `TestParallelEligibleTrue`; removed two T17-duplicating tests (`test_spec_with_slice_scope_yields_eligible`, `test_parallel_path_produces_multiple_slices`). Test count: 28 → 30 (net +2).
+
+### Added — M21 Task 17: Spec format extension (per-slice file/symbol scope) (2026-04-29)
+
+Files touched: `.claude/commands/clean-tasks.md` (Phase 1 §Generate step 4 extended with Slice scope stub emission rule; `## Slice scope` section template + 5 rules documented), `.claude/commands/auto-implement.md` (§Project setup extended with Parallel-build flag (T18 gate) paragraph; `meta.json` added to per-cycle directory layout), `tests/test_t17_spec_format.py` (new — 6 test classes, 15 test cases covering slice-scope detection, serial path, AC-to-slice mapping, duplicate-AC violation, files-column validation, and meta.json PARALLEL_ELIGIBLE flag), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (G4 marked satisfied at T17; T17 row → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_17_spec_format_extension.md` (Status → Done; TA-LOW-01 ticked), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (clean-tasks.md extended: Slice scope template + 5 rules + Phase 1 generator guidance), AC2 (auto-implement.md extended: PARALLEL_ELIGIBLE flag check at project-setup; meta.json in directory layout), AC3 (tests/test_t17_spec_format.py passes — 15 tests across 6 classes), AC4 (CI gates green), AC5 (CHANGELOG updated), AC6 (M21 README G4 updated with T17 satisfaction note), AC7 (T10 invariant held — no agent files touched), AC8 (T24 invariant held — no agent files touched), AC9 (status surfaces flipped: T17 spec → Done, M21 README T17 row → Done). TA-LOW-01 accepted (agent count 9-pin kept for sibling parity).
+
+Deviation D-1: `tests/test_main_branch_shape.py` updated to skip on worktree-* branches (environmental fix — branch detection incorrectly flagged agent worktree branches as "main").
+
+### Added — M21 Task 15: /ship manual happy-path publish Skill (host-only) (2026-04-29)
+
+Files touched: `.claude/skills/ship/SKILL.md` (new — ship Skill, host-only, ≤5K tokens, four required ## anchors, allowed-tools: Bash, explicit host-only + autonomy-mode boundary section), `.claude/skills/ship/runbook.md` (new — T24-rubric-conformant; pre-flight check matrix, build+wheel-contents denylist, real-install smoke invocations, operator-approval prompts, publish failure modes), `tests/test_t15_ship.py` (new — mirrors test_t13_triage.py shape; covers frontmatter+char/token budgets, four anchors+helper-file ref, T24 rubric, T25 efficiency gate, T15-specific host-only+autonomy-mode anchors, Live Skills count line, CHANGELOG entry), `.claude/agents/_common/skills_pattern.md` (Live Skills line extended: added ship (T15)), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_15_ship_command.md` (Status → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T15 row → Done; G3 exit criterion amended to mark Phase F complete with all four Skills named), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (SKILL.md exists; frontmatter name=ship, description ≤200 chars, allowed-tools declared; body ≤5K tokens; four ## anchors Inputs/Procedure/Outputs/Return schema; smoke steps 1-3+5 pass), AC2 (runbook.md exists, T24 rubric summary/section-budget/code-block-len pass; smoke step 4), AC3 (host-only safety anchor: SKILL.md body contains "host-only" + "autonomy-mode" references; smoke step 6), AC4 (T25 skills_efficiency --check all clean; smoke step 7), AC5 (T10 invariant 9/9 preserved; smoke step 8), AC6 (T24 invariant held on .claude/agents/; smoke step 9), AC7 (tests/test_t15_ship.py passes; smoke step 10), AC8 (_common/skills_pattern.md Live Skills line extended with ship (T15); single line; smoke step 12), AC9 (CHANGELOG entry present; smoke step 11), AC10a (T15 spec Status → Done), AC10b (M21 README T15 row → Done), AC10c (M21 README G3 prose extended with Phase F complete parenthetical). TA-LOW-01 (accepted: agent count hard-pin at 9 for sibling parity). TA-LOW-02 (accepted: leading-slash form kept for sibling parity). TA-LOW-03 (applied: curl -sf used in procedure step 6 and runbook PyPI-compare).
+
+Deviations: none.
+
+Cycle 2 surgical fixes (2026-04-29): FIX-1 — `runbook.md` pre-flight version-check command changed from `grep '^version' pyproject.toml` to `grep '^__version__' ai_workflows/__init__.py` (version is declared `dynamic`; actual source is `__init__.py`). FIX-2 — `tests/test_t15_ship.py::test_changelog_t15_entry` tightened to slice `[Unreleased]`-to-first-versioned-block and assert membership in that slice, enforcing AC9's "under [Unreleased]" requirement.
+
+### Added — M21 Task 16: /sweep ad-hoc reviewer Skill (2026-04-29)
+
+Files touched: `.claude/skills/sweep/SKILL.md` (new — sweep Skill, ≤5K tokens, four required ## anchors, allowed-tools: Bash), `.claude/skills/sweep/runbook.md` (new — T24-rubric-conformant; spawn-prompt templates per reviewer, precedence rule, two example reports), `tests/test_t16_sweep.py` (new — 6 test cases: frontmatter+char/token budgets, four anchors+helper-file ref, T24 rubric, T25 efficiency gate, T10 invariant, Live Skills count+CHANGELOG), `.claude/agents/_common/skills_pattern.md` (Live Skills line extended: added sweep (T16)), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_16_sweep_command.md` (Status → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T16 row → Done; G3 exit criterion amended with /sweep satisfaction parenthetical), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (SKILL.md exists; frontmatter name=sweep, description ≤200 chars, allowed-tools declared; body ≤5K tokens; four ## anchors Inputs/Procedure/Outputs/Return schema; smoke steps 1-3+5 pass), AC2 (runbook.md exists, T24 rubric summary/section-budget/code-block-len pass; smoke step 4), AC3 (T25 skills_efficiency --check all clean; smoke step 6), AC4 (T10 invariant 9/9 preserved; smoke step 7), AC5 (T24 invariant held on .claude/agents/; smoke step 8), AC6 (tests/test_t16_sweep.py passes; smoke step 9), AC7 (_common/skills_pattern.md Live Skills line extended with sweep (T16); single line; smoke step 11), AC8 (CHANGELOG entry present; smoke step 10), AC9a (T16 spec Status → Done), AC9b (M21 README T16 row → Done), AC9c (M21 README G3 prose extended with /sweep satisfaction parenthetical).
+
+Deviations: none.
+
+### Added — M21 Task 14: /check on-disk vs pushed-state Skill (2026-04-29)
+
+Files touched: `.claude/skills/check/SKILL.md` (new — check Skill, ≤5K tokens, four required ## anchors, allowed-tools: Bash declared with rationale note per TA-LOW-02), `.claude/skills/check/runbook.md` (new — T24-rubric-conformant; classification matrix six states × next-action, git invocations with example outputs, PyPI version compare section), `tests/test_t14_check.py` (new — frontmatter validity, token budget, four anchors, runbook reference, T24 rubric, T25 efficiency gate, Live Skills count line, CHANGELOG entry), `.claude/agents/_common/skills_pattern.md` (Live Skills line extended: added check (T14)), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_14_check_command.md` (Status → Done; TA-LOW-01/02 ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T14 row → Done; G3 exit criterion amended with satisfaction parenthetical naming /check), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (SKILL.md exists; frontmatter name=check, description ≤200 chars, allowed-tools declared; body ≤5K tokens; four ## anchors Inputs/Procedure/Outputs/Return schema; smoke steps 1-3+5 pass), AC2 (runbook.md exists, T24 rubric summary/section-budget/code-block-len pass; smoke step 4), AC3 (T25 skills_efficiency --check all clean against .claude/skills/; smoke step 6), AC7 (_common/skills_pattern.md Live Skills count line extended with check (T14); single line; smoke step 11), AC8 (CHANGELOG entry present; smoke step 10), AC9a (T14 spec Status → Done), AC9b (M21 README T14 row → Done), AC9c (M21 README G3 prose amended with T14 satisfaction). TA-LOW-01 (extended existing single Live Skills line — did not add a second). TA-LOW-02 (one-line allowed-tools rationale note added under §Skill structure §1 in SKILL.md).
+
+Deviations: none.
+
+### Added — M21 Task 13: /triage post-halt diagnosis Skill (2026-04-29)
+
+Files touched: `.claude/skills/triage/SKILL.md` (new — triage Skill, ≤5K tokens, four required ## anchors, allowed-tools declared), `.claude/skills/triage/runbook.md` (new — T24-rubric-conformant; halt classifications taxonomy, option matrices per halt category, two worked examples), `tests/test_t13_triage.py` (new — frontmatter validity, token budget, four anchors, runbook reference, T24 rubric, T25 efficiency gate, Live Skills count line, CHANGELOG entry), `.claude/agents/_common/skills_pattern.md` (appended Live Skills count line: ai-workflows, dep-audit, triage), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_13_triage_command.md` (Status → Done; TA-LOW-01 ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T13 row → Done; G3 exit criterion amended with satisfaction parenthetical naming /triage as the highest-value Phase F Skill), `CHANGELOG.md` (this entry).
+
+ACs satisfied: AC1 (SKILL.md exists; frontmatter name=triage, description ≤200 chars, allowed-tools declared; body ≤5K tokens; four ## anchors Inputs/Procedure/Outputs/Return schema; smoke steps 1-3+5 pass), AC2 (runbook.md exists, T24 rubric summary/section-budget/code-block-len pass; smoke step 4), AC3 (T25 skills_efficiency --check all clean against .claude/skills/; smoke step 6), AC4 (T10 invariant 9/9 preserved; smoke step 7), AC5 (T24 invariant held on .claude/agents/; smoke step 8), AC6 (tests/test_t13_triage.py passes; smoke step 9), AC7 (_common/skills_pattern.md Live Skills count line present and includes triage; smoke step 11), AC8 (CHANGELOG entry present; smoke step 10), AC9a (T13 spec Status → Done), AC9b (M21 README T13 row → Done), AC9c (M21 README G3 prose amended in-place with satisfaction parenthetical). TA-LOW-01 (## When to use / ## When NOT to use anchors kept — T25 smoke step 9 only enforces the four required anchors; additional sections are permitted per dep-audit precedent).
+
+Deviations: none.
+
+### Added — M21 Task 25: Periodic skill / scheduled-task efficiency audit (/audit-skills + scripts/audit/skills_efficiency.py + CI hookup) (2026-04-29)
+
+Files touched: `scripts/audit/skills_efficiency.py` (new — two CI-gated heuristics: screenshot-overuse, missing-tool-decl; ≤200 lines), `.claude/commands/audit-skills.md` (new slash command — §Inputs, §Procedure, §Outputs, §Return schema sections), `.claude/skills/ai-workflows/SKILL.md` (added `allowed-tools: Bash` frontmatter — Step 1b clean-tree precondition), `.claude/skills/dep-audit/SKILL.md` (added `allowed-tools: Bash` frontmatter — Step 1b clean-tree precondition), `.github/workflows/ci.yml` (new CI step: md_discoverability + skills_efficiency both run every PR), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_24_issue.md` (M21-T24-ISS-01 marked RESOLVED), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_25_issue.md` (new — T12 + T24 deferrals closed), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_25_periodic_skill_audit.md` (Status → Done; TA-LOW-01/02/03 ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (row 75 → Done; G5 audit-prompt half amended with satisfaction parenthetical), `tests/test_t25_skills_efficiency.py` (new — 18 tests covering both CI-gated rules + all-aggregate + invalid-target + synthetic-violation fixtures + live-repo smoke).
+
+ACs satisfied: AC1 (skills_efficiency.py exists, two CI-gated --check flags + all, exits non-zero on findings, exits 0 on clean, ≤200 lines), AC2 (audit-skills.md exists with four required ## section anchors), AC2b (both existing Skills carry allowed-tools: frontmatter), AC3 (ci.yml wires md_discoverability + skills_efficiency), AC4 (test file exists with all checks + all-aggregate + invalid-target + synthetic violation paths), AC5 (T24 issue TA-LOW-02 marked RESOLVED), AC6 (T10 invariant preserved — smoke step 5), AC7 (T24 invariant preserved — smoke step 6), AC8 (CHANGELOG), AC9a/b/c (status surfaces flipped). TA-LOW-01 (awk pattern in smoke step 8). TA-LOW-02 (operator-only heuristics in slash-command prose only). TA-LOW-03 (screenshot-overuse uses generalized regex; documented in module docstring).
+
+Deviations: none.
+
+### Changed — M21 Task 26 cycle 2: T26 trigger re-check + bundled wording fixes (auto-implement.md; long_running_pattern.md) (2026-04-29)
+
+Files touched: `.claude/commands/auto-implement.md` (FIX-1: trigger re-check note added to §Functional loop procedure Step 1; ADV-1: initializer step heading updated to "first trigger fire" wording; ADV-2: "No T26 override for the Auditor spawn" appended to §Auditor spawn — read-only-latest-summary rule), `agent_docs/long_running_pattern.md` (ADV-1: "one-shot at cycle 1" updated to "one-shot at first trigger fire (cycle 1 for opt-in tasks; cycle 3 for auto-trigger)").
+
+ACs satisfied: FIX-1 (N>=3 trigger arm now reachable via per-cycle re-check in functional loop Step 1), ADV-1 (wording updated in both files), ADV-2 (Auditor spawn no-override note added).
+
+Deviations: none.
+
+### Added — M21 Task 26: Two-prompt long-running pattern (agent_docs/long_running_pattern.md; auto-implement + builder wired for trigger ≥3 cycles) (2026-04-29)
+
+Files touched: `agent_docs/long_running_pattern.md` (new — T24-rubric-conformant pattern reference, creates `agent_docs/` directory), `.claude/commands/auto-implement.md` (new `## Two-prompt long-running pattern (T26)` section + T26 trigger override appended to `### Builder spawn — read-only-latest-summary rule`), `.claude/agents/builder.md` (one bullet added to `## Hard rules` — T26 schema-purity anchor), `.claude/agents/auditor.md` (Phase 5b extended — `progress.md` append step after `cycle_<N>/summary.md`), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (row 76 description + status updated; G5 exit criterion satisfaction parenthetical added), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_26_two_prompt_long_running.md` (Status → Done; TA-LOW-01/02/03 ticked).
+
+ACs satisfied: AC1 (agent_docs/long_running_pattern.md exists; T24 rubric summary/section-budget/code-block-len pass), AC2 (agent_docs/ directory created by this task), AC3 (auto-implement.md carries `## Two-prompt long-running pattern (T26)` section), AC4 (builder.md references both plan.md and progress.md), AC5 (T10 invariant 9/9), AC6 (T24 invariant — .claude/agents/*.md passes section-budget), AC7 (CHANGELOG), AC8a (spec Status → Done), AC8b (README row 76 description and status updated), AC8c (README G5 satisfaction parenthetical added). TA-LOW-01 (H3s promoted to H2s in long_running_pattern.md). TA-LOW-02 (unescaped backticks used in Edit old_string/new_string). TA-LOW-03 (exact verbatim schema-purity bullet copied per spec).
+
+Deviations: none.
+
+### Added — M21 Task 12: Skills extraction (.claude/skills/dep-audit/; pattern locked) (2026-04-29)
+
+Files touched: `.claude/skills/dep-audit/SKILL.md` (new — dep-audit operational shortcut Skill, ≤5K tokens), `.claude/skills/dep-audit/runbook.md` (new — full assertion lists, error-message catalog, edge cases; cycle-2: corrected §Lockfile-diff, §Dep-detection exit-code semantics, §Wheel-contents allowlist), `.claude/agents/dependency-auditor.md` (new `## Operational shortcuts` section pointing to Skill), `.claude/agents/_common/skills_pattern.md` (new — Skill-extraction pattern documentation), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_12_skills_extraction.md` (Status → Done; TA-LOW-01/02 ticked; grounding line-numbers replaced with anchor strings), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T12 row → Done; G6 exit criterion added + satisfied).
+
+ACs satisfied: AC1 (SKILL.md exists, frontmatter well-formed, name: dep-audit, description ≤200 chars, body ≤5K tokens, T24-rubric checks pass against dep-audit/ directory), AC2 (runbook.md exists, T24-rubric section-budget/summary/code-block-len/section-count all pass), AC3 (dependency-auditor.md has exactly one new `## Operational shortcuts` section pointing to Skill; no other section rewritten), AC4 (skills_pattern.md exists in _common/, contains literal phrase "Skill-extraction pattern", T24-rubric conformant), AC5 (T10 invariant 9/9 preserved), AC6 (T24 invariant held — .claude/agents/*.md still passes all four discoverability checks), AC7 (CHANGELOG updated), AC8a (T12 spec Status → Done), AC8b (M21 README T12 row → Done), AC8c (M21 README G6 added + satisfied parenthetical naming dep-audit). TA-LOW-01 (line number references replaced with anchor strings at both spec sites). TA-LOW-02 (literal phrase "Skill-extraction pattern" present in skills_pattern.md body). Cycle-2 carry-over: FIX-01 (§Lockfile-diff replaced fabricated `uv lock --diff` with `git diff <pre-task-commit>..HEAD -- uv.lock`; dropped `~ bumped` parser entry), FIX-02 (§Dep-detection added `--exit-code` flag; clarified exit 0 = no changes / exit 1 = changes detected), FIX-01-sdet (§Wheel-contents allowlist updated to `ai_workflows/`, `migrations/`, `*.dist-info/`; removed misleading bare LICENSE/README/CHANGELOG prose; updated 3-line summary; removed `evals/` denylist row).
+
+Deviations: none.
+
+### Changed — M21 Task 24: MD-file discoverability audit (rubric locked; .claude/agents/*.md conform; scripts/audit/md_discoverability.py added) (2026-04-29)
+
+Files touched: `.claude/agents/architect.md` (Rule 4: code block #1 shrunk from 21→14 lines), `.claude/agents/auditor.md` (Rule 4: code block #1 shrunk from 26→12 lines), `.claude/agents/dependency-auditor.md` (Rule 3: §What actually matters split into 2 sections), `.claude/agents/roadmap-selector.md` (Rule 3: §Phase 2 split; Rule 4: code block #2 shrunk from 50→18 lines), `.claude/agents/security-reviewer.md` (Rule 3: §What actually matters split into 2 sections), `.claude/agents/sr-dev.md` (Rule 3: §What to look for split into lenses 1-3 / 4-6; Rule 4: code block shrunk), `.claude/agents/sr-sdet.md` (Rule 3+4: same pattern as sr-dev.md), `.claude/agents/task-analyzer.md` (Rule 3: §Phase 2 split into 2a/2b; Rule 4: code block shrunk from 58→18 lines), `.claude/agents/_common/verification_discipline.md` (Rule 1: added When loaded + Origin summary lines), `scripts/audit/md_discoverability.py` (new — 149 lines, 4 checks), `tests/test_t24_md_discoverability.py` (new — 12 tests), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_24_issue.md` (new — per-file rubric baseline), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_24_md_discoverability.md` (Status → Done), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (T24 row + G2 exit criterion amended).
+
+ACs satisfied: AC1 (all 11 files pass rules 1-4; smoke steps 1-4 exit zero), AC2 (rule 5 recorded in issue file), AC3 (T10 invariant 9/9), AC4 (T11 invariant 4/4), AC5 (script exists, 149 lines, 4 checks), AC6 (issue file with baseline table), AC7 (CHANGELOG entry), AC8a/b/c (status surfaces flipped). TA-LOW-01 (CHANGELOG grep tightened). TA-LOW-02 (CI hookup deferred to T25 — noted). TA-LOW-03 (Rule 5 note in §Step 1 per spec carry-over).
+
+Deviations: none.
+
+### Changed — M21 Task 11: CLAUDE.md slim (threat-model → security-reviewer.md; seven-KDR table → 4 drift-check agents; CLAUDE.md becomes 83-line index; ADV-1/2 absorbed from T10) (2026-04-29)
+
+Files touched: `CLAUDE.md` (136 → 83 lines; 6 moves applied), `.claude/agents/security-reviewer.md` (threat-model stub replaced with full canonical section; heading renamed; ADV-1/ADV-2 applied), `.claude/agents/auditor.md` (KDR table appended; ADV-1/ADV-2), `.claude/agents/task-analyzer.md` (KDR table appended; ADV-1/ADV-2), `.claude/agents/architect.md` (KDR table appended; ADV-1/ADV-2), `.claude/agents/dependency-auditor.md` (KDR table appended; ADV-1/ADV-2), `.claude/agents/builder.md` (ADV-1/ADV-2), `.claude/agents/roadmap-selector.md` (ADV-1/ADV-2), `.claude/agents/sr-dev.md` (ADV-1/ADV-2), `.claude/agents/sr-sdet.md` (ADV-1/ADV-2), `design_docs/phases/milestone_21_autonomy_loop_continuation/README.md` (G1 prose + T11 task row), `design_docs/phases/milestone_21_autonomy_loop_continuation/task_11_claude_md_slim.md` (status → Done; carry-over ticked), `design_docs/phases/milestone_21_autonomy_loop_continuation/issues/task_11_issue.md` (new — per-agent wc -w baseline).
+
+ACs satisfied: AC1 (83 lines ≤ 95), AC2 (anchors for threat model + KDR table + verification discipline), AC3 (security-reviewer.md `## Threat model`), AC4 (KDR table in 4 drift-check agents), AC5 (ADV-1: preamble stripped from 9/9), AC6 (ADV-2: parenthetical in 9/9), AC7 (T10 invariant held 9/9), AC8 (CHANGELOG), AC9a/b/c (status surfaces flipped), TA-LOW-01 (cosmetic), TA-LOW-02 (stub replaced inline), TA-LOW-03 (G1 grep tightened).
+
+Deviations: none.
+
+### Added — M21 Task 10: Common-rules extraction (.claude/agents/_common/non_negotiables.md + verification_discipline.md; 9 agent prompts reference shared blocks) (2026-04-29)
+
+Files touched: `.claude/agents/_common/non_negotiables.md` (new — autonomy-boundary rules 1/2/3, ≤500 token proxy), `.claude/agents/_common/verification_discipline.md` (new — 4-section verification rules + Bash-safety rules, ≤400 token proxy), `.claude/agents/architect.md` (reference added, boundary text replaced, inline verification-discipline removed), `.claude/agents/auditor.md` (same), `.claude/agents/builder.md` (same), `.claude/agents/dependency-auditor.md` (same), `.claude/agents/roadmap-selector.md` (same), `.claude/agents/security-reviewer.md` (same), `.claude/agents/sr-dev.md` (same), `.claude/agents/sr-sdet.md` (same), `.claude/agents/task-analyzer.md` (same).
+
+ACs satisfied: AC1 (non_negotiables.md exists, ≤500 token proxy), AC2 (verification_discipline.md exists, 4 sections, ≤400 token proxy), AC3 (all 9 agent prompts reference both shared files), AC4 (no agent prompt re-states autonomy-boundary text), AC5 (CHANGELOG updated), AC6 (status surfaces flipped), TA-LOW-01 (reference lines placed in prompt body immediately after YAML `---`).
+
+Deviations: none.
+
+## [M20 Autonomy Loop Optimization] - 2026-04-28
+
+### Added — M20 Task ZZ: Milestone close-out cycle 2 — sr-dev FIX-THEN-SHIP applied (roadmap.md M20 narrative corrected; section header updated to M2–M20; T01/T02/T03 commit SHAs filled in CHANGELOG) (2026-04-28)
+
+Files touched: `design_docs/roadmap.md` (FIX-1: removed wrong-content M19 paste from M20 row; ADV-2: header updated to M2–M20), `CHANGELOG.md` (ADV-1: T01=1eb67e3, T02=aef31c3, T03=48ed494).
+
+### Added — M20 Task ZZ: Milestone close-out (status surfaces flipped; CHANGELOG promoted; roadmap + README updated; M21 propagation surface recorded) (2026-04-28)
+
+Doc-only milestone close-out. No `ai_workflows/` package changes.
+
+Closes M20 — Autonomy Loop Optimization. Flips all status surfaces, promotes all M20
+`[Unreleased]` CHANGELOG entries into this dated section, adds M20 rows to `roadmap.md`
+and root `README.md`, appends Outcome + Propagation status to the milestone README.
+
+**Shipped tasks (11 of 13 candidates):**
+- T01 (return-value schema) — 1eb67e3
+- T02 (input prune) — aef31c3
+- T03 (in-task cycle compaction) — 48ed494
+- T04 (cross-task iteration compaction) — 7caecbd
+- T05 (parallel terminal gate) — bd27945
+- T06 (shadow-audit study harness; DEFER verdict) — d76f93f
+- T08 (gate-output integrity) — 0dd91f4
+- T09 (task-integrity safeguards) — 8e572dc
+- T20 (auditor anti-cargo-cult inspections) — 851274f
+- T21 (adaptive-thinking migration) — 628b975
+- T22 (per-cycle telemetry) — 426c7fb
+- T23 (cache-breakpoint discipline; AC-7 deferred) — b39efbf
+- T27 (auditor input-volume rotation trigger; Path A rejected) — a266996
+- T28 (server-side compaction evaluation; DEFER verdict) — 21c37ba
+- ZZ prep commit — 0056f02
+
+**DEFER verdicts:**
+- T06: DEFER — recursive-subprocess confound + multi-day wall-clock make full 30-cell study
+  infeasible inside single autopilot iteration. Harness ready at
+  `scripts/orchestration/run_t06_study.py`; operator-resume per
+  `runs/study_t06/A1-m12_t01/methodology_note.json`.
+- T23 AC-7: DEFER — empirical cache-hit validation deferred per parallel L5-equivalent
+  bail-out (recursive-subprocess confound + TTL fragility). Operator-resume per
+  `runs/cache_verification/methodology.md`.
+- T28: DEFER — Claude Code Task tool does not expose `context_management.edits`; analysis at
+  `design_docs/analysis/server_side_compaction_evaluation.md`; `nice_to_have.md §24`.
+
+**T07 BLOCKED:** Dynamic model dispatch spec exists but is gated on T06 producing a non-DEFER
+verdict. Unblocks when operator runs `python scripts/orchestration/run_t06_study.py full-study`
+outside autopilot AND T06 verdict flips from DEFER to GO/NO-GO.
+
+**M21 hardening absorption surface:** 16+ Builder return-schema violations across 6 tasks in 6
+autopilot iterations; Auditor cycle-summary write refusal at multiple cycle boundaries; Builder
+pre-stamp "Auditor verdict" + "Locked decision" patterns; sr-dev `Write` tool missing from tools
+list; harness write-policy + orchestrator-owned post-spawn summary write reframe (LOW-11 from T06
+§C4). All 10 LOWs from T06 §C4 (LOW-1 through LOW-8 + LOW-10 + LOW-11) feed the M21
+agent-prompt-hardening absorbing task. `/clean-tasks m21` is now unblocked.
+
+**Autopilot baseline manual smoke (2026-04-28):**
+- Run timestamp: 20260428T153748Z; branch: `workflow_optimization`; `AIW_AUTONOMY_SANDBOX=1`.
+- 6 iter-shipped artifacts: `runs/autopilot-20260428T153748Z-iter1-shipped.md` through
+  `runs/autopilot-20260428T153748Z-iter6-shipped.md`.
+- Cycle counts: T06=5, T08=2, T09=1, T20=3, T23=2, T27=2 (15 total across 6 tasks).
+- Total agent invocations: ~70+. Cumulative tokens: ~3.5M.
+
+**Green-gate snapshot:**
+- `uv run pytest` — 1293 passed, 10 skipped, 1 pre-existing environmental fail
+  (`test_design_docs_absence_on_main` on `workflow_optimization` branch; LOW-3, out of ZZ scope).
+- `uv run lint-imports` — 5 contracts kept, 0 broken. No new layer contracts at M20
+  (orchestration infrastructure does not touch the package layer rule).
+- `uv run ruff check` — all checks passed.
+
+**Files touched:**
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/README.md` — Status flipped to
+  ✅ Complete; T07 row updated from Candidate to Planned; Outcome + Propagation status appended.
+- `design_docs/roadmap.md` — M20 row added (after M19); M20 narrative summary appended.
+- `README.md` — M20 row added to milestone table; §Next updated to reflect M21 as next milestone.
+- `CHANGELOG.md` — this entry; all M20 [Unreleased] entries promoted to this dated section.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/task_zz_milestone_closeout.md` —
+  Status flipped to ✅ Done.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/issues/task_zz_issue.md` — NEW;
+  audit log + M21 propagation surface + operator-resume actions.
+
+**ACs satisfied:**
+- AC-1 through AC-16 (see issue file for full enumeration).
+
+**Architecture.md:** No changes needed. M20 is orchestration-infrastructure; no §4 sub-bullet
+or §6 dep-table row requires acknowledgment of `scripts/orchestration/` (these are autonomy
+tooling, not runtime package components). Recorded in issue file per spec §5.
+
+**Deviations from spec:** None.
+
+### Added — M20 Task 27: Auditor input-volume rotation trigger (client-side simulation of clear_tool_uses_20250919; tunable via AIW_AUDITOR_ROTATION_THRESHOLD; ≤ 70% cumulative input-token reduction on long-cycle audits; Path A rejected per audit H6 — Claude Code Task tool does not expose context_management.edits) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Implements the client-side rotation trigger for Auditor spawns: when an Auditor cycle's
+`input_tokens >= 60000` and verdict is OPEN, the next Auditor spawn receives a compacted
+input (spec path + issue path + `git diff` + `cycle_N/summary.md`) instead of the
+standard pre-load set. Path A (server-side `clear_tool_uses_20250919` via agent
+frontmatter) is rejected — Claude Code's Task tool accepts only
+`name`/`description`/`tools`/`model`; no `context_management.edits` pass-through exists.
+
+**Files touched:**
+- `scripts/orchestration/auditor_rotation.py` — NEW. Core helper exposing
+  `should_rotate(cycle_usage, threshold)`, `get_threshold()` (env-var aware),
+  `write_rotation_log(...)`, `build_compacted_auditor_spawn_input(...)`, and CLI
+  entry point (`--input-tokens`, `--verdict`, `--threshold`).
+- `.claude/commands/_common/auditor_context_management.md` — NEW. Documents the
+  threshold (60K default, `AIW_AUDITOR_ROTATION_THRESHOLD` env override), compaction
+  recovery target (≤ 30K), Path A rejection rationale (audit H6), Auditor-only scope,
+  rotation log format, and integration points.
+- `.claude/commands/auto-implement.md` — §Step 2 Auditor updated with rotation-trigger
+  check (pre-spawn decision logic + rotation log write + compacted-input shape + env var
+  reference). Per-cycle directory layout extended with `auditor_rotation.txt`.
+- `.claude/commands/clean-implement.md` — same rotation-trigger pattern applied.
+- `tests/orchestrator/test_auditor_rotation_trigger.py` — NEW. 29 hermetic tests:
+  threshold-fire, threshold-no-fire, verdict-PASS, verdict-BLOCKED, tunability,
+  env-var override, rotation log format, compacted-input shape.
+- `tests/orchestrator/test_auditor_rotation_doesnt_break_verdict.py` — NEW. 9 hermetic
+  tests: 5-cycle fixture comparing T27-enabled vs disabled; verdicts identical;
+  cumulative input tokens ≤ 70% of disabled when ≥ 1 rotation fires; custom threshold.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `.claude/commands/auto-implement.md` describes the rotation trigger in the
+        per-cycle Auditor spawn loop (per §Mechanism).
+- AC-2: `.claude/commands/clean-implement.md` matches.
+- AC-3: `.claude/commands/_common/auditor_context_management.md` exists; documents
+        threshold (60K default, `AIW_AUDITOR_ROTATION_THRESHOLD` env override),
+        compaction recovery target (≤ 30K), Path A rejection (Claude Code Task tool
+        surface limitation per audit H6).
+- AC-4: Rotation events log to `runs/<task>/cycle_<N>/auditor_rotation.txt`
+        (documented in commands + implemented in `write_rotation_log()`).
+- AC-5: `test_auditor_rotation_trigger.py` passes (29 tests).
+- AC-6: `test_auditor_rotation_doesnt_break_verdict.py` passes (9 tests).
+- AC-7: CHANGELOG updated.
+- AC-8: Status surfaces flipped (spec Status, milestone README task-table row).
+
+**Deviations from spec:** None.
+
+#### Cycle 2 sub-entry — M20 Task 27 terminal-gate fixes (sr-sdet B-1 + F-1 + F-2 + A-1) (2026-04-28)
+
+Test-quality fixes only. No `ai_workflows/` changes. No functional logic change to `auditor_rotation.py` except `get_threshold()` now guards zero (adds `int(stripped) > 0` to the isdigit check, preventing zero-threshold runaway).
+
+**Files touched:**
+- `scripts/orchestration/auditor_rotation.py` — `get_threshold()` docstring updated to document accepted/rejected env-var values (positive integers only; -1/0/float strings all fall back to 60K); zero guard added (`int(stripped) > 0`).
+- `tests/orchestrator/test_auditor_rotation_trigger.py` — F-1: added 3 boundary tests to `TestGetThreshold` (`-1`, `0`, `60000.0` all fall back to 60K). F-2: replaced tautological `test_no_prior_chat_history_placeholder` with structural `test_no_duplication_of_cycle_summary_content` (passes prior-Auditor-verdict text as input; verifies it appears exactly once in the output). A-1: `repo_root` + `rotation_mod` fixtures promoted to `scope="module"`.
+- `tests/orchestrator/test_auditor_rotation_doesnt_break_verdict.py` — B-1: replaced tautological `TestVerdictsUnchanged` (2 tests asserting `VERDICTS == VERDICTS` + 1 test asserting `len()==len()`) with a single `test_same_record_count` asserting both simulators return `len(VERDICTS)` records; inline comment acknowledges "rotation doesn't change verdicts" requires a live test. A-2: `test_same_number_of_cycles` removed (absorbed into `test_same_record_count`). A-1: `repo_root` + `rotation_mod` fixtures promoted to `scope="module"`.
+
+**ACs satisfied (carry-over from cycle-1 terminal gate):**
+- B-1 fixed: `TestVerdictsUnchanged` no longer tautological.
+- F-1 fixed: `get_threshold()` documented + zero guard added + 3 boundary tests added.
+- F-2 fixed: `test_no_duplication_of_cycle_summary_content` replaces weak negative assertion.
+- A-1 applied: both `rotation_mod` fixtures use `scope="module"`.
+- A-2 resolved: `test_same_number_of_cycles` removed; merged into `test_same_record_count`.
+
+**Deviations from locked decision:** None. Option B selected for F-1 as locked.
+
+### Added — M20 Task 23: Cache-breakpoint discipline (stable-prefix construction + 2-call verification harness; addresses anthropics/claude-code #27048/#34629/#42338/#43657 5–20× session-cost blowup failure mode) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Establishes the stable-prefix discipline for sub-agent spawn prompts and ships a
+2-call verification harness that reads T22's `cache_read_input_tokens` telemetry
+records to confirm Claude Code's cache breakpoint is correctly placed.
+
+**Files touched:**
+- `.claude/commands/_common/spawn_prompt_template.md` — extended with
+  §Stable-prefix discipline section (four rules: no timestamps/UUIDs in prefix,
+  fixed tool list, byte-identical system prompt, `\n\n` boundary before dynamic
+  context). References `cache_verify.py` for verification CLI.
+- `scripts/orchestration/cache_verify.py` — NEW. Verification harness.
+  `verify_cache_discipline(record1, record2)` core logic; `run_dry_run()` CLI
+  helper; exit codes 0=PASS/1=SKIP/2=FAIL/3=ERROR; `--dry-run` mode for
+  hermetic testing. AC-7 empirical validation deferred to operator-resume
+  (parallel to T06 L5 deferral; recursive-subprocess confound + TTL fragility).
+- `.claude/commands/auto-implement.md` — §Cache-breakpoint verification section
+  added: CLI form, output location (`runs/<task>/cache_verification.txt`), halt
+  surface (`🚧 Cache breakpoint regression`), operator-resume framing.
+- `runs/cache_verification/methodology.md` — NEW. Operator runbook for empirical
+  AC-7 validation outside autopilot.
+- `tests/orchestrator/test_cache_breakpoint_verification.py` — NEW. 19 hermetic
+  tests: PASS/FAIL/SKIP/ERROR paths, boundary conditions (exactly 80%, exactly at
+  TTL, None timestamps), `run_dry_run` exit-code mapping, output file contents.
+- `tests/orchestrator/test_stable_prefix_construction.py` — NEW. 14 hermetic
+  tests: no timestamp/UUID/hostname in prefix segment for all prompt builders,
+  `\n\n` boundary present, per-call values isolated to dynamic context, byte-
+  identical prefix invariant.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `spawn_prompt_template.md` has §Stable-prefix discipline section.
+- AC-2: `scripts/orchestration/cache_verify.py` exists with 2-call harness.
+- AC-3: `auto-implement.md` §Cache-breakpoint verification describes verifier CLI,
+        output location, and halt surface.
+- AC-4: Verification halt-surface fires correctly (FAIL exit 2 + 🚧 in output).
+- AC-5: `test_cache_breakpoint_verification.py` passes (19 tests).
+- AC-6: `test_stable_prefix_construction.py` passes (14 tests).
+- AC-7: DEFERRED to operator-resume. See `runs/cache_verification/methodology.md`
+        and issue file §Carry-over. Rationale: recursive-subprocess confound +
+        5-min TTL fragility + telemetry attribution conflict (parallel to T06 L5).
+- AC-8: This CHANGELOG entry.
+- AC-9: Status surfaces flipped (spec Status, milestone README task-table row,
+        milestone README exit criterion #11).
+
+**Deviations from spec:** AC-7 (empirical validation) deferred per task brief
+§For AC-7. Harness ships fully implemented; `--dry-run` mode covers hermetic
+testing. Operator runbook at `runs/cache_verification/methodology.md`.
+
+#### Cycle 2 (2026-04-28) — terminal-gate sr-dev + sr-sdet fix-then-ship
+
+Applied 5 fixes from sr-dev + sr-sdet cycle-1 terminal reviews.
+
+**Files touched:**
+- `scripts/orchestration/cache_verify.py` — sr-dev FIX-1: absent
+  `cache_read_input_tokens` key in record2 now returns ERROR (not silent FAIL
+  with misleading 0-token ratio); sr-dev FIX-2: `to_text` ratio line now uses
+  `is not None` guard (was truthy int check; suppressed ratio when
+  `stable_prefix_tokens == 0`).
+- `tests/orchestrator/test_cache_breakpoint_verification.py` — sr-sdet FIX-3:
+  added `test_spawn2_missing_cache_read_input_tokens_key_returns_error` asserting
+  absent key → ERROR; docstring for `test_skip_ttl_boundary_exactly_at_limit`
+  corrected from "exclusive" to "inclusive ge boundary" (ADV-1).
+- `tests/orchestrator/test_stable_prefix_construction.py` — sr-sdet FIX-1:
+  `test_rule1_no_per_request_strings_in_builder_prefix` rewritten to call real
+  `build_builder_spawn_prompt` directly (no appended UUID section) and extended to
+  `build_task_analyzer_spawn_prompt` + `build_roadmap_selector_spawn_prompt`;
+  sr-sdet FIX-2: added `test_real_builder_prefix_is_byte_identical_across_two_calls`
+  and `test_real_auditor_prefix_is_byte_identical_across_two_calls` exercising real
+  builders; ADV-2: added `test_hardcoded_hostname_never_appears_in_builder_prefix`
+  (hostname regression check independent of runtime `socket.gethostname()` value).
+- `CHANGELOG.md` — this cycle-2 sub-entry.
+
+**Gate results:** 46 tests pass (up from 33 in cycle 1); `uv run lint-imports`
+5 contracts kept; `uv run ruff check` all checks passed.
+
+### Changed — M20 Task 20: Auditor anti-cargo-cult inspections (carry-over diff cross-ref + cycle-N overlap + rubber-stamp detection) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Extends the Auditor agent with three detection modes in Phase 4 (Critical sweep):
+(1) Carry-over checkbox-cargo-cult — HIGH when a `[x]` carry-over item has no
+    corresponding diff hunk (M12-T01 lesson, ported from template).
+(2) Cycle-N-vs-cycle-(N-1) finding overlap — MEDIUM when ≥ 50% of cycle-N finding
+    titles score > 0.70 (operator-tunable via AIW_LOOP_DETECTION_THRESHOLD) against
+    prior-cycle titles (loop-spinning detection).
+(3) Rubber-stamp detection — MEDIUM when verdict is PASS + diff > 50 lines +
+    zero HIGH/MEDIUM findings (no new ADVISORY tier — uses existing MEDIUM per audit L6).
+
+**Files touched:**
+- `.claude/agents/auditor.md` — Phase 4 extended with three new bullets; M12-T01
+  carry-over checkbox-cargo-cult paragraph ported from template.
+- `scripts/orchestration/cargo_cult_detector.py` — NEW. Python detection helpers:
+  `detect_checkbox_without_diff`, `detect_cycle_overlap`, `detect_rubber_stamp`,
+  `extract_finding_titles`, `count_diff_lines`, `get_loop_detection_threshold`,
+  `run_all_detectors`. Threshold env-var: `AIW_LOOP_DETECTION_THRESHOLD`.
+- `tests/agents/test_auditor_anti_cargo_cult.py` — NEW. Hermetic tests for all three
+  detectors (true-positives + true-negatives + threshold env-var + structural grep).
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: Phase 4 extended with cycle-overlap + rubber-stamp bullets; no new phase number.
+- AC-2: M12-T01 carry-over patch ported verbatim to live auditor.md.
+- AC-3: HIGH for checkbox; MEDIUM for cycle-overlap; MEDIUM for rubber-stamp.
+- AC-4: `tests/agents/test_auditor_anti_cargo_cult.py` passes — true-positives + negatives.
+- AC-5: This CHANGELOG entry.
+- AC-6: Status surfaces flipped (spec Status, milestone README task-table row).
+
+**Deviations from spec:** None. Detection logic placed in
+`scripts/orchestration/cargo_cult_detector.py` per the "smallest surface area" option
+in the spec's implementation-pattern section; no new `ai_workflows/` package module.
+
+_Cycle 2 (2026-04-28): Fixed sr-sdet BLOCK B-1 (tautological carry-over assertion replaced
+with verbatim phrase check), FIX F-1 (phase-4-scoped overlap/rubber-stamp assertions via
+`_phase4_block` helper), FIX F-2 (boundary tests at diff_lines=50 and diff_lines=51),
+A-1 advisory (env-var tests converted to `monkeypatch.setenv/delenv`), A-2 advisory
+(rubber-stamp assertion simplified to `"rubber-stamp" in phase4.lower()`)._
+
+_Cycle 3 (2026-04-28): sr-dev F-1 — wrapped `text.index("## Phase 4")` in try/except in
+`_phase4_block`; on ValueError calls `pytest.fail(...)` for a descriptive failure instead
+of a bare traceback._
+
+### Added — M20 Task 09: Task-integrity safeguards (non-empty diff + non-empty test diff for code tasks + independent pre-stamp gate re-run; uses T08 gate_parse_patterns.md) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Three pre-commit safeguards the orchestrator runs after all reviewers SHIP and before
+stamping AUTO-CLEAN: (1) `git diff --stat <pre>..HEAD` must be non-empty; (2) for code
+tasks, `git diff --stat <pre>..HEAD -- tests/` must be non-empty (bypassed for doc-only
+and analysis-only tasks); (3) `uv run pytest -q` re-runs independently and must pass.
+Reuses T08's `parse_gate_output` for the pytest-footer regex — no duplication.
+
+**Files touched:**
+- `.claude/commands/_common/integrity_checks.md` — NEW. Canonical reference for the three
+  checks: failure-mode signatures, halt message format, task-kind parsing rule (spec
+  `**Kind:**` line with README fallback), captured output location
+  (`runs/<task>/integrity.txt`), relationship to T08 gate-capture-and-parse.
+- `.claude/commands/auto-implement.md` — Added `## Pre-commit ceremony` section between
+  G6 TERMINAL CLEAN and the commit ceremony. Describes all three checks with exact halt
+  messages. Added `<pre-task-commit>` SHA capture instruction to the project-setup section.
+- `tests/orchestrator/test_integrity_checks.py` — NEW. 34 tests covering all 5 spec-named
+  cases: empty-diff halt, empty-test-diff halt for code task, failing-pytest halt,
+  doc-only bypass (no halt), all-pass no-halt; plus unit tests of individual check
+  functions and file-existence + content assertions for both integrity_checks.md and
+  auto-implement.md.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `.claude/commands/auto-implement.md` describes the pre-commit ceremony with three checks.
+- AC-2: `.claude/commands/_common/integrity_checks.md` exists.
+- AC-3: Halt surfaces the specific failed check (check ID + name in every BLOCKED message).
+- AC-4: `tests/orchestrator/test_integrity_checks.py` passes (34 tests).
+- AC-5: This CHANGELOG entry.
+- AC-6: Status surfaces flipped (spec Status, milestone README task row + G5 exit criterion #10).
+
+**Deviations from spec:** None. T08's `parse_gate_output` is imported directly from
+`tests/orchestrator/test_gate_output_capture.py` (the shared-helper approach the spec
+recommends); no intermediate scripts/orchestration/ module was needed.
+
+### Added — M20 Task 08: Gate-output integrity (orchestrator-side raw-stdout capture + footer-line parse; fail-closed on missing output; load-bearing under default-Sonnet) (2026-04-28)
+
+Orchestration-infrastructure task. No `ai_workflows/` package changes.
+Defense-in-depth: the orchestrator independently captures and parses the raw stdout of
+each gate command before stamping AUTO-CLEAN / CLEAN. Fail-closed on missing or
+unparseable output. Paired with T01's return-schema parser as the second defence layer
+(T01 catches malformed agent verdict-lines; T08 catches Builder claims of "gates pass"
+with empty or failure-indicating actual stdout).
+
+**Files touched:**
+- `.claude/commands/_common/gate_parse_patterns.md` — NEW. Single source of truth for
+  per-gate footer-line regex (pytest, ruff, lint-imports) plus extension hooks for
+  task-specific smoke tests. Capture format spec. Halt condition wording.
+- `.claude/commands/auto-implement.md` — Added `## Gate-capture-and-parse convention`
+  section before the commit ceremony. References `gate_parse_patterns.md`. Mandates
+  `gate_pytest.txt`, `gate_lint-imports.txt`, `gate_ruff.txt` in
+  `runs/<task>/cycle_<N>/`. Halt message: `🚧 BLOCKED: gate <name> output not parseable`.
+- `.claude/commands/clean-implement.md` — Same gate-capture-and-parse convention added
+  before the `## Reporting` section. Consistent with auto-implement.md.
+- `tests/orchestrator/test_gate_output_capture.py` — NEW. 46 tests covering: valid pytest
+  footer, empty stdout, claim-pass-without-footer, exit-code-nonzero, footer-with-failures,
+  ruff and lint-imports variants, unknown gate, BLOCKED message format, and
+  gate_parse_patterns.md file-existence + content assertions.
+- `tests/orchestrator/test_auto_clean_stamp_safety.py` — NEW. Orchestrator-level stamp-
+  safety simulation: empty gate file halts, all-passing gates stamp AUTO-CLEAN, one failure
+  footer halts, non-zero exit halts, BLOCKED message references correct path, capture path
+  convention, command-file reference assertions.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `.claude/commands/auto-implement.md` describes gate-capture-and-parse convention.
+- AC-2: `.claude/commands/clean-implement.md` matches.
+- AC-3: `.claude/commands/_common/gate_parse_patterns.md` exists with per-gate regex.
+- AC-4: Captured gate outputs land at `runs/<task>/cycle_<N>/gate_<name>.txt` (convention
+  documented in gate_parse_patterns.md + verified in test_auto_clean_stamp_safety.py).
+- AC-5: Halt-on-missing-footer surfaces `🚧 BLOCKED: gate <name> output not parseable`.
+- AC-6: `tests/orchestrator/test_gate_output_capture.py` passes (46 tests).
+- AC-7: `tests/orchestrator/test_auto_clean_stamp_safety.py` passes.
+- AC-8: This CHANGELOG entry.
+- AC-9: Status surfaces flipped (spec Status, milestone README task row + G5 exit criterion #9).
+
+**KDR note:** T08 is orchestration-layer infrastructure (no `ai_workflows/` change). Layer rule
+N/A. (orchestration infrastructure; no `ai_workflows/` change)
+
+_Cycle 2 (2026-04-28): Fixed sr-sdet BLOCK-1 (added `test_failure_footer_zero_exit_is_blocked_by_condition4` with exit_code=0 to exercise Condition 4; renamed prior test to `test_failure_footer_nonzero_exit_is_blocked`) and BLOCK-2 (replaced tautological `test_gate_filename_convention` assertion with path derivation via `build_blocked_message`); added ADV-1 comment to `test_no_gates_stamps`._
+
+### Added — M20 Task 06: Autonomy model-dispatch study (6-cell × 5-task matrix; recommendation gates T07; design_docs/analysis/autonomy_model_dispatch_study.md) (2026-04-28)
+
+Shadow-Audit empirical study harness and study report for the 6-cell model-dispatch
+matrix (Sonnet 4.6 / Opus 4.6 / Opus 4.7 × Builder / Auditor roles across 5 representative
+tasks). Verdict: DEFER — recursive-subprocess confound and multi-day wall-clock make full
+30-cell data collection infeasible inside a single autopilot iteration. Harness is ready
+for operator-run resumption outside autopilot.
+
+**Files touched:**
+- `design_docs/analysis/autonomy_model_dispatch_study.md` — NEW. 208-line study report with
+  all spec sections: verdict (DEFER), 6-cell results table, per-task-kind verdict deltas,
+  cost analysis, wall-clock analysis, provisional default-tier rule, complexity threshold,
+  risks + caveats, reopen triggers, appendices.
+- `scripts/orchestration/run_t06_study.py` — NEW. Reproducible harness: single-cell and
+  full-study subcommands; throwaway-branch management; T22 telemetry aggregation; L5
+  bail-out (quota projection > 5% of weekly Max → exit code 2 + bail_manifest.json).
+- `runs/study_t06/A1-m12_t01/methodology_note.json` — NEW. A1 methodology validation stub
+  documenting why recursive-subprocess invocation was not attempted inline.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/task_06_shadow_audit_study.md` —
+  Status flipped to Done (partial — harness + DEFER report; AC #7 deferred to T06-resume).
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/README.md` — T06 task table
+  row + G3 exit criterion flipped to Done.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/issues/task_06_issue.md` — NEW.
+  Issue file with AC evaluation, locked decisions, and carry-over for T06-resume.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `design_docs/analysis/autonomy_model_dispatch_study.md` exists with all sections populated.
+- AC-2: Verdict line `**Recommendation: DEFER on T07 default flips**` with two-reason justification.
+- AC-3: Per-cell metrics table has all 6 cells (A1-A6); `grep -c "^| A[1-6]"` returns 6.
+- AC-4: Per-task-kind verdict deltas table present; 5 task kinds; data DEFERRED with directional priors.
+- AC-5: Default-tier rule table with per-role provisional assignments + `--expert`/`--cheap` scope.
+- AC-6: Complexity threshold section with 4 named signals.
+- AC-7: DEFERRED — only `runs/study_t06/A1-m12_t01/` exists (methodology stub). Carry-over
+  C1 in issue file for T06-resume operator.
+- AC-8: this CHANGELOG entry.
+- AC-9: status surfaces flipped (spec Status, milestone README task row, G3 exit criterion).
+
+**KDR note:** T06 is analysis-only. No `ai_workflows/` package changes. Layer rule N/A.
+KDR-003 holds: zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY` reads.
+The harness calls `claude --dangerously-skip-permissions` via the production OAuth path.
+
+**Deviations from spec:**
+- AC #7 (30 cell-task run directories) not satisfied. Documented rationale: recursive-subprocess
+  confound makes inside-autopilot measurement invalid; multi-day wall-clock infeasible in single
+  iteration. Harness fully implemented for outside-autopilot resumption.
+
+*(2026-04-28 cycle 2 audit fix — MED-1 resolution):*
+- `design_docs/analysis/autonomy_model_dispatch_study.md` — Study status header corrected from
+  "Methodology validated" to "Methodology designed; data collection and methodology execution
+  both deferred (harness ready)."
+- `runs/study_t06/A1-m12_t01/result.json` — renamed to `result_dry_run.json` to disambiguate
+  dry-run artifact from a real cell result.
+
+*(2026-04-28 cycle 4 terminal-gate fix — sr-dev FIX-THEN-SHIP + sr-sdet BLOCK resolved):*
+- `scripts/orchestration/run_t06_study.py` — four harness bugs fixed:
+  - **BLOCK-1 (sr-sdet):** `_compute_quota_projection` parameter renamed
+    `n_remaining_cells` → `n_total_cells` (default 6); formula changed from
+    `a1_total_tokens × 30` to `a1_total_tokens × n_total_cells`. The old formula
+    treated the 5-task A1 aggregate as a per-pair cost, producing a 5× overestimate
+    that caused the bail-out to fire on every non-trivial run.
+  - **BLOCK-2 / FIX-1 (sr-sdet / sr-dev):** `_write_bail_manifest` call in
+    `run_full_study` now receives an `a1_summary` dict
+    (`{"a1_task_results": [...], "a1_total_tokens": <int>}`) instead of the stale
+    last-loop `result` variable. Updated function signature, docstring, and
+    `bail_manifest.json` schema accordingly.
+  - **FIX-2 (sr-dev):** `run_cell` `finally:` block now raises on
+    `_restore_branch` failure (FATAL print + re-raise), preventing the outer loop
+    from continuing on a corrupt repo where HEAD is still on the throwaway branch.
+    `_delete_throwaway_branch` is only reached when restore succeeded.
+  - **FIX-2 (sr-sdet):** L5 bail-out check moved to fire after the **first task pair**
+    (A1-m12_t01) inside the A1 loop, using per-pair scale factor 30
+    (`len(CELLS) × len(STUDY_TASKS)`), per spec L5 "bail if cost exceeds 5% projected
+    to study end." Previously the check fired only after all 5 A1 tasks completed.
+  - **Dry-run fix (uncovered by new test):** `_get_current_branch` now guarded inside
+    `if dry_run:` block — dry-run path no longer calls git at all.
+- `tests/orchestration/test_run_t06_harness.py` — NEW. 5 hermetic tests:
+  `test_compute_quota_projection_uses_correct_scale_factor`,
+  `test_compute_quota_projection_default_n_total_cells_is_6`,
+  `test_compute_quota_projection_no_bail_when_low_tokens`,
+  `test_bail_manifest_contains_aggregate_not_last_task_result`,
+  `test_run_cell_dry_run_completes_without_subprocess`. All pass without network or
+  subprocess.
+
+*(2026-04-28 cycle 5 terminal-gate fix — sr-sdet FIX-A + FIX-B + LOW-9 closure):*
+- **FIX-B / LOW-9:** `scripts/orchestration/run_t06_study.py` — single-cell CLI
+  bail-out call site (line ~842) fixed: `_write_bail_manifest(projection, result)` →
+  `_write_bail_manifest(projection, {"a1_task_results": [result], "a1_total_tokens": ...})`.
+  Aligns with the full-study path's aggregate dict contract.
+- **FIX-A:** `tests/orchestration/test_run_t06_harness.py` — 2 new tests added (5 → 7):
+  `test_run_full_study_dry_run_completes_without_bail` pins the `i==0` bail-out guard
+  (zero tokens in dry_run must not trigger bail; study_manifest.json must have total_pairs==30);
+  `test_single_cell_bail_manifest_shape` pins the LOW-9 call-site fix through `main()`.
+- **ADV-4:** `test_compute_quota_projection_default_n_total_cells_is_6` strengthened
+  from tautological equality assertion to independent arithmetic check
+  (`projected_total == 600_000`).
+
+### Added — M20 Task 22: Per-cycle agent telemetry wrapper (raw token capture + model + effort + wall-clock + verdict; cache-* fields conditional on Task tool surface check; quota-proxy aggregation owned by T06; basis for T06 study + T07 dispatch defaults + T23 cache verification + T27 rotation trigger; mitigates anthropics/claude-code #52502 metering opacity) (2026-04-28) (cycle 2 follow-up: rewrote concurrency test for same-triple contention + added zero-cache divide-by-zero guard test)
+
+New orchestration-layer telemetry infrastructure. Wraps every sub-agent Task spawn
+to capture raw token counts + model + effort + wall-clock + verdict and persist to
+`runs/<task>/cycle_<N>/<agent>.usage.json`.
+
+**Files touched:**
+- `scripts/orchestration/telemetry.py` — NEW. CLI with `spawn` + `complete` subcommands.
+  Atomic write (temp-file + rename). Stdlib only. Path convention matches
+  `runs/<task>/cycle_<N>/<agent>.usage.json` per audit M11/M12 zero-padded shorthand.
+  Also exports `aggregate_cycle_records()` + `format_telemetry_table()` for T04 retrofit.
+- `scripts/orchestration/check_task_response_fields.py` — NEW. Surface-check helper per
+  audit M7. Probes T22 (token telemetry) and T27 (tool-result clearing via
+  `context_management.edits`) field availability per carry-over L1 round 2.
+  Writes `runs/m20_t22_surface_check.txt` as the audit trail.
+- `.claude/commands/auto-implement.md` — telemetry-record convention added to Builder,
+  Auditor, and parallel-reviewer spawn blocks.
+- `.claude/commands/clean-implement.md` — telemetry-record convention added to Builder,
+  Auditor, and security-reviewer spawn blocks.
+- `.claude/commands/clean-tasks.md` — telemetry-record convention added to task-analyzer spawn block.
+- `.claude/commands/queue-pick.md` — telemetry-record convention added to roadmap-selector spawn block.
+- `.claude/commands/autopilot.md` — telemetry-record convention added to roadmap-selector spawn block.
+- `tests/orchestrator/_helpers.py` — `make_iter_shipped()` already had `## Telemetry summary`
+  section + `ITER_SHIPPED_PROCEED_SECTIONS` already included it (landed at T04 time); verified.
+- `tests/orchestrator/test_telemetry_record.py` — NEW. 14 hermetic tests: spawn/complete
+  round-trips, atomic write under concurrency, bad-input error messages, spec smoke test.
+- `tests/orchestrator/test_telemetry_aggregation.py` — NEW. 14 hermetic tests:
+  3-cycle × 5-agent fixture → 15 rows; cache-hit % computed correctly; T04 iter-shipped
+  helper includes Telemetry summary section.
+- `runs/autopilot-20260428T024624Z-iter5-shipped.md` — Telemetry summary section
+  retrofitted with table header stub.
+- `runs/autopilot-20260428T024624Z-iter6-shipped.md` — same retrofit.
+- `runs/autopilot-20260428T024624Z-iter7-shipped.md` — same retrofit.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/task_22_per_cycle_telemetry.md` —
+  Status flipped to Done; Out-of-scope "Cost reconciliation" bullet reworded per carry-over L1 round 4.
+- `design_docs/phases/milestone_20_autonomy_loop_optimization/README.md` — Task 22 row +
+  G7 exit criterion flipped to Done.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: `scripts/orchestration/telemetry.py` exists with `spawn` + `complete` subcommands.
+- AC-2: per-cycle JSON records land at `runs/<task>/cycle_<N>/<agent>.usage.json` with all captured fields.
+- AC-3: 5 spawning slash commands describe the telemetry-record convention.
+- AC-4: T04's aggregation hook (via `_helpers.make_iter_shipped()` + `ITER_SHIPPED_PROCEED_SECTIONS`)
+  includes `## Telemetry summary`; existing iter-shipped files retrofitted.
+- AC-5: `test_telemetry_record.py` passes (14 tests).
+- AC-6: `test_telemetry_aggregation.py` passes (14 tests).
+- AC-7: `runs/` is in `.gitignore` (verified: line 30 `runs/*`, line 31 `!runs/.gitkeep`).
+- AC-8: this CHANGELOG entry.
+- AC-9: status surfaces flipped (spec Status, milestone README task table, G7 exit criterion).
+
+**KDR note:** T22 is orchestration infrastructure under `scripts/orchestration/` (not `ai_workflows/`).
+Layer rule N/A. KDR-003 holds: zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY`.
+
+### Changed — M20 Task 21: Adaptive-thinking migration (eliminate thinking: max; per-role effort settings; research brief §Lens 3.3; required for T06 + T07) (2026-04-28)
+
+Eliminates every deprecated `thinking: <literal>` shorthand directive (6 × `thinking: max` + 1
+× `thinking: high`) from all 7 slash commands and adds `thinking: { type: adaptive }` + explicit
+`effort:` to all 7 slash command frontmatters and all 9 agent frontmatters. Establishes a new
+canonical reference file `.claude/commands/_common/effort_table.md` listing every per-role effort
+assignment. Required for Opus 4.7 forward compatibility (T06's 6-cell matrix would 400-error on
+Opus 4.7 without this migration) and for T07 (dynamic dispatch would crash on deprecated API).
+
+**Files touched:**
+- `.claude/commands/auto-implement.md` — replace `thinking: max` with `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/commands/audit.md` — same migration, effort: high.
+- `.claude/commands/clean-tasks.md` — same migration, effort: high.
+- `.claude/commands/clean-implement.md` — same migration, effort: high.
+- `.claude/commands/queue-pick.md` — same migration, effort: medium.
+- `.claude/commands/autopilot.md` — same migration, effort: high.
+- `.claude/commands/implement.md` — replace `thinking: high` with `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/builder.md` — add `thinking:\n  type: adaptive\neffort: high` to frontmatter.
+- `.claude/agents/auditor.md` — add `thinking:\n  type: adaptive\neffort: high` to frontmatter.
+- `.claude/agents/security-reviewer.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/dependency-auditor.md` — add `thinking:\n  type: adaptive\neffort: medium` (mechanical role).
+- `.claude/agents/architect.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/sr-dev.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/sr-sdet.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/task-analyzer.md` — add `thinking:\n  type: adaptive\neffort: high`.
+- `.claude/agents/roadmap-selector.md` — add `thinking:\n  type: adaptive\neffort: medium` (sequential walk).
+- `.claude/commands/_common/effort_table.md` — NEW canonical reference for per-role effort assignments.
+- `tests/orchestrator/test_no_deprecated_thinking_directives.py` — NEW hermetic tests: zero `thinking: <literal>` shorthand, zero `budget_tokens`, adaptive+effort in all 7 commands, adaptive+effort in all 9 agents.
+- `tests/orchestrator/test_effort_table_consistency.py` — NEW hermetic tests: effort_table.md exists + lists all 16 files + every frontmatter matches table assignment.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: zero `thinking: <literal>` shorthand in `.claude/` (grep returns 0).
+- AC-2: zero `budget_tokens` in `.claude/` (grep returns 0).
+- AC-3: all 7 slash command frontmatters have `thinking: { type: adaptive }` + `effort:`.
+- AC-4: all 9 agent frontmatters have `thinking: { type: adaptive }` + `effort:`.
+- AC-5: `.claude/commands/_common/effort_table.md` exists and matches.
+- AC-6: `test_no_deprecated_thinking_directives.py` passes (6 tests).
+- AC-7: `test_effort_table_consistency.py` passes (5 tests).
+- AC-8: this CHANGELOG entry.
+- AC-9: status surfaces flipped (see spec and milestone README).
+
+**Deviations from spec:** none.
+
+### Changed — M20 Task 05: Unified parallel terminal gate (sr-dev + sr-sdet + security-reviewer in single multi-Task message; fragment files; replaces two-gate Security+Team flow with single TERMINAL CLEAN/BLOCK/FIX precedence rule; research brief §Lens 1.4) (2026-04-28) (cycle 2 follow-up: aligned reviewer verdict templates, updated schema doc, hardened benchmark test)
+
+**Files touched:**
+- `.claude/commands/auto-implement.md` — DELETE Security gate (steps S1-S3) and Team gate
+  (steps T1-T4); REPLACE with unified `## Unified terminal gate (runs once, after FUNCTIONALLY
+  CLEAN — parallel)` section (steps G1-G6). Commit ceremony updated to reference TERMINAL CLEAN.
+  Reporting section updated: end-of-terminal-gate one-liner replaces two separate gate one-liners.
+  Rationale section updated to explain the parallelism precedence rule.
+- `.claude/agents/sr-dev.md` — `## Output format` updated to write to
+  `runs/<task>/cycle_<N>/sr-dev-review.md` fragment file; `## Return to invoker` `file:` value
+  updated to point at the fragment path.
+- `.claude/agents/sr-sdet.md` — `## Output format` updated to write to
+  `runs/<task>/cycle_<N>/sr-sdet-review.md` fragment file; `## Return to invoker` `file:` value
+  updated to point at the fragment path.
+- `.claude/agents/security-reviewer.md` — `## Output format` updated to write to
+  `runs/<task>/cycle_<N>/security-review.md` fragment file; `## Return to invoker` `file:` value
+  updated to point at the fragment path.
+- `.claude/commands/_common/parallel_spawn_pattern.md` — NEW canonical pattern reference for
+  parallel spawn with fragment files.
+- `tests/orchestrator/test_parallel_terminal_gate.py` — NEW hermetic tests covering:
+  single-turn 3-way spawn assertion, fragment-file landing (all three paths), single-Edit
+  stitch pass assertions, precedence rule correctness (BLOCK > FIX-THEN-SHIP > SHIP;
+  security-reviewer BLOCK surfaced first).
+- `tests/orchestrator/bench_terminal_gate.py` — NEW manual wall-clock benchmark with
+  `@pytest.mark.benchmark` decorator; asserts post-T05 wall-clock ≤ 0.6 × pre-T05 baseline.
+- `pyproject.toml` — registered `benchmark` marker in `[tool.pytest.ini_options].markers`
+  per carry-over L4.
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: auto-implement.md describes unified terminal gate; old Security + Team gate sections deleted.
+- AC-2: TERMINAL CLEAN / TERMINAL BLOCK (security-reviewer precedence) / TERMINAL FIX rule documented.
+- AC-3: All 3 reviewer agents write to fragment paths.
+- AC-4: dependency-auditor stays conditional + standalone (step G4); architect stays conditional + standalone (step G5). Verified in auto-implement.md.
+- AC-5: parallel_spawn_pattern.md exists.
+- AC-6: test_parallel_terminal_gate.py passes.
+- AC-7: bench_terminal_gate.py asserts ≥ 1.67× improvement.
+- AC-8: this CHANGELOG entry.
+- AC-9: status surfaces flipped (see spec and milestone README).
+
+**Carry-over L4 satisfied:** `benchmark` marker registered in pyproject.toml.
+**Carry-over L2 verified:** smoke-test grep uses `cycle_<N>/` form (test_reviewer_agents_write_to_fragment_paths in test_parallel_terminal_gate.py).
+
+**Deviations from spec:** none.
+
+### Added — M20 Task 28: Server-side compaction evaluation document (design_docs/analysis/server_side_compaction_evaluation.md; verdict DEFER) (2026-04-28)
+
+Analysis-only task. Evaluates Anthropic's beta `compact_20260112` strategy for use in
+ai-workflows' orchestrator loop. Verdict: **DEFER**.
+
+Surface mismatch is the blocking constraint: Claude Code's `Task` tool (ai-workflows' sub-agent
+spawn primitive) does not expose `context_management.edits`, making the primitive inaccessible
+from ai-workflows' actual deployment shape. Additionally, T01–T04 shipped on 2026-04-28 and
+the orchestrator's context is already O(1); the marginal benefit is low. Beta stability and
+untested `pause_after_compaction` loop semantics add further risk without a forcing function.
+
+DEFER trigger: Claude Code `Task` exposes `context_management.edits` (stable release) AND
+T22 telemetry shows Auditor sessions still hitting >80K tokens.
+
+**Files touched:**
+- `design_docs/analysis/server_side_compaction_evaluation.md` — NEW; 5-section evaluation
+  (Mechanism, ai-workflows fit, Composition with T03/T04, Risk catalogue, Verdict + integration
+  sketch). Full surface-fit analysis citing `auto-implement.md` lines 8–14 and milestone README
+  T01 note (line 50).
+- `design_docs/nice_to_have.md` — added entry §24 with reopen trigger, integration sketch, and
+  cross-reference to the evaluation document (DEFER verdict per AC-4).
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: evaluation document exists with all 5 sections.
+- AC-2: verdict DEFER surfaced in document title and first paragraph.
+- AC-3: n/a (DEFER — no follow-up task ID or integration sketch required beyond the document).
+- AC-4: `design_docs/nice_to_have.md` has new §24 entry with reopen trigger.
+- AC-5: this CHANGELOG entry.
+- AC-6: status surfaces flipped (see spec and milestone README).
+
+### Changed — M20 Task 04: Cross-task iteration compaction (iter_<N>-shipped.md per autopilot iteration; constant cross-task orchestrator context; research brief §Lens 2.1) (2026-04-28)
+
+Eliminates quadratic context growth across autopilot outer-loop iterations.  The autopilot
+outer loop's Step D now emits `runs/autopilot-<run-ts>-iter<N>-shipped.md` at each iteration
+boundary as a structured projection of what the iteration delivered (task shipped + commit SHA
++ reviewer verdicts + carry-over).  Step A on iteration N ≥ 2 reads ONLY the most recent
+`iter_<M>-shipped.md` for prior-iteration context — prior iterations' chat history is dropped.
+The iter-shipped artifact is bounded in size by the template regardless of how many iterations
+have run, making the per-iteration context O(1) instead of O(N).  T04 is the cross-task
+analogue of T03's in-task compaction.
+
+**Files touched:**
+- `.claude/commands/autopilot.md` — Step A updated with read-only-latest-shipped rule
+  (iteration N ≥ 2 carries only the most recent iter-shipped artifact; prior chat dropped);
+  Step D extended to write `runs/autopilot-<run-ts>-iter<N>-shipped.md` with the canonical
+  template; §Path convention section added documenting the flat hyphenated filename form.
+- `tests/orchestrator/_helpers.py` — extended with `make_iter_shipped`, `parse_iter_shipped`,
+  `build_queue_pick_spawn_prompt`, `ITER_SHIPPED_REQUIRED_KEYS`, `ITER_SHIPPED_PROCEED_SECTIONS`;
+  module docstring updated to cite T04.
+- `tests/orchestrator/test_iter_shipped_emission.py` — NEW; 3-iteration simulation (13 tests):
+  flat hyphenated path form, required keys, verdict/commit/reviewer recorded, PROCEED sections,
+  iter-2 unchanged after iter-3, all three artifacts coexist independently, cycles independent.
+- `tests/orchestrator/test_cross_task_context_constant.py` — NEW; cross-task context
+  constancy tests + M12 4-iteration validation re-run (4 tests): iter-2 ≈ iter-5 within 10%,
+  iter-5 does NOT include iter-1 chat history (discriminating 2-part assertion), post-T04
+  iter-4 matches iter-1 (permissive 50% bound; structural difference: iter-1 has no artifact).
+- `tests/orchestrator/fixtures/m12_iter4_pre_t04_queue_pick_spawn_prompt.txt` — NEW; frozen
+  pre-T04 iter-4 queue-pick spawn-prompt fixture (carries 3 full iteration chat transcripts)
+  for the M12 4-iteration validation re-run (AC-6).
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: autopilot.md Step D writes `runs/autopilot-<run-ts>-iter<N>-shipped.md` per the
+  canonical template (Run timestamp, Iteration, Date, Verdict from queue-pick, Task shipped,
+  Cycles, Final commit, Files touched, Auditor verdict, Reviewer verdicts, KDR additions,
+  Carry-over, Telemetry summary placeholder).
+- AC-2: autopilot.md Step A reads only the latest `iter_<M>_shipped.md` plus project memory;
+  does not carry prior-iteration chat history. Documented in §Step A — read-only-latest-shipped
+  rule section.
+- AC-3: Path naming convention `runs/autopilot-<run-ts>-iter<N>(-shipped)?.md` documented in
+  autopilot.md §Path convention; flat hyphenated form; no per-run subdirectory.
+- AC-4: `tests/orchestrator/test_iter_shipped_emission.py` passes (13 tests: 3-iteration
+  simulation, structure validation, cycles independent).
+- AC-5: `tests/orchestrator/test_cross_task_context_constant.py` passes (4 tests: iter-5
+  input size within 10% of iter-2 — structurally equivalent; iter-5 does NOT include iter-1
+  chat history — discriminating 2-part assertion).
+- AC-6: Validation re-run using frozen `m12_iter4_pre_t04_queue_pick_spawn_prompt.txt`
+  fixture; post-T04 iter-4 context is within 50% of iter-1 (permissive; structural difference);
+  pre-T04 fixture is >1.5× larger than post-T04 iter-4 prompt.
+- AC-7: CHANGELOG updated with `### Changed — M20 Task 04: ...` entry.
+- AC-8: Status surfaces flipped (spec **Status:** line, milestone README T04 row, Done-when
+  checkbox G1 T04).
+
+**Carry-over (from spec) satisfied:**
+- L3 (round 1): 10% threshold documented as heuristic in `test_cross_task_context_constant.py`
+  module docstring; T22 baseline data may revise it.
+- L2 (round 3): AC-3 reworded to flat-hyphenated path form (no per-run subdirectory) per
+  round-2 user arbitration; §Path convention section in autopilot.md documents this.
+- L2 (round 4): Test descriptions in `test_iter_shipped_emission.py` and
+  `test_cross_task_context_constant.py` use the flat hyphenated path form
+  `runs/autopilot-<run-ts>-iter<N>-shipped.md` (not underscored shorthand `iter_<N>_shipped.md`).
+
+**Deviations from spec:**
+- The `within 10%` comparison between iter-1 and iter-2/4/5 uses a permissive 50% bound in
+  `test_m12_iter4_post_t04_constant_vs_iter1` because iter-1 carries NO prior artifact (just
+  project brief + recommendation file path) while iterations N ≥ 2 carry one iter-shipped
+  artifact (content vs. no-content). The structurally meaningful 10% assertion is applied to
+  iter-2 vs iter-5 (both carry exactly one artifact) in `test_iter_2_within_10pct_of_iter_5`.
+  The discrepancy is documented in the module docstring and test docstrings per L3.
+
+**Cycle-2 addition (FIX-SDET-01, 2026-04-28):**
+- `tests/orchestrator/test_iter_shipped_emission.py` — +2 tests covering the previously
+  unexercised `NEEDS-CLEAN-TASKS` and `HALT-AND-ASK` verdict branches of `make_iter_shipped`:
+  `test_iter_shipped_needs_clean_tasks_structure` (asserts section header +
+  `clean_tasks_milestone` value in body) and `test_iter_shipped_halt_and_ask_structure`
+  (asserts section header + `halt_reason` value in body). Total: 15 tests.
+
+### Changed — M20 Task 03: In-task cycle compaction (cycle_<N>/summary.md per Auditor; constant per-cycle orchestrator context; research brief §Lens 2.1) (2026-04-28)
+
+Implements the Anthropic note-taking memory primitive (research brief Lens 2.1) at
+per-cycle granularity.  The Auditor's Phase 5 now emits `runs/<task>/cycle_<N>/summary.md`
+as a structured projection of the issue file it already writes.  Orchestrators
+(`auto-implement`, `clean-implement`) read ONLY the latest cycle summary on cycle N+1's
+Builder and Auditor spawns — not the full chat history of cycles 1..N-1.  Combined with
+T01 (3-line schema) and T02 (input prune), the orchestrator's per-cycle context becomes
+roughly constant instead of linear-in-cycle-count.
+
+**Files touched:**
+- `.claude/agents/auditor.md` — Phase 5 extended with Phase 5a (issue file) + Phase 5b
+  (cycle-summary emission); nested `cycle_<N>/summary.md` path documented; carry-over
+  invariant documented.
+- `.claude/commands/auto-implement.md` — `runs/<task>/` directory convention, per-cycle
+  layout, and read-only-latest-summary rule for Builder + Auditor spawns added.
+- `.claude/commands/clean-implement.md` — same read-only-latest-summary rule added.
+- `.claude/commands/_common/cycle_summary_template.md` — NEW; canonical template +
+  directory-layout authority + read-only-latest-summary rule.
+- `tests/orchestrator/_helpers.py` — extended with `make_cycle_summary`,
+  `build_builder_spawn_prompt_cycle_n`, `parse_cycle_summary`, and
+  `CYCLE_SUMMARY_REQUIRED_KEYS`.
+- `tests/orchestrator/test_cycle_summary_emission.py` — NEW; 3-cycle simulation (11 tests).
+- `tests/orchestrator/test_cycle_context_constant.py` — NEW; cycle-N context constancy
+  tests + M12 T03 validation re-run (6 tests).
+- `tests/orchestrator/fixtures/m12_t03_pre_t03_cycle3_spawn_prompt.txt` — NEW; frozen
+  pre-T03 cycle-3 spawn-prompt fixture for validation re-run (AC-7).
+- `CHANGELOG.md` — this entry.
+
+**ACs satisfied:**
+- AC-1: Auditor Phase 5 (issue-file write) extended to emit `cycle_<N>/summary.md` per
+  cycle; no new phase numbering introduced (per audit M14).
+- AC-2: `cycle_<N>/summary.md` template structure documented in auditor.md Phase 5b and
+  in `.claude/commands/_common/cycle_summary_template.md`.
+- AC-3: `auto-implement.md` and `clean-implement.md` describe the read-only-latest-summary
+  rule for cycle-N Builder and Auditor spawns.
+- AC-4: `runs/<task>/` directory convention and `<task-shorthand>` format (`m<MM>_t<NN>`)
+  documented in both orchestrator command files; directory creation on cycle 1 documented.
+- AC-5: `tests/orchestrator/test_cycle_summary_emission.py` passes (3-cycle simulation,
+  11 tests: nested `cycle_<N>/summary.md` form, required keys, carry-over invariant).
+- AC-6: `tests/orchestrator/test_cycle_context_constant.py` passes (6 tests: cycle-2 ≈
+  cycle-3 within 10%, cycle-N vs cycle-1 within 50% permissive bound, no prior Builder
+  report in cycle-3 spawn prompt). 10% threshold documented as heuristic per L2 carry-over.
+- AC-7: Validation re-run using frozen `m12_t03_pre_t03_cycle3_spawn_prompt.txt` fixture;
+  post-T03 cycle-3 context is ≤ 50% of cycle-1 deviation (permissive), and pre-T03
+  fixture is >1.5× larger than post-T03 cycle-3 prompt.
+- AC-8: CHANGELOG updated with `### Changed — M20 Task 03: ...` entry.
+- AC-9: Status surfaces flipped (spec **Status:** line, milestone README T03 row).
+
+**Carry-over (from spec) satisfied:**
+- L2 (round 1): 10% threshold documented as heuristic in `test_cycle_context_constant.py`
+  module docstring; T22 baseline data may revise it.
+- L1 (round 3): All test descriptions in `test_cycle_summary_emission.py` use the nested
+  form `cycle_<N>/summary.md`; flat form `cycle_<N>_summary.md` is explicitly rejected.
+
+**Deviations from spec:**
+- The `within 10%` comparison between cycle-1 and cycle-2/3 uses a permissive 50% bound
+  in `test_cycle2_within_50pct_of_cycle1` and `test_cycle3_within_50pct_of_cycle1`
+  (renamed in cycle 3 from `test_cycle2_within_10pct_of_cycle1` / `test_cycle3_within_10pct_of_cycle1`)
+  because cycle-1 carries a README path reference (one line) while cycle-2/3 carry
+  summary content. The structurally meaningful 10% assertion is applied to cycle-2 vs
+  cycle-3 (both carry exactly one summary) in `test_cycle2_within_10pct_of_cycle3`.
+  The discrepancy is documented in the module docstring and test docstrings per L2.
+
+**Cycle 2 fixes (2026-04-28) — resolves M20-T03-ISS-01 and M20-T03-ISS-02:**
+- `.claude/commands/auto-implement.md` Step 1 (Builder) and Step 2 (Auditor) reworded
+  to reference the "read-only-latest-summary rule" sections rather than re-listing fixed
+  spawn args that contradict the cycle-1-vs-N≥2 branch (M20-T03-ISS-01).
+- `.claude/commands/clean-implement.md` same Step 1 + Step 2 rewording (M20-T03-ISS-01).
+- `.claude/commands/_common/spawn_prompt_template.md` Builder pre-load table updated:
+  "Parent milestone README path" removed from the unconditional "Always pass" list;
+  replaced with a cycle-N rule note referencing `cycle_summary_template.md` as the
+  authoritative single source of truth (M20-T03-ISS-02, option b).
+
+**Cycle 3 test rewrites (2026-04-28) — locked team decisions (sr-sdet BLOCK arbitrated by user):**
+- `tests/orchestrator/test_cycle_context_constant.py` — three test changes per locked decisions:
+  1. `test_cycle3_carries_summary_drops_prior_chat` (renamed from `test_cycle3_does_not_include_cycle1_builder_report`):
+     replaced vacuous "phrase not in prompt" assertion with a discriminating two-part assertion:
+     (a) summary marker IS present in cycle-3 prompt (proves summary is carried forward);
+     (b) prior-cycle chat marker is NOT present (proves prior-cycle chat is dropped and
+     that `build_builder_spawn_prompt_cycle_n`'s signature cannot admit prior context at all).
+  2. `test_cycle2_within_10pct_of_cycle3`: constructors now use meaningfully different content
+     volumes — summary_1 with minimal content (1 carry-over, 3 files, no decisions) and
+     summary_2 with realistic larger content (5 files, 1 decision, 2 carry-overs, longer
+     open-issues) — making the bound discriminating: a regression adding unbounded raw text
+     would blow the 10% bound and the test would fail.
+  3. Renamed `test_cycle2_within_10pct_of_cycle1` → `test_cycle2_within_50pct_of_cycle1`
+     and `test_cycle3_within_10pct_of_cycle1` → `test_cycle3_within_50pct_of_cycle1` to
+     match the actual 50% bound used in both bodies.  Docstrings updated to note that the
+     strict 10% bound for cycle-1 baseline is deferred to T22's empirical telemetry.
+
+### Changed — M20 Task 02: Sub-agent input prune (orchestrator-side scope discipline + per-spawn output budget; research brief §Lens 2.3) (2026-04-28)
+
+Orchestrator-side scope discipline across all 5 spawning slash commands (`auto-implement`,
+`clean-tasks`, `clean-implement`, `queue-pick`, `autopilot`): each spawn passes only the
+minimal pre-load set and an output budget directive; bulk content inlining (full
+`architecture.md`, sibling issue files, whole-milestone-README content) is removed.
+Canonical scaffold in `.claude/commands/_common/spawn_prompt_template.md`; all 5 commands
+link to it. KDR-section extractor parses only cited KDR identifiers from a task spec and
+builds a compact pointer for the Auditor spawn rather than inlining the full §9 table.
+Per-spawn token-count instrumentation lands at `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt`.
+Validated: post-T02 Auditor spawn for M12 T01 is ≥ 30% smaller than the pre-T02 baseline
+(frozen fixture `tests/orchestrator/fixtures/m12_t01_pre_t02_spawn_prompt.txt`).
+
+**Files touched:**
+- `.claude/commands/_common/spawn_prompt_template.md` — NEW; canonical spawn-prompt scaffold
+- `.claude/commands/auto-implement.md` — `## Spawn-prompt scope discipline` section added
+- `.claude/commands/clean-tasks.md` — `## Spawn-prompt scope discipline` section added
+- `.claude/commands/clean-implement.md` — `## Spawn-prompt scope discipline` section added
+- `.claude/commands/queue-pick.md` — `## Spawn-prompt scope discipline` section added
+- `.claude/commands/autopilot.md` — `## Spawn-prompt scope discipline` section added
+- `tests/orchestrator/__init__.py` — NEW test package
+- `tests/orchestrator/_helpers.py` — NEW; token-count proxy, KDR extraction helpers, per-agent spawn-prompt builders
+- `tests/orchestrator/test_spawn_prompt_size.py` — NEW; per-agent ceiling assertions + 30% reduction validation (44 tests)
+- `tests/orchestrator/test_kdr_section_extractor.py` — NEW; KDR-citation parser + compact-pointer tests
+- `tests/orchestrator/fixtures/m12_t01_pre_t02_spawn_prompt.txt` — NEW; frozen pre-T02 baseline fixture
+- `CHANGELOG.md` — this entry
+
+**ACs satisfied:**
+- AC-1: All 5 spawning slash commands describe the pruned spawn-prompt convention with per-agent minimal pre-load sets and output budget directives.
+- AC-2: `.claude/commands/_common/spawn_prompt_template.md` exists as the canonical reference; all 5 slash commands link to it.
+- AC-3: `tests/orchestrator/test_spawn_prompt_size.py` passes with the per-agent ceilings (Builder 8K, Auditor 6K, reviewers 4K, task-analyzer 6K, roadmap-selector 4K).
+- AC-4: `tests/orchestrator/test_kdr_section_extractor.py` passes with positive + edge cases.
+- AC-5: Per-spawn token-count instrumentation lands at `runs/<task>/cycle_<N>/spawn_<agent>.tokens.txt` (nested per-cycle directory, no `_<cycle>` suffix on filename; verified by `TestSpawnTokenInstrumentation`).
+- AC-6: Validation re-run test `test_m12_t01_audit_spawn_30pct_reduction` asserts ≥ 30% input-token reduction against the frozen M12 T01 baseline.
+- AC-7: CHANGELOG updated with `### Changed — M20 Task 02: ...` entry.
+- AC-8: Status surfaces flipped (spec **Status:** line, milestone README T02 row, "Done when" #2).
+
+**Deviations from spec:** None.
+
+**Cycle 2 (2026-04-28) — 5 locked team decisions applied:** FIX-1 (`auto-implement.md` + `clean-implement.md` Step 2/S1 prose aligned with scope-discipline section); FIX-2 (`autopilot.md` Reviewers row + `architect` row added); FIX-SDET-1 (tautological test deleted, `test_spawn_tokens_file_path_convention` parametrized over `auditor`+`builder`); FIX-SDET-2 (`dependency-auditor` added to reviewer ceiling parametrize); FIX-SDET-3 (`extract_kdr_sections` normalisation + unnormalised-input test added).
+
+### Changed — M20 Task 01: Sub-agent return-value schema (3-line verdict / file / section), schema-compliance tests, orchestrator parser convention (research brief §Lens 1.3) (2026-04-28)
+
+Hard 3-line return-value schema enforced across all 9 sub-agents in the autonomy fleet
+(builder, auditor, security-reviewer, dependency-auditor, task-analyzer, architect, sr-dev,
+sr-sdet, roadmap-selector). Each agent's `## Return to invoker` section mandates the schema.
+Orchestrator-side parser convention described in all 5 slash commands that spawn agents.
+Canonical reference at `.claude/commands/_common/agent_return_schema.md` (first file under
+`_common/`, unblocking subsequent M20 tasks T02 / T05 / T07–T09 / T21 / T23 / T27).
+
+**Files touched:**
+- `.claude/agents/builder.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/auditor.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/security-reviewer.md` — `## Return to invoker` schema (verified from 030152f)
+- `.claude/agents/dependency-auditor.md` — `## Return to invoker` schema (verified from 030152f)
+- `.claude/agents/task-analyzer.md` — renamed `## Phase 5 — Return to invoker` to `## Return to invoker` for uniformity (AC-1)
+- `.claude/agents/architect.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/sr-dev.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/sr-sdet.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/agents/roadmap-selector.md` — `## Return to invoker` schema (verified from commit 030152f)
+- `.claude/commands/_common/agent_return_schema.md` — NEW; canonical schema reference with per-agent verdict table
+- `.claude/commands/auto-implement.md` — `## Agent-return parser convention` section added; links to `_common/`
+- `.claude/commands/clean-implement.md` — same parser convention section
+- `.claude/commands/clean-tasks.md` — same parser convention section
+- `.claude/commands/queue-pick.md` — same parser convention section
+- `.claude/commands/autopilot.md` — same parser convention section
+- `tests/agents/__init__.py` — NEW test package
+- `tests/agents/_helpers.py` — NEW parser helper (`parse_agent_return`, `MalformedAgentReturn`, `token_count_proxy`)
+- `tests/agents/test_return_schema_compliance.py` — NEW; 142 hermetic tests across 9 agents
+- `tests/agents/test_orchestrator_parser.py` — NEW; parser unit tests (positive + negative paths)
+- `tests/agents/fixtures/<agent>/` — NEW; 28 fixture files (one per verdict token per agent)
+- `CHANGELOG.md` — this entry
+
+**ACs satisfied:**
+- AC-1: All 9 agent files have uniform `## Return to invoker` section with per-agent verdict tokens.
+- AC-2: `.claude/commands/_common/agent_return_schema.md` is the canonical reference with full table.
+- AC-3: All 5 slash commands have `## Agent-return parser convention` sections linking to `_common/`.
+- AC-4: `test_return_schema_compliance.py` passes — 142 tests (3–4 fixture cases per agent, one per token).
+- AC-5: `test_orchestrator_parser.py` passes — conformant + all negative paths covered.
+- AC-6: Token-cap assertions (≤ 100 proxy units) pass for every fixture case.
+- AC-7: CHANGELOG updated with `### Changed — M20 Task 01: ...` entry.
+- AC-8: Status surfaces flipped (spec **Status:** line, milestone README T01 row, "Done when" #1).
+- L1 (carry-over): Fixture-based default suite + `AIW_AGENT_SCHEMA_E2E=1` opt-in guard.
+- L8 (carry-over): Token-cap proxy `len(re.findall(r"\\S+", text)) * 1.3`; no tiktoken dep.
+
+**Deviations from spec:**
+- Parser helper placed in `tests/agents/_helpers.py` (not `ai_workflows/agents/return_schema.py`),
+  per spec's stated alternative. Adding it to `ai_workflows/` would introduce a subpackage with
+  no runtime caller, conflicting with layer discipline. The spec explicitly offered this as the
+  correct fallback.
+
+*Cycle 2 (2026-04-28): architect verdict-token drift fix (`architect.md:42` + `auto-implement.md:189`) + parser trailing-whitespace robustness (`_helpers.py` `.strip()` + `test_trailing_spaces_in_verdict_are_tolerated`) + architect-prompt/helper token-consistency regression test.*
+
+### Added — M12 Task 03: Workflow wiring — cascade opt-in via module constant + env-var (2026-04-27)
+
+Wires `audit_cascade_node()` (M12 T02) into the `planner` and `slice_refactor` workflows
+as default-off, operator-opt-in behaviour controlled by module-level constants + env-var
+overrides (ADR-0009 / KDR-014). No quality knobs land on `*Input` models, `WorkflowSpec`,
+or CLI flags.
+
+**planner:** `_AUDIT_CASCADE_ENABLED_DEFAULT = False`; activated by `AIW_AUDIT_CASCADE=1`
+or `AIW_AUDIT_CASCADE_PLANNER=1`.  When enabled, `build_planner()` replaces the
+`explorer` + `explorer_validator` standard nodes with an `audit_cascade_node(...,
+name="planner_explorer_audit")` sub-graph plus a thin `cascade_bridge` node that copies
+the cascade's `primary_parsed` output into the `explorer_report` key expected by the
+downstream planner node.
+
+**slice_refactor:** `_AUDIT_CASCADE_ENABLED_DEFAULT = False`; activated by
+`AIW_AUDIT_CASCADE=1` or `AIW_AUDIT_CASCADE_SLICE_REFACTOR=1`.  When enabled,
+`_build_slice_branch_subgraph()` replaces `slice_worker` + `slice_worker_validator` with
+`audit_cascade_node(skip_terminal_gate=True, name="slice_worker_audit")` plus a
+`cascade_bridge` node (Option A isolation: cascade channels live on `SliceBranchState`
+only, NOT `SliceRefactorState`, preventing `InvalidUpdateError` on parallel fan-in).
+`_slice_branch_finalize()` handles `AuditFailure` as a structured exhaustion record with
+`audit_cascade_exhausted:` prefix.  Carry-over M12-T02-LOW-02: `RunnableConfig | None`
+→ `RunnableConfig = None` type annotation fix in `audit_cascade.py`.
+
+**Files touched:**
+- `ai_workflows/workflows/planner.py` — `_AUDIT_CASCADE_ENABLED_DEFAULT`, `_AUDIT_CASCADE_ENABLED`
+  constants; `## Quality knobs` module-docstring section; 9 cascade channels on `PlannerState`;
+  `build_planner()` branched on `_AUDIT_CASCADE_ENABLED`; `cascade_bridge` marker node.
+- `ai_workflows/workflows/slice_refactor.py` — same constant pattern; `AuditFailure` import;
+  9 cascade channels on `SliceBranchState` (NOT `SliceRefactorState`); `_slice_branch_finalize()`
+  updated; `_build_slice_branch_subgraph()` branched; `cascade_bridge` marker node.
+- `ai_workflows/graph/audit_cascade.py` — M12-T02-LOW-02 fix: `RunnableConfig | None`
+  → `RunnableConfig = None` in two `_wrapped` inner functions.
+- `tests/workflows/test_planner_cascade_enable.py` — NEW: 4 tests (AC-1 through AC-4/KDR-014
+  guard) + `_restore_registry` autouse fixture (module `__dict__` snapshot/restore pattern
+  prevents class-identity drift across test modules).
+- `tests/workflows/test_slice_refactor_cascade_enable.py` — NEW: 6 tests (AC-1 through AC-6,
+  including Option-A isolation structural test via `get_type_hints`) + same fixture.
+- `tests/test_kdr_014_no_quality_fields_on_input_models.py` — NEW: parametrized KDR-014
+  guard across all `*Input` models and `WorkflowSpec`.
+
+**KDRs satisfied:**
+- KDR-004: `ValidatorNode` pairing preserved in both standard and cascade paths.
+- KDR-006: `AuditFailure` routed via `RetryableSemantic` bucket; no bespoke retry loops.
+- KDR-014: Quality knobs at module level + env-var only; zero `*Input` / `WorkflowSpec`
+  field additions.
+
+**ACs satisfied:**
+- AC-1: `_AUDIT_CASCADE_ENABLED_DEFAULT = False` at module level in both workflows.
+- AC-2: `_AUDIT_CASCADE_ENABLED` evaluates `AIW_AUDIT_CASCADE` or per-workflow var; default False.
+- AC-3: `build_planner()` / `_build_slice_branch_subgraph()` branch on the constant at call time.
+- AC-4: When enabled, cascade sub-graph replaces standard LLM + validator nodes.
+- AC-5: `cascade_bridge` structural marker present in compiled graph iff cascade enabled.
+- AC-6: `SliceBranchState` carries all cascade channels; `SliceRefactorState` carries none (Option A).
+- AC-7: `_slice_branch_finalize()` handles `AuditFailure` with structured prefix.
+- AC-8: `_AUDIT_CASCADE_ENABLED_DEFAULT` and `_AUDIT_CASCADE_ENABLED` exported in `__all__`.
+- AC-9: All 13 new tests pass; KDR-014 guard parametrized across all Input models.
+- M12-T02-LOW-02: `RunnableConfig | None` → `RunnableConfig = None` annotation fix.
+- M12-T02-LOW-03: `audit_cascade_node()` call sites use `skip_terminal_gate=True` in slice_refactor.
+- TA-LOW-01: KDR-014 guard uses closed field-name list (not `.*_policy` regex).
+- TA-LOW-02: Tests 1-3 use `monkeypatch.delenv/setenv` + `importlib.reload` for order-independence.
+- TA-LOW-03/04: Both modules export `_AUDIT_CASCADE_ENABLED_DEFAULT` and `_AUDIT_CASCADE_ENABLED`.
+- TA-LOW-05: Module docstrings updated with `## Quality knobs` section.
+- TA-LOW-06: `AuditFailure` exhaustion record carries structured `audit_cascade_exhausted:` prefix.
+- TA-LOW-07/08: Planner sub-graph cascade decision is independent of slice_refactor's; verified by Test 5.
+
+**M12 T03 cycle 2 additions (2026-04-27) — HIGH-01 + LOW-01 + LOW-02:**
+- `ai_workflows/graph/audit_cascade.py` — **bug fix**: added `"slice": Any` to `_DynamicState`
+  in `audit_cascade_node()` so LangGraph passes the per-branch `slice` field from the outer
+  `SliceBranchState` into the cascade's internal state (LangGraph filters parent state to inner-schema
+  keys; without this entry `_slice_worker_prompt` raised `KeyError: 'slice'` inside the cascade).
+  Also added `slice: Any` to the `_CascadeState` documentation TypedDict for symmetry.
+  Updated module docstring line 46-47 (LOW-01): replaced stale `audit_cascade_enabled config field`
+  reference with the correct module-constant pattern description (ADR-0009 / KDR-014 / M12 T03).
+- `ai_workflows/workflows/slice_refactor.py` — LOW-02: added `_AUDIT_CASCADE_ENABLED_DEFAULT` +
+  `_AUDIT_CASCADE_ENABLED` to `__all__` for symmetry with `planner.py`.
+- `tests/workflows/test_slice_refactor_cascade_enable.py` — HIGH-01: added 3 new async e2e tests
+  (tests 7-9) with stub-adapter pattern (mirrors `tests/graph/test_audit_cascade.py`):
+  - `test_cascade_exhaustion_folded_into_slice_failure_prefix` — wire-level smoke for AC-10:
+    invokes `_build_slice_branch_subgraph()` directly; scripts 2 auditor-fail cycles; asserts
+    `SliceFailure.last_error.startswith("audit_cascade_exhausted:")` with `failure_reasons` +
+    `suggested_approach` embedded.
+  - `test_cascade_pass_lands_in_slice_results` — wire-level smoke for AC-11c: invokes branch
+    directly; scripts 1 primary + 1 auditor-pass; asserts `slice_results` has 1 entry.
+  - `test_cascade_parallel_fanin_no_invalid_update_error` — wire-level smoke for AC-11a: builds
+    minimal outer `StateGraph(SliceRefactorState)` with N=2 Send-dispatched branches; asserts no
+    `InvalidUpdateError` and `slice_results` has 2 entries (proves Option A isolation at runtime).
+
+**Deviations from spec:**
+- `audit_cascade.py` `_DynamicState` gained `"slice": Any` pass-through to fix a runtime bug
+  discovered while writing the HIGH-01 test: the cascade's inner state schema filtered out
+  `state["slice"]` which `_slice_worker_prompt` reads. The spec's AC-10/11 could not be satisfied
+  without this fix. Change is backward-compatible (new optional field, `total=False` TypedDict,
+  unused by the cascade primitive). Noted in `_DynamicState` comment and `_CascadeState` docstring.
+
+### Changed — M12 Task 08: AuditCascadeNode skip_terminal_gate parameter (T02 amendment) (2026-04-27)
+
+Extends `audit_cascade_node()` (M12 T02) with a backward-compatible `skip_terminal_gate: bool = False`
+keyword-only parameter (inserted between `cascade_context_fn` and `name`).  Default `False`
+preserves T02 behaviour byte-for-byte.  When `True`, the cascade's `human_gate` node is omitted
+entirely from the compiled sub-graph; verdict-exhaustion and validator-exhaustion (NonRetryable)
+both route to `END` with `state['last_exception']` carrying the terminal exception for the caller
+to inspect.  T03 prerequisite: T03's slice_refactor parallel fan-out calls this parameter to
+avoid N parallel operator interrupts on cascade-exhausted branches.
+
+**Files touched:**
+- `ai_workflows/graph/audit_cascade.py` — new `skip_terminal_gate` kwarg; docstring `Parameters`
+  block updated with use-case explanation; module docstring amended to cite T08; gate construction
+  wrapped in `if not skip_terminal_gate:`; `_decide_after_validator` and `_decide_after_verdict`
+  use closure-captured `skip_terminal_gate` to route to `END` vs `f"{name}_human_gate"`;
+  `add_node` / `add_conditional_edges` / `add_edge` for the gate node wrapped in the same
+  conditional so LangGraph compile-time validation sees no unregistered destinations.
+- `tests/graph/test_audit_cascade.py` — 4 new tests (cascade test count grows 7 → 11):
+  `test_skip_terminal_gate_default_false_preserves_t02_behaviour`,
+  `test_skip_terminal_gate_true_omits_human_gate_node_from_compiled_subgraph`,
+  `test_skip_terminal_gate_true_routes_exhaustion_to_END_with_audit_failure_in_state`,
+  `test_skip_terminal_gate_true_routes_validator_exhaustion_to_END_with_nonretryable_in_state`.
+  Imports of `AuditFailure` + `NonRetryable` added for T08 assertions.
+
+**KDR preservation:**
+- KDR-006 (RetryingEdge taxonomy) preserved — `AuditFailure` still routes via `RetryableSemantic`
+  bucket; only the terminal route changes when `skip_terminal_gate=True`.
+- KDR-011 (cascade primitive contract) preserved — default behaviour unchanged; the new mode is
+  an explicit caller-opt-in that does not alter the standard escalation path.
+
+**Backward-compatibility:** `False` default preserves T02 behaviour byte-for-byte. All 7 prior
+cascade tests + 5 audit-feedback-template tests still pass (regression guard confirmed).
+
+**ACs satisfied:**
+- AC-1: `skip_terminal_gate: bool = False` keyword-only parameter added between `cascade_context_fn` and `name`.
+- AC-2: Docstring `Parameters` block documents the new parameter with parallel fan-out use-case explanation.
+- AC-3: Default `False` verified by re-running all 7 prior cascade tests — all pass unchanged.
+- AC-4: `f"{name}_human_gate" not in compiled.nodes` when `skip_terminal_gate=True` (structural, not just unreachable).
+- AC-5: Verdict-exhaustion routes to `END` with `AuditFailure` in `state["last_exception"]` when `skip_terminal_gate=True`.
+- AC-6: Validator-exhaustion (NonRetryable) routes to `END` with `NonRetryable` in `state["last_exception"]`; auditor never invoked.
+- AC-7: All 4 new tests pass.
+- AC-8: All 7 prior T02 cascade tests + 5 template tests still pass.
+- AC-9: No `ai_workflows/workflows/` diff; no `ai_workflows/mcp/` diff; no `primitives/retry.py` diff; no `pyproject.toml` diff.
+- AC-10/11: KDR-003 guardrail tests pass; no `anthropic` import added.
+- AC-12: `uv run pytest` + `uv run lint-imports` (5 contracts kept) + `uv run ruff check` all clean.
+- AC-13: CHANGELOG entry under `[Unreleased]` uses `### Changed` (not `### Added`) citing T02 amendment, KDR preservation, and backward-compat.
+- AC-14 (smoke): `test_skip_terminal_gate_true_routes_exhaustion_to_END_with_audit_failure_in_state` PASSED — wire-level smoke invokes the compiled cascade through real `tiered_node` + `validator_node` + `wrap_with_error_handler` + `retrying_edge` with only LLM dispatch stubbed.
+
+**Carry-over satisfied:**
+- TA-T08-LOW-01: No positional test-number references in new docstrings/comments; test names are canonical.
+- TA-T08-LOW-02: T03 dependency-block hash substitution deferred to orchestrator commit-ceremony (per spec).
+
+### Added — M12 Task 02: AuditCascadeNode primitive + AuditFailure exception (2026-04-27)
+
+Implements the foundational cascade sub-graph primitive (KDR-004, KDR-006, KDR-011) that
+composes `TieredNode(primary) → ValidatorNode → TieredNode(auditor) → AuditVerdictNode` inside
+a compiled `StateGraph`. When the auditor reports `passed=False`, the verdict node raises
+`AuditFailure` (a `RetryableSemantic` subclass) carrying the rendered audit-feedback template
+as `revision_hint`; `RetryingEdge` routes it back to the primary without any new taxonomy bucket.
+On budget exhaustion the cascade routes to a `strict_review=True` `HumanGate`.
+
+**Files touched:**
+- `ai_workflows/primitives/retry.py` — added `AuditFailure` + `_render_audit_feedback` helper;
+  `classify()` extended to pass through pre-classified bucket instances (AuditFailure subclass chain);
+  `AuditFailure` added to `__all__`.
+- `ai_workflows/graph/audit_cascade.py` — new module; `AuditVerdict` pydantic model,
+  `audit_cascade_node()` factory returning a compiled `StateGraph`; dynamic TypedDict for cascade
+  state schema; `_wrap_verdict_with_transcript` custom error wrapper; `_decide_after_validator`
+  and `_decide_after_verdict` edge routing functions.
+- `ai_workflows/graph/retrying_edge.py` — docstring-only: added `audit_cascade.py` cross-reference
+  bullet in "Relationship to sibling modules".
+- `pyproject.toml` — 5th import-linter contract: "audit_cascade composes only graph + primitives".
+- `tests/primitives/test_audit_feedback_template.py` — 5 new tests pinning the template shape,
+  empty-reasons fallback, no-suggested-approach fallback, AuditFailure revision_hint byte-equality,
+  and RetryableSemantic subclass / classify() routing.
+- `tests/graph/test_audit_cascade.py` — 6 new wire-level tests: pass-through smoke, re-fire with
+  audit-feedback, exhaustion → strict HumanGate, validator short-circuit, composability in outer
+  graph, role-tag stamping.
+- `tests/test_scaffolding.py` — updated contract count assertion from 4 to 5; added audit_cascade
+  contract name assertion.
+
+**ACs satisfied:**
+- AC-1: `AuditFailure` exception subclasses `RetryableSemantic`; `classify(AuditFailure(...)) is RetryableSemantic`.
+- AC-2: `_render_audit_feedback` helper produces spec-pinned template (5 template tests).
+- AC-3: `audit_cascade_node()` returns a `CompiledStateGraph` composable as a node in an outer graph.
+- AC-4: Validator failure routes back to primary without firing the auditor.
+- AC-5: Audit failure routes back to primary with `revision_hint` containing the rendered template.
+- AC-6: Budget exhaustion routes to `strict_review=True` `HumanGate`.
+- AC-7: 5th import-linter contract ("audit_cascade composes only graph + primitives") passes.
+- Carry-over TA-LOW-01: spec `**Status:**` line flipped.
+- Carry-over TA-LOW-02: `classify()` extended to handle pre-classified bucket instances.
+- Carry-over TA-LOW-03/04: module docstring cites task + relationships; public classes/functions documented.
+
+**Deviations from spec:**
+- Spec stated "no `classify()` edit needed" — `classify()` required a two-line extension to pass
+  `AuditFailure` instances through as `RetryableSemantic` (the AC `classify(AuditFailure(...)) is RetryableSemantic`
+  was unsatisfiable otherwise). Called out explicitly per Builder rules.
+
+### Added — M12 Task 01: Auditor TierConfigs (2026-04-27)
+
+Registers `auditor-sonnet` (`ClaudeCodeRoute(cli_model_flag="sonnet")`) and
+`auditor-opus` (`ClaudeCodeRoute(cli_model_flag="opus")`) in every workflow
+tier registry that exposes a generative tier whose output is read downstream,
+as the foundation for the M12 tiered audit cascade (ADR-0004, KDR-011).
+
+**Files touched:**
+- `ai_workflows/workflows/planner.py` — `planner_tier_registry()` extended
+  with `auditor-sonnet` + `auditor-opus`; docstring updated to name the new
+  entries and cite M12 Task 01 / ADR-0004.
+- `ai_workflows/workflows/summarize_tiers.py` — `summarize_tier_registry()`
+  extended with `auditor-sonnet` + `auditor-opus` declared directly (no
+  planner composition); `ClaudeCodeRoute` added to imports; module docstring
+  updated to cite M12 Task 01.
+- `ai_workflows/workflows/slice_refactor.py` — docstring-only change: names
+  the two new auditor tiers that propagate automatically via the existing
+  `dict(planner_tier_registry())` composition.
+- `tests/workflows/test_auditor_tier_configs.py` — new; workflow-layer shape
+  assertions for all three registries (planner, slice_refactor, summarize).
+- `tests/graph/test_auditor_tier_override.py` — new; graph-layer assertion
+  that `_resolve_tier` resolves the new tiers via `_mid_run_tier_overrides`.
+- `tests/workflows/test_slice_refactor_fanout.py` — updated
+  `test_slice_refactor_tier_registry_composes_planner_tiers` to include
+  `auditor-sonnet` + `auditor-opus` in the expected key set.
+
+**ACs satisfied:**
+- AC-1: `auditor-sonnet` in registry with `ClaudeCodeRoute(cli_model_flag="sonnet")`.
+- AC-2: `auditor-opus` in registry with `ClaudeCodeRoute(cli_model_flag="opus")`.
+- AC-3: Pricing covered by existing `pricing.yaml` (`claude-sonnet-4-6`,
+  `claude-opus-4-7` already at zero rate — Max flat-rate, no edit needed).
+- AC-4: `per_call_timeout_s=300` matches `planner-synth` baseline; no deviation.
+- AC-5: `_resolve_tier` integration test passes — `_mid_run_tier_overrides`
+  resolves new tiers by name unchanged from M8 T04 precedence rules.
+- AC-6: KDR-003 guardrail tests green — `test_kdr_003_no_anthropic_in_production_tree`
+  (tree-wide) and `test_no_anthropic_sdk_import_in_planner_or_claude_code_driver`
+  both pass with no extension required.
+- AC-7: No cascade-wiring diff (no `AuditCascadeNode` integration; T03).
+- AC-8: No `ai_workflows/mcp/` diff (standalone MCP tool is T05).
+- AC-9/10: Gates clean — 759 passed, 4 lint-import contracts kept, ruff clean.
+- AC-11: CHANGELOG entry present (this entry).
+
+**KDR-003 note:** Zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY` reads
+in any modified file. The tree-wide grep test covers the new lines automatically.
+
+## [0.4.0] - 2026-04-30
+
+### Added — M17 Task 04: Milestone close-out + version bump to 0.4.0 (2026-04-30)
+
+Files touched:
+- `ai_workflows/__init__.py` — `__version__` bumped `0.3.1 → 0.4.0` (single source of truth; `pyproject.toml` reads dynamically).
+- `design_docs/roadmap.md` — M17 row flipped `✅ complete (2026-04-30)`; stale refs fixed (`ADR-0008 → ADR-0010`, `AIW_WORKFLOWS_PATH → AIW_EXTRA_WORKFLOW_MODULES`).
+- `README.md` — M17 row flipped `Complete (2026-04-30)`.
+- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — Status ✅ Complete; task row 04 ✅ Done; CS300 dogfood exit criterion noted deferred (operator-dependent); §Outcome appended.
+- `design_docs/phases/milestone_17_scaffold_workflow/task_04_milestone_closeout.md` — **Status:** ✅ Done (2026-04-30); TA-LOW-02 carry-over ticked.
+- `design_docs/phases/milestone_17_scaffold_workflow/issues/task_04_issue.md` — NEW: build report.
+- `CHANGELOG.md` — M17 T01–T03 [Unreleased] entries promoted to [0.4.0]; T04 close-out entry added; fresh [Unreleased] skeleton left at top.
+
+ACs satisfied: AC-1 (version bump + stale roadmap refs fixed), AC-2 (CHANGELOG promoted), AC-3 (roadmap M17 ✅), AC-4 (milestone README complete), AC-5 (root README updated), AC-6 (gates green).
+Carry-over satisfied: TA-LOW-02 (dependency-auditor terminal-gate framing — noted as non-optional even for version-bump-only commit).
+Deviations from spec: [0.4.0] section placed after named milestone sections (M12/M21/M20) to preserve existing test invariants from test_t15_ship.py::test_changelog_t15_entry.
+
+### Added — M17 Task 03: ADR-0010 + skill-install doc + docs/writing-a-workflow.md §Scaffolding (2026-04-30)
+
+Files touched:
+- `design_docs/adr/0010_user_owned_generated_code.md` — NEW: ADR-0010 records the risk-ownership framing, validator-scope decision (schema-only, Rule 1), write-target safety rules (Rule 2), `AIW_EXTRA_WORKFLOW_MODULES` handoff (Rule 3), no-auto-registration (Rule 4), and three rejected alternatives (lint-before-handover, sandbox-scaffold-runtime, keep-generated-code-inside-package). Cites KDR-004, KDR-013, ADR-0007.
+- `design_docs/phases/milestone_9_skill/skill_install.md` — §7 Generating your own workflow appended: invocation (`aiw run-scaffold`), gate review, approve/reject, write-path safety guards, `AIW_EXTRA_WORKFLOW_MODULES` handoff, iteration guidance.
+- `docs/writing-a-workflow.md` — `## Scaffolding a workflow` section inserted immediately after `### Minimum viable spec` (TA-LOW-03): frames scaffold as alternative entry point, notes validator scope + user ownership, cross-references skill_install.md §7.
+- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — task row 03 → ✅ Done; exit-criteria checkboxes for ADR-0010 + skill-install ticked; `(M16 T03)` reference for ADR-0007 corrected to `(M16 T01)` (TA-LOW-01).
+- `design_docs/phases/milestone_17_scaffold_workflow/task_03_adr_and_docs.md` — **Status:** → ✅ Done (2026-04-30); TA-LOW-01 + TA-LOW-03 carry-over checkboxes ticked.
+- `CHANGELOG.md` — this entry.
+
+ACs satisfied: AC-1 (ADR-0010 created), AC-2 (skill_install.md extended), AC-3 (docs/writing-a-workflow.md §Scaffolding placed after §Minimum viable spec), AC-4 (status surfaces flipped), AC-5 (CHANGELOG updated), AC-6 (gates green — doc-only task, no source changes).
+Carry-over satisfied: TA-LOW-01 (ADR-0007 attribution corrected M16 T03 → M16 T01), TA-LOW-03 (§Scaffolding placed after §Minimum viable spec).
+Deviations from spec: only one `(M16 T03)` reference remained in the README at build time (the §What M17 ships item 8 reference had already been cleared by prior work); the single remaining instance in §Risk-ownership-boundary was corrected.
+
+### Added — M17 Task 02: prompt template iteration + live-mode smoke + carry-over items (2026-04-30)
+
+Files touched:
+- `ai_workflows/workflows/scaffold_workflow_prompt.py` — `SCAFFOLD_PROMPT_TEMPLATE` iterated: now teaches `WorkflowSpec` field inventory (`name`, `input_schema`, `output_schema`, `steps`, `tiers`), `register_workflow(spec)` calling convention, four-layer contract, tier-naming convention, and canonical example step. Prompt length ~3× T01 placeholder; `render_scaffold_prompt()` unchanged.
+- `ai_workflows/workflows/scaffold_workflow.py` — inner imports of `NonRetryable` / `RetryableSemantic` hoisted to module-level import block (ADV-1 / AC-6).
+- `ai_workflows/workflows/_scaffold_write_safety.py` — `atomic_write` docstring updated: `NamedTemporaryFile` → `mkstemp` (ADV-2 / AC-7).
+- `tests/workflows/test_scaffold_workflow.py` — `test_render_scaffold_prompt_brace_escaping` added: exercises brace-containing inputs in `goal`, `target_path`, and `existing_workflow_context` (LOW-3 / AC-4).
+- `tests/cli/test_run_scaffold_alias.py` — NEW: 5 tests covering `--goal`, `--target`, `--force`, `--tier-override` flag parsing via `typer.testing.CliRunner` (LOW-2 / AC-5).
+- `tests/release/test_scaffold_live_smoke.py` — NEW: `AIW_E2E=1`-gated live smoke; invokes real Opus tier via `ClaudeCodeRoute`; asserts gate interrupt + non-empty `spec_python` + validator pass (AC-2).
+- `CHANGELOG.md` — this entry (AC-9).
+
+ACs satisfied: AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9. Carry-over items LOW-2, LOW-3, ADV-1, ADV-2 from T01 audits closed.
+AC-1 (live CS300-goal run passes validator on first attempt) and AC-3 (CS300 dogfood documented) are operator-dependent: require `AIW_E2E=1` + Claude Code CLI auth. Deferred to operator; noted in issue file.
+Deviations from spec: none.
+
+### Added — M17 Task 01: scaffold_workflow meta-workflow graph + validator + write safety (2026-04-30)
+
+New modules:
+- `ai_workflows/workflows/scaffold_workflow.py` — `ScaffoldWorkflowInput`, `ScaffoldedWorkflow`, `WriteOutcome`, `ScaffoldState`, `build_scaffold_workflow()`, `scaffold_workflow_tier_registry()`, `initial_state()`, module-top `register("scaffold_workflow", build_scaffold_workflow)`.
+- `ai_workflows/workflows/_scaffold_write_safety.py` — `validate_target_path()`, `atomic_write()`, error classes (`TargetInsideInstalledPackageError`, `TargetDirectoryNotWritableError`, `TargetExistsError`, `TargetRelativePathError`).
+- `ai_workflows/workflows/_scaffold_validator.py` — `validate_scaffold_output()`, `ScaffoldOutputValidationError`.
+- `ai_workflows/workflows/scaffold_workflow_prompt.py` — `SCAFFOLD_PROMPT_TEMPLATE`, `render_scaffold_prompt()`.
+
+Updated:
+- `ai_workflows/cli.py` — `run-scaffold` Typer alias command added (M17 T01 AC-7).
+
+Tests:
+- `tests/workflows/test_scaffold_workflow.py` — 25 tests covering validator (5), write-safety (8), integration (4), registration (1), pydantic models (4), tier registry (1), KDR compliance (2).
+- `tests/mcp/test_scaffold_workflow_http.py` — 1 HTTP round-trip parity test via `fastmcp.Client`.
+
+ACs satisfied: AC-1 through AC-17.
+T02 follow-up scope: prompt template iteration + live-mode smoke against Claude Opus + CS300 dogfood. ADR-0010 and skill-install docs land at T03.
+Deviations from spec: none.
+
+### Changed — M15 rescoped (2026-04-30)
+
+M15 rescoped: YAML overlay (`~/.ai-workflows/tiers.yaml`) dropped — conflicts with KDR-014 (framework owns quality policy; env-var is the only operator override). M15 scope is now `TierConfig.fallback` schema + `TieredNode` cascade dispatch + cost attribution + `aiw list-tiers` + ADR-0006. M15 deferred pending M17 close-out. M17 unblocked: scaffold tier rebindable per-call via `--tier-override` / `tier_overrides` (KDR-014).
+
+Files touched:
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — rescoping note, title, scope/goal/exit-criteria/non-goals/key-decisions/dependencies/open-questions updated.
+- `design_docs/phases/milestone_15_tier_overlay/task_01_overlay_and_fallback_schema.md` — status + title updated; overlay loader deliverables dropped.
+- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — M15 hard dependency removed; tier rebinding cites KDR-014 `--tier-override`; dependencies + carry-over updated.
+- `design_docs/roadmap.md` — M15 row + M17 row + M15/M17 summaries updated.
+- `.gitignore` — `.claude/worktrees/` added (agent-isolation artifact).
+
 ## [0.3.1] - 2026-04-26
 
 ### Fixed
@@ -56,326 +1805,1360 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   is fixed in the published wheel; `aiw version` from `/tmp` prints
   `0.3.1`.
 
+## [M19 Patch — 0.3.1 dispatch hotfix + real-install gate] - 2026-04-26
+
+### Changed — M19 hotfix: ``register_workflow`` → dispatch plumbing (2026-04-26)
+
+Closes a publish-quality regression that 0.3.0's audit + security gate + dependency-auditor +
+"wire-level e2e proof" all missed: spec-API workflows registered via ``register_workflow(spec)``
+could not be invoked through the published CLI because ``_dispatch._build_initial_state`` had no
+way to find the spec. The integration test that "proved" wire-level behaviour (``tests/integration/
+test_spec_api_e2e.py``) used a fixture that imperatively re-registered ``summarize`` via
+``register("summarize", compile_spec(_SPEC))`` — the fixture path bypassed the broken dispatch
+lookup. The 0.3.0 PyPI live-smoke caught it on the first invocation.
+
+- ``ai_workflows/workflows/__init__.py`` — added ``_SPEC_REGISTRY`` and
+  ``get_spec(name)`` exporting from public surface.
+- ``ai_workflows/workflows/spec.py`` — ``register_workflow`` now writes to
+  ``_SPEC_REGISTRY[spec.name]`` after compiling + registering the builder.
+- ``ai_workflows/workflows/_dispatch.py`` — ``_build_initial_state`` accepts
+  the ``workflow_name`` and consults ``get_spec(workflow_name)``; spec-API
+  workflows get ``{"run_id": ..., **spec.input_schema(**inputs).model_dump()}``;
+  imperative workflows fall through unchanged.
+- ``tests/release/test_install_smoke.py`` (NEW) — wheel-install + spec-API
+  ``aiw run`` smoke. Runs by default.
+- ``scripts/release_smoke.sh`` Stage 7 (NEW) — same check at the bash gate.
+- ``CLAUDE.md`` — codified the real-install release-smoke discipline.
+
+**Audit-pipeline lesson.** Every code task spec must name a smoke test that
+runs against the **same code path the published CLI uses**, not a fixture that
+pre-registers things. T04's audit accepted the integration test as proof; it
+wasn't proof of the dispatch path. The new ``tests/release/`` gate prevents
+this class of false-positive from re-occurring.
+
 ## [0.3.0] - 2026-04-26
 
 **Yanked 2026-04-26 — broken declarative-API dispatch. Use 0.3.1 or later.**
 
-Declarative authoring surface (ADR-0008). Downstream consumers — and the
-in-tree workflows themselves — can now describe an `ai-workflows` workflow
-declaratively as a `WorkflowSpec` (data) rather than imperatively as a
-LangGraph `StateGraph` (code), and register it via `register_workflow(spec)`.
-The legacy imperative path (`register(name, build_fn)`) is preserved as the
-documented escape hatch (Tier 4 of the four-tier extension model).
-
-This is the canonical surface for new workflows going forward. The compiler
-(`ai_workflows.workflows._compiler.compile_spec`) synthesises a StateGraph
-from the spec — same runtime semantics, same MCP wire shape, same
-checkpointer behaviour. Existing in-package workflows (`planner`,
-`slice_refactor`, `ollama_fallback`) are unaffected; both registration paths
-coexist.
-
-The release also lands a long-standing artefact-field bug fix in
-`_dispatch.py`. Workflows whose `FINAL_STATE_KEY` is not literally `"plan"`
-now correctly round-trip their final artefact through `RunWorkflowOutput`.
-The user-observable field is now `RunWorkflowOutput.artifact` /
-`ResumeRunOutput.artifact`; the old `plan` aliases are deprecated and will
-be removed at 1.0.
-
 ### Added
-
-- `ai_workflows.workflows.WorkflowSpec` — pydantic model describing a
-  workflow as data (steps, edges, gates, validators, retry policies, tier
-  bindings, schemas).
-- Step taxonomy — `LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`,
-  `FanOutStep`, plus the `Step` base class for custom step types.
-- `register_workflow(spec)` — register a `WorkflowSpec`-backed workflow
-  alongside the existing `register(name, build_fn)` imperative path.
-- `summarize` workflow — first in-tree spec-API workflow; ships as the
-  end-to-end proof point. Two-step pipeline (LLM summary → validator),
-  invokable through both surfaces (`aiw run summarize --text "..."`,
-  `mcp__ai-workflows__run_workflow workflow="summarize"`).
-- `aiw run --input KEY=VALUE` — typed-input surface for the spec API
-  (pairs with `--text` / `--file` shorthand for free-text workflows).
-- Custom-step extension hook — Tier 3 of the four-tier extension model
-  (downstream consumers subclass `Step` for capabilities not covered by
-  the shipped step types).
-- `ai_workflows.workflows.testing.compile_step_in_isolation` — pytest
-  fixture for testing custom step types without standing up a full
-  `WorkflowSpec`.
-- `docs/writing-a-workflow.md` — declarative-first rewrite (Tier 1 +
-  Tier 2 walkthrough using the `summarize` workflow as the worked
-  example).
-- `docs/writing-a-custom-step.md` — Tier 3 guide (when to subclass
-  `Step`, how to compile in isolation, graduation path to a graph-layer
-  primitive).
-- `docs/writing-a-graph-primitive.md` — audience-clarification banner +
-  Tier 3 → graph-layer graduation framing.
-- `README.md §Extending ai-workflows` — four-tier pointer table.
-- `docs/architecture.md §Extension model` — normative four-tier framing
-  + graduation path + ADR-0008 reference.
+- declarative authoring surface (`WorkflowSpec` + step taxonomy + `register_workflow` + custom-step extension hook)
 
 ### Changed
-
-- `RunWorkflowOutput.artifact` / `ResumeRunOutput.artifact` are the
-  canonical artefact fields. The previous `plan` field names are
-  preserved as deprecated aliases for the 0.2.x → 0.3.x migration
-  window.
-- `docs/writing-a-workflow.md` rewritten declarative-first; the
-  imperative `register(name, build_fn)` path is now the documented
-  escape hatch (Tier 4).
-- Tier-table label format harmonised across `architecture.md`,
-  `README.md`, and `docs/writing-a-custom-step.md`.
+- `RunWorkflowOutput.artifact` is the canonical artefact field
+- `plan` deprecated alias preserved through 0.2.x line
+- `docs/writing-a-workflow.md` rewritten declarative-first
+- `architecture.md` extended with §"Extension model"
+- `README.md` "Extending ai-workflows" section
 
 ### Fixed
-
-- `_dispatch.py` artefact-field bug: workflows whose `FINAL_STATE_KEY`
-  was not literally `"plan"` previously dropped their final artefact on
-  the dispatch return path. The artefact is now read from the channel
-  named by the workflow's `FINAL_STATE_KEY` and surfaced via
-  `RunWorkflowOutput.artifact`.
+- `_dispatch.py` artefact-field bug (composes with rename — non-`plan` `FINAL_STATE_KEY` workflows now round-trip their artefact correctly)
 
 ### Deprecated
+- `RunWorkflowOutput.plan` / `ResumeRunOutput.plan` field. Removal target: 1.0.
 
-- `RunWorkflowOutput.plan` / `ResumeRunOutput.plan` field aliases.
-  Removal target: 1.0. Update consumers to read `.artifact` instead.
+## [M19 Declarative Authoring Surface — 0.3.0 release] - 2026-04-26
 
-## [0.2.0] — 2026-04-24
+### Changed — M19 Task 08 cycle 2: Status surface flip + README staleness + CHANGELOG [0.3.0] block (2026-04-26)
 
-First CS-300-forced minor release. Downstream consumers can now
-register their own workflow modules against `aiw` and `aiw-mcp`
-without forking the wheel — dotted Python module paths via
-`AIW_EXTRA_WORKFLOW_MODULES` (env, comma-separated) or
-`--workflow-module` (repeatable CLI flag on both surfaces, composes
-with the env). The server-side registry-dispatch path now consults
-the registry first and routes externally-registered workflows via
-`sys.modules[builder.__module__]`, so a workflow sitting at
-`cs300.workflows.question_gen` resolves identically to the shipped
-`planner`.
+Closes HIGH-1 / MEDIUM-1 / MEDIUM-2 from the cycle 1 audit (auto-locked via auditor-agreement
+bypass per `.claude/commands/clean-implement.md` stop-condition 2).
 
-Ships as a minor bump (0.1.3 → 0.2.0) because the surface is
-**additive** — unset env + absent flag means zero behavioural
-change from 0.1.3. Backwards-compatible with every existing MCP-host
-registration and every existing `uvx --from jmdl-ai-workflows aiw …`
-command.
+**Carry-over ACs closed (cycle 2):**
 
-User code is user-owned (KDR-013): the framework surfaces
-`ExternalWorkflowImportError` with the failing dotted path + the
-underlying cause, but does not lint, test, or sandbox imported
-modules. In-package workflows cannot be shadowed — eager pre-import
-primes the registry so the existing `register()` collision check
-fires loudly when an external module tries to take a shipped name.
+- HIGH-1: `task_01_workflow_spec.md:3` + `task_02_compiler.md:3` `**Status:**` lines flipped to
+  `✅ Complete (2026-04-26).`. T03–T07 status lines harmonised to same canonical close-out form
+  (T03's stale "Awaiting audit" tail dropped; "Done" / "Implemented" verb-drift eliminated).
+- MEDIUM-1: `README.md` Status table extended with M15 + M16 + M19 rows. Stale `# prints 0.1.0`
+  comment replaced with `# prints the current __version__ (0.3.0 at M19 close)`.
+- MEDIUM-2: `## [0.3.0] - 2026-04-26` user-facing CHANGELOG block landed on `design_branch`
+  above the M19 design-trail section — to be cherry-picked to `main` during publish ceremony.
+  T08 spec AC-5 wording amended to explicitly document the design-branch-owns-both / main-cherry-
+  pick split.
 
-### Added
+**Files touched (cycle 2):**
 
-- `AIW_EXTRA_WORKFLOW_MODULES` env var — comma-separated dotted
-  Python module paths. Unset / empty = no extra load. Whitespace
-  trimmed per-entry; empty entries from trailing commas skipped.
-- `--workflow-module <dotted>` CLI flag on both `aiw` (root
-  callback) and `aiw-mcp` (root command). Repeatable. Composes with
-  the env var — env imports first, CLI entries appended.
-- `ai_workflows.workflows.load_extra_workflow_modules()` +
-  `ExternalWorkflowImportError` (a subclass of `ImportError`) —
-  both re-exported from the `ai_workflows.workflows` package.
-- Dispatch routing extension: `_dispatch._import_workflow_module`
-  consults `workflows._REGISTRY` first and returns
-  `sys.modules[builder.__module__]` for externally-registered
-  workflows. In-package lazy-import fallback preserved.
-- `docs/writing-a-workflow.md` gains a new **§External workflows
-  from a downstream consumer** section with the env-var + CLI-flag
-  surfaces, the worked CS-300 shape, and the user-owned-code
-  contract.
-- `README.md` gains a one-line pointer at the bottom of the MCP
-  server section for downstream consumers.
+- `design_docs/phases/milestone_19_declarative_surface/task_01_workflow_spec.md` — Status flipped.
+- `design_docs/phases/milestone_19_declarative_surface/task_02_compiler.md` — Status flipped.
+- `design_docs/phases/milestone_19_declarative_surface/task_03_result_shape.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_04_summarize_proof_point.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_05_writing_workflow_rewrite.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_06_writing_custom_step.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_07_extension_model_propagation.md` — Status harmonised.
+- `design_docs/phases/milestone_19_declarative_surface/task_08_milestone_closeout.md` — AC-5 wording split.
+- `README.md` — Status table + version comment updated.
+- `CHANGELOG.md` — `## [0.3.0] - 2026-04-26` block added; this cycle-2 entry.
 
-### Not in this release
+**ACs satisfied (cycle 2):** HIGH-1 / MEDIUM-1 / MEDIUM-2 (locked cycle-1 carry-overs). All
+cycle-1 ACs (AC-1 through AC-15) remain satisfied.
 
-No `AIW_WORKFLOWS_PATH` directory-scan loader, no
-`AIW_PRIMITIVES_PATH`, no `aiw inspect <workflow>` command, no
-programmatic-import logging default, no entry-point discovery
-(PEP 621), no hot-reload, no sandboxing, no linting of user code
-— all deferred with triggers that have not fired. See the builder
-branch's `design_docs/phases/milestone_16_external_workflows/`
-(builder-only, on design branch) for the forcing-function notes on
-each.
+### Changed — M19 Task 08: Milestone close-out + 0.3.0 publish ceremony (2026-04-26)
 
-### Notes
+Flips M19 to `✅ Complete (2026-04-26)`. Promotes the M19 T01–T07 `[Unreleased]`
+entries into this dated `[M19 Declarative Authoring Surface — 0.3.0 release] - 2026-04-26`
+section. Absorbs all outstanding carry-over items (CARRY-T01-HIGH-1, CARRY-T01-LOW-1 through
+LOW-3, CARRY-T07-MEDIUM-1, CARRY-T07-LOW-1 through LOW-3, CARRY-SEC-HIGH-1 + ADV-1,
+TA-LOW-05, TA-LOW-08). Version bumped to 0.3.0.
 
-- Setting **any** entry on `AIW_EXTRA_WORKFLOW_MODULES` or
-  `--workflow-module` triggers eager pre-import of the shipped
-  workflows (`planner` + `slice_refactor`) at startup so the
-  collision check is armed before externals load. Invocations with
-  no external entry bypass this — the existing lazy-import path for
-  shipped workflows is preserved exactly as 0.1.3.
-- `ExternalWorkflowImportError` subclasses `ImportError`, so
-  existing `except ImportError` handlers compose unchanged. The
-  underlying cause is available via `__cause__`.
-- Startup is **not atomic** across multiple entries. If entry *k*
-  fails, entries *0..k-1* have already executed their top-level
-  side effects (including any `register()` calls). This is the same
-  semantic Python itself uses for partial module imports; the CLI /
-  MCP surfaces do not fake atomicity.
+**Carry-over absorbed (T08 pre-publish pass):**
 
-### Published
+- CARRY-T01-HIGH-1: `[tool.hatch.build.targets.sdist]` exclude block added to `pyproject.toml`
+  — prevents `.claude/`, `CLAUDE.md`, `design_docs/`, `tests/skill/`, `scripts/spikes/` from
+  leaking into the sdist on PyPI publish. Verified: `tar -tzf dist/jmdl_ai_workflows-0.3.0.tar.gz
+  | grep -E '(\.claude|CLAUDE|design_docs|tests/skill|scripts/spikes)'` → no matches.
+- CARRY-T01-LOW-1: `warnings.filterwarnings("ignore", ...)` at module-level in `spec.py` (after
+  all imports) suppresses the `ValidateStep.schema` pydantic UserWarning. Field name preserved;
+  cosmetic warning suppressed per recommendation.
+- CARRY-T01-LOW-2: `task_01_workflow_spec.md` AC-10 wording amended to name
+  `ai_workflows.primitives.retry` + `ai_workflows.primitives.tiers` explicitly (aligns with
+  Deliverable 1 + four-layer rule; "imports stdlib + pydantic + ai_workflows.workflows only"
+  was too restrictive).
+- CARRY-T01-LOW-3: `task_01_workflow_spec.md` Deliverable 3 annotated — `NotImplementedError(...)`
+  or `...` are both acceptable stub bodies; the locked contract is the signature.
+- CARRY-T07-MEDIUM-1: 6 sites updated — `mcp/schemas.py:91` (RunWorkflowOutput pending bullet),
+  `mcp/schemas.py:178,183-184` (ResumeRunOutput pending + gate_rejected bullets),
+  `_dispatch.py:729` (`_build_result_from_final` interrupt branch), `_dispatch.py:994-995`
+  (`_build_resume_result_from_final` interrupt branch), `_dispatch.py:998-999` (gate_rejected
+  branch), `_dispatch.py:1093` (gate_rejected inline comment), and
+  `design_docs/architecture.md:106` (§4.4 M11 T01 line). M11 T01 framing ("in-flight draft" /
+  "re-gated draft" / "last-draft artefact") replaced with FINAL_STATE_KEY-honest framing
+  ("follows FINAL_STATE_KEY; may be None if channel empty at gate time").
+- CARRY-T07-LOW-1: `design_docs/architecture.md` §"Extension model" expanded from 19 lines
+  to ~50 lines — added Tier 1 happy-path paragraph, Tier 2 parameter-depth paragraph,
+  Tier 3 custom-step paragraph, and graduation-path expanded with promotion note.
+- CARRY-T07-LOW-2: 3 anchor slugs fixed — `docs/writing-a-graph-primitive.md:3,15` +
+  `docs/writing-a-custom-step.md:324` — wrong `#extension-model----extensibility-...`
+  (4 hyphens) replaced with correct GFM slug `#extension-model-extensibility-...` (1 hyphen).
+- CARRY-T07-LOW-3: Tier-label tables harmonised across 3 files to canonical
+  `1 — Compose / 2 — Parameterise / 3 — Author a custom step type / 4 — Escape to LangGraph
+  directly` (no bold; em-dash separator; full label): `README.md` (was `**1. Compose**` etc.)
+  and `docs/writing-a-custom-step.md` (was `Tier 1 — compose` etc.).
+- CARRY-SEC-HIGH-1: `README.md §Security notes` subsection restored under `## MCP server`.
+  Content sourced from `b01b1ec:README.md` — loopback default, `--host 0.0.0.0` foot-gun
+  documentation, `--cors-origin` opt-in framing.
+- CARRY-SEC-ADV-1: `README.md §Setup` subsection restored under `## Getting started`.
+  Covers `GEMINI_API_KEY`, `OLLAMA_BASE_URL`, `AIW_STORAGE_DB`/`AIW_CHECKPOINT_DB`, and
+  Claude Code OAuth-only access note.
+- TA-LOW-05: CHANGELOG promote shape follows M13 + M14 pattern exactly
+  (`## [M<N> <Name>] - YYYY-MM-DD` with T08 entry at top + T01–T07 entries below).
+- TA-LOW-08: live-smoke (Deliverable 6) uses `--max-words 10` against a 17-word input; verified
+  as acceptance-soft (exit 0 + non-empty output, not strict word-count adherence). No blocker.
 
-- **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.2.0/>
-- **Wheel:** `jmdl_ai_workflows-0.2.0-py3-none-any.whl` (164600 bytes).
-- **SHA256:** `1b761093d68bbb9e331c0646c54d2192f1bd277356482b51cccc599cbfef4065`
-- **Publish-side commit:** `main:e3607a9` (the release-prep commit whose
-  wheel was uploaded).
-- **Post-publish live smoke:** `uvx --refresh --from
-  jmdl-ai-workflows==0.2.0 aiw version` from `/tmp` prints `0.2.0`; a
-  companion `aiw --help` + `aiw-mcp --help` from `/tmp` both surface the
-  new `--workflow-module` flag, confirming the M16 external-workflow
-  registration path is live in the published wheel.
+**Files touched (`design_branch`):**
 
-## [0.1.3] — 2026-04-23
+- `ai_workflows/__init__.py` — `__version__` bumped `"0.2.0"` → `"0.3.0"`.
+- `pyproject.toml` — `[tool.hatch.build.targets.sdist]` exclude block added
+  (CARRY-T01-HIGH-1). No other manifest changes.
+- `ai_workflows/workflows/spec.py` — `warnings.filterwarnings(...)` added after all imports
+  (CARRY-T01-LOW-1).
+- `ai_workflows/mcp/schemas.py` — docstrings updated at lines 91 + 178 + 183-184
+  (CARRY-T07-MEDIUM-1).
+- `ai_workflows/workflows/_dispatch.py` — docstrings and inline comment updated at lines 729 +
+  994-995 + 998-999 + 1093 (CARRY-T07-MEDIUM-1).
+- `design_docs/architecture.md` — line 106 (§4.4 M11 T01 bullet) + §"Extension model"
+  expanded ~30 lines (CARRY-T07-MEDIUM-1 + CARRY-T07-LOW-1).
+- `docs/writing-a-graph-primitive.md` — anchor slugs fixed at lines 3 + 15
+  (CARRY-T07-LOW-2).
+- `docs/writing-a-custom-step.md` — anchor slug fixed at line 324; tier-label table
+  harmonised (CARRY-T07-LOW-2 + CARRY-T07-LOW-3).
+- `README.md` — tier-label table harmonised; `### Security notes` restored; `### Setup`
+  restored (CARRY-T07-LOW-3 + CARRY-SEC-HIGH-1 + CARRY-SEC-ADV-1).
+- `design_docs/phases/milestone_19_declarative_surface/task_01_workflow_spec.md` — AC-10
+  wording + Deliverable 3 stub-body annotation (CARRY-T01-LOW-2 + CARRY-T01-LOW-3).
+- `design_docs/phases/milestone_19_declarative_surface/task_08_milestone_closeout.md` —
+  **Status** flipped to `✅ Complete (2026-04-26)`.
+- `design_docs/phases/milestone_19_declarative_surface/README.md` — Status flipped;
+  Outcome section + Propagation status + Decision-resolution filled in.
+- `design_docs/roadmap.md` — M19 row flipped to `✅ complete (2026-04-26)`;
+  §M2–M19 summaries M19 entry added.
+- `CHANGELOG.md` — this entry + promote of T01–T07 entries.
 
-Post-0.1.2 audit patch. Three parallel agent audits against 0.1.2
-surfaced 20 findings; 0.1.3 absorbs the doc-drift + observability
-drift + onboarding-hygiene subset. The remaining findings map to
-M15/M16/M17 milestones or `nice_to_have.md` entries with concrete
-triggers — all recorded in the builder-mode audit disposition on the
-`design_branch`. No new runtime surface; no KDR change; no API break.
+**Green-gate snapshot (2026-04-26, T08 close):**
 
-### Fixed
+- `uv run pytest` — 746 passed, 9 skipped, 22 warnings (UserWarning for ValidateStep.schema
+  suppressed; 2 fewer than pre-T08 baseline of 24 warnings).
+- `uv run lint-imports` — 4 contracts kept, 0 broken on design_branch.
+- `uv run ruff check` — clean.
 
-- **`aiw-mcp` CLI `--host 0.0.0.0` exposure** — the loopback default + the foot-gun are now spelled out in the root README's new `## MCP server → Security notes` subsection. The flag behaviour is unchanged; this is documentation of the existing surface.
-- **`docs/writing-a-workflow.md` cited a non-existent MCP tool** — `get_run_status` was referenced but the actual MCP surface is four tools (`run_workflow`, `resume_run`, `list_runs`, `cancel_run`). A CS300-class consumer following the docs verbatim would have hit "unknown tool." Rewritten to name only the real surface, with `list_runs(--status ...)` as the status-query path.
-- **Tier-name references in `docs/writing-a-workflow.md` were stale.** The doc cited pre-pivot names (`orchestrator`, `gemini_flash`, `claude_code`); the runtime names are per-workflow (e.g. `planner-explorer` + `planner-synth` for the shipped `planner`), declared in Python via `<workflow>_tier_registry()` helpers. Added a new "Where tiers come from" section that names the authoritative source: per-workflow Python registries, not `tiers.yaml` (which is a schema-smoke fixture, not loaded at dispatch).
-- **Observability drift — dual logging.** `ai_workflows/graph/ollama_fallback_gate.py` dual-logged a WARN event through both `logging.getLogger(__name__).warning(...)` and a structlog emit; the stdlib call was removed (KDR observability discipline: `StructuredLogger` only).
-- **Observability drift — stdlib logger for eval-capture errors.** `ai_workflows/evals/capture_callback.py` used `logging.getLogger(__name__)`; switched to `structlog.get_logger(__name__)`, event renamed to snake-case `eval_capture_failed`, `extra=` kwarg replaced by structlog's native kwargs.
-- **Claude Code CLI stderr was silently dropped on non-retryable failures.** `ai_workflows/primitives/retry.py:classify()` now emits a structlog warning with the CLI's `stderr` body (truncated at 2000 chars) before the `subprocess.CalledProcessError` is classified as `NonRetryable`. Debug signal for CLI-version mismatch / OAuth expiry is preserved.
+**Wheel + sdist contents (0.3.0):**
 
-### Changed
+- Wheel (`jmdl_ai_workflows-0.3.0-py3-none-any.whl`): only `ai_workflows/`, `migrations/`,
+  `LICENSE`, `README.md`, `CHANGELOG.md` — no `.env*`, `design_docs/`, `runs/`, `*.sqlite3`.
+- Sdist (`jmdl_ai_workflows-0.3.0.tar.gz`): sdist exclusion block verified — no `.claude/`,
+  `CLAUDE.md`, `design_docs/`, `tests/skill/`, `scripts/spikes/` present.
+- Wheel SHA256 (cycle 1): `d697f534b7101b2d169e6c29d66a82879c4e3b661ea7c906d9c66707f43343dd`
+  Wheel SHA256 (cycle 2 / final pre-publish): `f7af3962075167aac3400ad2f81bee6a7a7efaf9c07fbcbfdc55370023b28f31`
+  (README + CHANGELOG changes between cycles rolled the hash)
 
-- **Root `README.md`** — `## MCP server` gained a `Security notes` subsection (loopback default + `0.0.0.0` foot-gun + TLS posture + CORS semantics). The `## Contributing / from source` example trimmed its stale `# prints 0.1.0` comment to `# prints the installed package version`.
-- **`tiers.yaml` clarified as a schema-smoke fixture.** The header comment now names the file as a schema-sanity fixture and points at each workflow's `<workflow>_tier_registry()` helper as the authoritative source. Deleted the `planner` and `implementer` entries that mapped to `gemini/gemini-2.5-flash` — those bindings were never used at runtime (dispatch calls the workflow's Python helper, never `TierRegistry.load()`) and misrepresented the project's tier plan. `tests/primitives/test_tiers_loader.py` expectations updated in lockstep. M15 (planned) relocates the file to `docs/tiers.example.yaml` and introduces the `AIW_TIERS_PATH` user-overlay mechanism.
+**Release-commits pair (pre-T08 tips, design_branch):**
 
-### Added
+- `design_branch:64fa32b` — /clean-implement auditor-agreement bypass (post-T07 last commit).
+- `main:` — (to be filled at publish time; T08 adds the user-facing 0.3.0 CHANGELOG block
+  to `main` before push).
 
-- **`.env.example`** at repo root. Documents required (`GEMINI_API_KEY` with [Google AI Studio link](https://aistudio.google.com/apikey)) + optional (`OLLAMA_BASE_URL`, `AIW_STORAGE_DB`, `AIW_CHECKPOINT_DB`, `AIW_LOG_LEVEL`) env vars. Also notes the Claude-Code tier is OAuth-only (no `ANTHROPIC_API_KEY` — KDR-003) and covers the testing gates (`AIW_E2E`, `AIW_EVAL_LIVE`, `AIW_EVALS_ROOT`, `AIW_CAPTURE_EVALS`). `PYPI_TOKEN` deliberately not included — release-maintainer-only. The repo's `.gitignore` gains a `!.env.example` negation so the new file is tracked (previous `.env.*` pattern would have swept it).
+**ACs satisfied (spec §Acceptance Criteria):** AC-1 through AC-6 + AC-12 through AC-15
+(AC-7 / AC-8 / AC-9 / AC-10 / AC-11 are the publish + live-smoke + stamp + push + memory
+steps the user runs post-T08 Builder handoff).
 
-### Published
+### Added — M19 Task 07 cycle 2: T07 findings propagated to T08 carry-over (2026-04-26)
+
+Files touched:
+- `design_docs/phases/milestone_19_declarative_surface/task_08_milestone_closeout.md` — new
+  `## Carry-over from M19 T07 audit (2026-04-26)` subsection added after the existing T01 carry-over
+  section. Absorbs all 4 T07 cycle 1 findings deferred by user (option 2): CARRY-T07-MEDIUM-1
+  (class-level + function-level docstring prose drift from M11 T01 framing in `mcp/schemas.py` +
+  `_dispatch.py` + `architecture.md:106`), CARRY-T07-LOW-1 (§Extension model section length below
+  spec target — optional polish), CARRY-T07-LOW-2 (wrong anchor slugs in 3 cross-links to
+  §Extension model), CARRY-T07-LOW-3 (tier-label format divergence across 3 tier tables). No source
+  code or doc surface changes; pure propagation cycle.
+
+ACs satisfied: T07 cycle 2 propagation-only scope per user-locked option 2 on MEDIUM-1.
+Deviations from spec: none.
+
+### Changed — M19 Task 07: four-tier extension model propagated across architecture + README + primitive doc + nice_to_have re-open trigger (2026-04-26)
+
+Files touched:
+- `design_docs/architecture.md` — new §"Extension model" subsection (~35 lines) between §7 and §8
+  makes the four-tier framing part of the architecture-of-record. Includes framing paragraph, tier
+  table (Tier 1–4 with guide pointers), out-of-scope-for-external-authors paragraph, graduation
+  paragraph, gate-pause projection note (T03 MEDIUM-1 carry-over: `FINAL_STATE_KEY` controls
+  `artifact` projection; empty channel → `artifact=None` at gate time), and reference to ADR-0008.
+  KDR-004 row in §9 updated to reflect M19 construction-invariant graduation (source col adds
+  ADR-0008). KDR-013 row updated to reflect boundary shift (specs are data; custom step types
+  remain code; source col adds ADR-0008).
+- `README.md` — new "## Extending ai-workflows" section above "## MCP server" with one-paragraph
+  framing per tier and pointer table to each tier's guide. Three outdated "(builder-only, on design
+  branch)" annotations scrubbed per AC-7.
+- `docs/writing-a-graph-primitive.md` — audience-clarification banner at top naming framework
+  contributors (not downstream consumers) as the audience, with pointers to Tier 1+2 and Tier 3
+  guides. Existing "promote when pattern appears in 2+ workflows" heuristic restated as the Tier 3
+  → graph-layer graduation path (new §"When to write a new graph primitive" lead paragraph).
+  Cross-link to `architecture.md §Extension model` added. Three "(builder-only, on design branch)"
+  annotations scrubbed.
+- `docs/writing-a-custom-step.md` — back-link to `architecture.md §Extension model` added in
+  §Pointers to adjacent tiers (T06-ISS-LOW-1 carry-over: T06 intentionally omitted the anchor
+  until T07 ships the section).
+- `design_docs/nice_to_have.md` — new §23 entry "Spec API extensions for slice_refactor-shape
+  patterns" with explicit re-open trigger (second external workflow with conditional routing or
+  sub-graph composition; per M19 §Decisions Q5 + H2). Includes `gate_review_payload_field` knob
+  candidate per T03 MEDIUM-1 carry-over.
+- `CHANGELOG.md` — this entry.
+
+ACs satisfied: AC-1 (architecture.md §Extension model ~35-line subsection, framing+table+OOS+
+graduation+ADR-0008), AC-2 (KDR-004 + KDR-013 rows updated), AC-3 (no new KDR), AC-4 (README
+§Extending section above §MCP server, framing + tier table), AC-5 (audience-clarification banner
+at top of writing-a-graph-primitive.md), AC-6 (graduation-path restatement + cross-link to
+architecture.md §Extension model), AC-7 (cross-refs audited; (builder-only, on design branch)
+annotations scrubbed from writing-a-graph-primitive.md and README.md), AC-8 (smoke passes; all
+referenced files exist), AC-9 (four-tier framing consistent across all surfaces), AC-10 (existing
+content unchanged outside new/updated sections), AC-11 (nice_to_have.md §23 entry with re-open
+trigger language matching Deliverable 5), AC-12 (gates green), AC-13 (this entry).
+
+Carry-over ACs satisfied: T03-MEDIUM-1 Path A (gate-pause projection note in architecture.md
+§Extension model + gate_review_payload_field candidate in nice_to_have.md §23),
+T06-ISS-LOW-1 (architecture.md §Extension model back-link added to writing-a-custom-step.md),
+M18-R1/R2 ((builder-only, on design branch) annotations scrubbed from writing-a-graph-primitive.md
+and README.md per M18 inventory cross-reference rot items).
+
+Deviations from spec: none. Deliverables 1–7 implemented as specified.
+
+**KDRs:** KDR-004 (validator pairing — M19 construction-invariant framing), KDR-013 (user-owned
+code — boundary shift to data/code split under M19 spec API).
+
+### Added — M19 Task 06: docs/writing-a-custom-step.md (Tier 3 dedicated guide) + compile_step_in_isolation testing fixture (2026-04-26)
+
+Files touched:
+- `docs/writing-a-custom-step.md` — Write-overwrite of the T05 placeholder stub (CARRY-T05-MEDIUM-2).
+  Full Tier 3 dedicated guide for downstream consumers extending the framework via custom step
+  types. Sections: intro + tier-decision table, §When to write a custom step, §The `Step` base
+  class contract (both `execute(state) -> dict` typical path and `compile(state_class, step_id)
+  -> CompiledStep` advanced override path per locked Q4), §Advanced — overriding `compile()`
+  directly (MyFanOutStep example), §Worked example — `WebFetchStep` (httpx, doctest: +SKIP per
+  TA-LOW-04 carry-over) + synthetic `AddOneStep` doctest-runnable substitute, §State-channel
+  conventions (four rules including `_mid_run_` key boundary from T04 ADV-1), §Testing your
+  custom step (`compile_step_in_isolation` fixture usage + StubLLMAdapter integration pattern),
+  §Graduation hints (three promotion signals + cross-link to `writing-a-graph-primitive.md`),
+  §User-owned code boundary (KDR-013 + ADR-0007 framing), §Pointers to adjacent tiers (Tier 1+2
+  + Tier 4 cross-links). WebFetchStep example uses tier name `summarize-url-llm` (not
+  `planner-explorer`) per TA-LOW-09 carry-over.
+- `ai_workflows/workflows/testing.py` — new module. `compile_step_in_isolation` async function
+  (per locked M4). Compiles a single `Step` instance into a one-node `StateGraph` using the same
+  Q4 default compile path (`step.compile()` → `_default_step_compile`) and runs it against an
+  initial state dict; returns final state with merge semantics (pre-existing keys preserved).
+  Uses `dict` as state class so custom steps can write arbitrary keys. Layer-rule-compliant:
+  imports from `workflows.spec` + `workflows._compiler` only.
+- `tests/workflows/test_testing_fixtures.py` — 7 hermetic tests for `compile_step_in_isolation`:
+  primary AC-10 test (custom execute runs), empty initial_state, state-merge semantics, error
+  propagation, independent calls, importability smoke, layer placement.
+- `tests/docs/test_writing_custom_step_snippets.py` — 19 doc-verification tests for
+  `writing-a-custom-step.md`: doc exists + no stub vestige (CARRY-T05-MEDIUM-2), all Python
+  blocks compile, skip markers, 9-section structure, WebFetchStep skip-marked + AddOneStep
+  present, generic tier name (TA-LOW-09), Step contract documented, four state-channel
+  conventions, `compile_step_in_isolation` referenced, graduation hints three signals + cross-link,
+  KDR-013 + ADR-0007 cited, cross-links to adjacent tiers.
+- `CHANGELOG.md` — this entry.
+
+ACs satisfied: AC-1 (9-section structure + both execute/compile paths), AC-2 (WebFetchStep
+doctest-skip + AddOneStep runnable substitute), AC-3 (Step base class contract: execute + compile
++ frozen + extra='forbid' + Q4 default-compile-wraps-execute), AC-4 (four state-channel
+conventions), AC-5 (compile_step_in_isolation fixture documented with worked test example),
+AC-6 (graduation hints: three signals + graph-primitive cross-link), AC-7 (KDR-013 + ADR-0007),
+AC-8 (Tier 1+2 + Tier 4 cross-links), AC-9 (doctest verification: all blocks compile, skipped
+blocks marked), AC-10 (compile_step_in_isolation in workflows/testing.py, exported, docstring,
+tests, layer-rule-compliant), AC-11 (this entry), AC-12 (gates green).
+
+Carry-over ACs satisfied: TA-LOW-04 (WebFetchStep doctest skip), TA-LOW-09 (generic tier name,
+not planner-explorer), CARRY-T05-MEDIUM-2 (Write-overwrite, no stub vestiges).
+
+Deviations from spec: none. All deliverables implemented as specified.
+
+**KDRs:** KDR-013 (user-owned custom step code; boundary documented with ADR-0007 framing),
+KDR-009 (no checkpointer in isolation fixture; unit-testing primitive only), KDR-004
+(LLMStep compile path documented in §Advanced — overriding compile() directly).
+
+### Fixed — M19 Task 05 (cycle 2): writing-a-workflow.md doc-hygiene + bug fixes (2026-04-26)
+
+Files touched:
+- `docs/writing-a-workflow.md` — 5 targeted fixes:
+  - LOW-1: "four fields" → "five fields" in §WorkflowSpec shape intro (line 26).
+  - HIGH-1: `aiw resume <run_id> --approve` → `aiw resume <run_id>` / `--gate-response approved`
+    (the `--approve` flag does not exist; `--gate-response approved` is the correct explicit form).
+    `aiw cancel <run_id>` removed; replaced with a note that CLI cancellation is not implemented
+    at 0.2.x and the MCP `cancel_run` tool is the available surface.
+  - MEDIUM-1 (user-locked Path a): §Worked example code block updated to byte-match
+    `ai_workflows/workflows/summarize.py` — added `from __future__ import annotations`, restored
+    the inline `RetryPolicy` import comment, appended the trailing `_SPEC` module-level docstring.
+  - HIGH-2: §Testing your workflow fixture pattern replaced — the broken
+    `ai_workflows.primitives.providers.litellm_adapter.LiteLLMAdapter` patch target and bare
+    `StubLLMAdapter()` constructor replaced with the working pattern lifted from
+    `tests/workflows/test_summarize.py`: correct patch site (`tiered_node_module.LiteLLMAdapter`),
+    `StubLLMAdapter.arm(expected_output=...)` call, and `yield` / `disarm()` teardown.
+  - LOW-2: one-line comment added to the worked example explaining the sibling-module
+    tier-registry pattern vs. inline.
+- `tests/docs/test_writing_workflow_snippets.py` — 5 new tests (23 total):
+  - `test_worked_example_matches_summarize_py` rewritten for byte-equality (after normalisation
+    of doctest markers and the LOW-2 comment block); replaces the prior key-phrase-presence check.
+  - `test_doc_cli_no_approve_flag` — asserts `--approve` not in the doc (HIGH-1 pin).
+  - `test_doc_cli_no_aiw_cancel_command` — asserts `aiw cancel` not taught as a valid command
+    (HIGH-1 pin).
+  - `test_doc_cli_resume_registered_commands` — asserts `resume` is a registered Typer command
+    and `cancel` is not (HIGH-1 live-CLI pin; resolves effective name from callback when
+    `name=None`).
+  - `test_doc_testing_fixture_no_broken_import_path` — asserts the broken
+    `ai_workflows.primitives.providers.litellm_adapter` path is absent (HIGH-2 pin).
+  - `test_doc_testing_fixture_uses_correct_patch_target` — asserts `tiered_node` appears in the
+    Testing section (HIGH-2 patch-site pin).
+
+ACs re-satisfied: AC-3 (byte-equality tightened), AC-10 (fixture now runtime-correct),
+AC-13 (gates green). HIGH-1 + HIGH-2 + MEDIUM-1 + LOW-1 + LOW-2 from cycle-1 issue file closed.
+
+Deviations from spec: none. All 5 cycle-2 fixes implemented per the cycle-2 scope.
+
+**KDRs:** KDR-013 (external workflow authoring surface unchanged), KDR-003 (no Anthropic API ref).
+
+### Changed — M19 Task 05: docs/writing-a-workflow.md rewritten declarative-first (2026-04-26)
+
+Files touched:
+- `docs/writing-a-workflow.md` — full rewrite, declarative-first. Doc now teaches the M19 spec
+  API (Tier 1 — compose built-in steps + Tier 2 — parameterise them) as the happy path.
+  Existing LangGraph-builder content moved under §"Escape hatch — when the spec API isn't
+  enough" with cross-link to `docs/writing-a-graph-primitive.md`. §"Running your workflow"
+  documents `aiw run --input KEY=VALUE` and the MCP `{"payload": {...}}` wire-shape wrapper.
+  §"External workflows from a downstream consumer" updated: minimum module shape uses
+  `WorkflowSpec`; references to non-existent `get_run_status` tool removed; tier-registry
+  naming convention clarified. Cross-references audited; outdated "(builder-only, on design
+  branch)" annotations cleared where items are now in the main tree.
+- `docs/writing-a-custom-step.md` — new placeholder stub. Forward-anchor for T06's Tier 3
+  dedicated guide; resolves the broken cross-link from `writing-a-workflow.md` until T06 lands.
+- `tests/docs/test_writing_workflow_snippets.py` — new test module. 18 tests covering: all
+  Python code blocks compile cleanly (AC-10), worked-example consistency with `summarize.py`
+  (AC-3), no `import langgraph` in Tier-1/Tier-2 blocks (AC-1), MCP payload wrapper documented
+  (AC-4), `result.artifact` canonical + `result.plan` deprecated 0.2.x / removal 1.0 (AC-5,
+  TA-LOW-01), Tier-3/Tier-4 cross-links + `execute()` + `compile()` framing (AC-6),
+  `compile_step_in_isolation` reference (TA-LOW-06), external-workflow section correctness
+  (AC-7: no `get_run_status`, `WorkflowSpec` used, naming convention stated), escape-hatch
+  section (AC-8), no cross-reference rot on shipped items (AC-9), reserved field names (ADV-1),
+  `prompt_template` brace-escaping caveat (ADV-2), section order (AC-2).
+
+ACs satisfied: AC-1 through AC-13, TA-LOW-01, TA-LOW-06, ADV-1, ADV-2.
+
+Deviations from spec:
+- §Worked example code block in the doc uses the parenthesized multi-line string literal form
+  identical to `summarize.py`'s source representation (which concatenates to the same runtime
+  string). The AC-3 doctest test checks key phrase presence and tier-name identity rather than
+  byte-for-byte verbatim match, because the Python source layout (parenthesized string concat)
+  is what appears in the file, and that is the canonical representation.
+- `docs/writing-a-custom-step.md` is a stub placeholder. The spec states T05 forward-anchors
+  the link; a stub is necessary so the existing link-checker test (`tests/docs/test_docs_links.py`)
+  does not fail on the broken cross-link before T06 lands.
+
+**KDRs:** KDR-013 (external workflow authoring surface; `WorkflowSpec` as the primary path;
+`register(name, build_fn)` escape hatch documented and preserved), KDR-008 (MCP FastMCP
+`payload` wire convention documented; wire shape unchanged), KDR-004 (validator pairing by
+construction in `LLMStep`; doc teaches the contract), KDR-006 (three-bucket retry via
+`RetryPolicy`; doc parameterisation path shown), KDR-003 (no Anthropic API; no LLM tier names
+reference the Claude Code path in the doc's default examples).
+
+### Added — M19 Task 04 (cycle 2): summarize ValidateStep reframe + cross-surface identity test fix (2026-04-26)
+
+Files touched (cycle 2 only):
+- `ai_workflows/workflows/summarize.py` — module docstring updated to reframe the ``ValidateStep`` as illustrative (runtime no-op when ``schema`` matches upstream ``LLMStep.response_format``); field-level comment on ``ValidateStep`` updated to match (MEDIUM-1, locked Path i).
+- `tests/workflows/test_summarize.py` — ``test_summarize_validator_step_runs`` tightened: asserts ``status == "errored"`` + ``error is not None``; docstring updated to reflect the actual contract (LLMStep paired-validator semantic-retry exhaustion, not standalone ValidateStep) (MEDIUM-1 / LOW-5).
+- `tests/integration/test_spec_api_e2e.py` — ``test_summarize_artefact_identical_across_surfaces`` rewritten as sync test using ``CliRunner.invoke`` for the CLI side + ``asyncio.run(_mcp_call())`` for the MCP side; genuinely drives both entry-points; fixes cycle-1 tautological identity (MEDIUM-2). ``test_aiw_run_summarize_help_lists_input_fields`` renamed to ``test_aiw_show_inputs_summarize_lists_input_fields`` to match the actual UX exercised (LOW-4).
+- `tests/cli/test_run.py` — ``test_run_missing_goal_exits_two`` adds ``assert "required" in combined.lower()`` to match both assertions in the test docstring (LOW-2).
+- `CHANGELOG.md` — AC count corrected from "AC-1 through AC-11" to "AC-1 through AC-13" (LOW-3).
+- `design_docs/phases/milestone_19_declarative_surface/task_04_summarize_proof_point.md` — AC-1 through AC-13 + TA-LOW-02 + TA-LOW-10 checkboxes flipped from ``[ ]`` to ``[x]``; Deliverable 1 line 102 bullet rewritten to match locked Path (i) framing (LOW-1).
+- `design_docs/phases/milestone_19_declarative_surface/issues/task_02_issue.md` — "Post-close T02 latent fixes" section appended documenting the four ``_compiler.py`` changes made at T04 cycle 1 (LOW-6).
+
+ACs cycle-2 scope: MEDIUM-1 (ValidateStep no-op accept + reframe), MEDIUM-2 (cross-surface identity test drives actual CLI entry-point), LOW-1 (AC checkboxes), LOW-2 (under-assertion), LOW-3 (AC count), LOW-4 (test name), LOW-5 (test tightened), LOW-6 (T02 doc trail).
+
+**KDRs:** KDR-004 (ValidatorNode paired by construction; reframing clarifies what the test actually proves).
+
+### Added — M19 Task 04: summarize workflow as in-tree spec-API proof point + aiw run --input extension (2026-04-26)
+
+Files touched:
+- `ai_workflows/workflows/summarize.py` — new in-tree workflow authored against the M19 declarative spec API. `WorkflowSpec` composing `LLMStep` (with `prompt_template` Tier 1 sugar) + `ValidateStep` against `SummarizeOutput`. Exposes `SummarizeInput`, `SummarizeOutput`, `_SPEC`; calls `register_workflow(_SPEC)` at module top level. No `import langgraph` anywhere in the module.
+- `ai_workflows/workflows/summarize_tiers.py` — `summarize_tier_registry()` helper returning the `TierRegistry` for the summarize workflow. Encapsulates model selection for the proof-point workflow.
+- `ai_workflows/cli.py` — `aiw run` extended with `--input KEY=VALUE` (repeatable, `Optional[list[str]]`) for arbitrary spec-API workflow inputs. Existing `--goal` flag made optional (spec-API workflows don't always need it). `--goal` + `--input goal=` conflict detected at dispatch layer (Pydantic validation). `show-inputs` command added for introspecting workflow input schemas.
+- `ai_workflows/workflows/_compiler.py` — multi-step composition fixes: `on_terminal` parameter on `_compile_llm_step` for non-last LLMSteps so retrying_edge routes to the next step on success/terminal; `path_map_override` field on `GraphEdge` for non-END terminal routing; inter-step stitching loop skips LLMStep exit nodes (conditional retrying_edge already handles them); `initial_state` pre-initializes all LLMStep intermediate keys + framework-internal keys so `AsyncSqliteSaver` with `durability='sync'` round-trips cleanly on transient failure recovery.
+- `tests/workflows/test_summarize.py` — 5 hermetic tests (stub LLM adapter at adapter boundary, `tmp_path` SQLite redirect): AC-1 (registers via spec API), AC-2 (compiles to runnable StateGraph), AC-3/AC-7 (round-trips through dispatch with `FINAL_STATE_KEY = "summary"`), AC-4 (ValidateStep runs and catches malformed output), AC-5 (retry policy on transient failure — 2 LLM calls: 1 transient + 1 success).
+- `tests/integration/test_spec_api_e2e.py` — 5 wire-level integration tests: AC-6 (`aiw run summarize --input KEY=VALUE` round-trip), AC-8 (`aiw run summarize --help` contains `--input`), AC-9 (`aiw run planner` without `--goal` / `--input goal=` exits 2 with field+required in output), AC-10 (MCP `run_workflow` tool dispatches summarize end-to-end via `fastmcp.Client`), AC-11 (artefact identity across dispatch surface — `artifact["summary"]` matches expected value).
+
+ACs satisfied: AC-1 through AC-13 (all task ACs; AC-12 = this entry; AC-13 = no new step types — only LLMStep + ValidateStep used). Carry-over ACs from spec analysis (TA-LOW-02 module-restructuring fallback, TA-LOW-10 `_run_workflow` reference) satisfied inline.
+
+Deviations from spec:
+- Test 5 in `test_spec_api_e2e.py` uses direct `run_workflow` dispatch (not `CliRunner.invoke`) because `CliRunner` calls `asyncio.run()` internally — cannot be used inside a `@pytest.mark.asyncio` test without nested event-loop conflict. The wire-level artefact identity assertion is preserved; only the invocation surface differs.
+- `CliRunner(mix_stderr=False)` replaced with `CliRunner()` — Typer 0.24.1 does not support `mix_stderr` parameter.
+- `ValidateStep` in `summarize.py` runs after the LLMStep; Pydantic's `model_validate_json` on a `SummarizeOutput` instance (not a JSON string) falls back to string coercion, which does not raise. The LLMStep's paired validator (KDR-004 by construction) provides the effective schema gate; the explicit `ValidateStep` exercises the step type as a composition primitive.
+
+**KDRs:** KDR-004 (ValidatorNode after every TieredNode — by construction in the compiler), KDR-006 (RetryingEdge on LLMStep; transient failure recovery tested), KDR-009 (SqliteSaver checkpoints; `initial_state` initialized for durability='sync' round-trips), KDR-013 (in-tree workflow cannot be shadowed by external registration).
+
+### Deprecated — M19 Task 03: RunWorkflowOutput.plan / ResumeRunOutput.plan (2026-04-26)
+
+- `ai_workflows/mcp/schemas.py` — `RunWorkflowOutput.plan` and `ResumeRunOutput.plan`
+  are now deprecated aliases. Deprecated alias preserved for backward compatibility
+  through the 0.2.x line; removal target 1.0. Read `artifact` instead.
+
+**KDRs:** KDR-008 (FastMCP schema contract; additive change is non-breaking).
+
+### Changed — M19 Task 03: RunWorkflowOutput / ResumeRunOutput field rename (2026-04-26)
+
+- `ai_workflows/mcp/schemas.py` — `RunWorkflowOutput.artifact` and
+  `ResumeRunOutput.artifact` are now the canonical field names for the workflow's
+  terminal artefact. The `plan` field is preserved as a backward-compatible alias
+  surfaced on the wire alongside `artifact`. Existing 0.2.0 callers reading
+  `result.plan` continue to work.
+- Both models updated with `Field(deprecated=True)` on `plan` and a descriptive
+  `description` on `artifact` naming the deprecated alias framing per TA-LOW-01.
+- Module docstring updated to document the M19 T03 rename rationale (ADR-0008).
+- (Cycle 2) `RunWorkflowOutput.artifact` + `ResumeRunOutput.artifact` field descriptions
+  updated to match spec Deliverable 2 verbatim: restored planner / slice_refactor /
+  external-workflow worked-example framing; replaced stale "in-flight draft at gate
+  pause" wording with honest "FINAL_STATE_KEY channel may be ``None`` at gate time"
+  framing per locked MEDIUM-1 Path A. `plan` alias description updated to canonical
+  TA-LOW-01 phrasing ("deprecated alias preserved for backward compatibility through
+  the 0.2.x line; removal target 1.0").
+- (Cycle 2) `tests/workflows/test_result_shape_correctness.py` module docstring — fixed
+  path typo `milestone_19_workflow_contract` → `milestone_19_declarative_surface`.
+- (Cycle 2) `design_docs/phases/milestone_19_declarative_surface/task_07_extension_model_propagation.md`
+  — carry-over entry added to `## Carry-over from prior milestones` propagating
+  MEDIUM-1 (slice_refactor gate-pause `artifact=None` post-T03, locked Path A
+  2026-04-26) per auditor cross-task propagation instruction.
+
+**KDRs:** KDR-008 (FastMCP schema contract).
+
+### Fixed — M19 Task 03: result-shape artefact-field bug (2026-04-26)
+
+- `ai_workflows/workflows/_dispatch.py` — `_build_result_from_final` and
+  `_build_resume_result_from_final` now read `final.get(final_state_key)` for the
+  response artefact field (five call sites). Previously hardcoded `final.get("plan")`
+  silently dropped the artefact for any workflow whose `FINAL_STATE_KEY != "plan"`.
+  CS-300's 2026-04-25 pre-flight smoke surfaced the bug; in-tree `slice_refactor` was
+  also affected. The `_dump_plan` helper was renamed to `_dump_artifact` for consistency.
+- All error-path branches in both result-build functions now emit `artifact: None`
+  alongside `plan: None` (lockstep). Previously the `artifact` key was absent from
+  error paths in `_build_resume_result_from_final`, causing `KeyError` on callers
+  reading the field.
+- `tests/workflows/test_result_shape_correctness.py` — 5 new hermetic regression tests
+  (Deliverable 5): `test_external_workflow_artifact_round_trips_via_artifact_field`,
+  `test_external_workflow_artifact_also_surfaces_via_plan_alias`,
+  `test_in_tree_planner_unchanged_artifact_path`,
+  `test_resume_path_populates_both_fields`,
+  `test_error_path_emits_none_for_both_fields`.
+
+**Files touched:** `ai_workflows/workflows/_dispatch.py`,
+`ai_workflows/mcp/schemas.py`,
+`tests/workflows/test_result_shape_correctness.py`.
+
+**ACs satisfied:** Deliverable 2 (schema rename), Deliverable 3 (five call sites
+migrated + error-path lockstep), Deliverable 5 (regression tests).
+
+**KDRs:** KDR-008 (schema contract), KDR-013 (external workflow artefact surfaced
+correctly for `FINAL_STATE_KEY != "plan"`).
+
+### Fixed — M19 Task 02 cycle-2: compiler correctness fixes (2026-04-26)
+
+- `ai_workflows/workflows/_compiler.py` MEDIUM-1: `LLMStep(retry=None)` now wires `retrying_edge`
+  using `RetryPolicy()` defaults (was: retrying_edge skipped entirely when `retry=None`). Resolves
+  doc/code mismatch — docstring always said "When `None` the compiler uses the default
+  `RetryPolicy()`". `validator_node.max_attempts` now derives from `policy.max_semantic_attempts` so
+  both budgets always agree.
+- `ai_workflows/workflows/_compiler.py` MEDIUM-2: tier-registry helper stored under raw `spec.name`
+  (not sanitised `spec.name.replace("-","_")`); `_dispatch._resolve_tier_registry` reads the raw name
+  via `getattr`, so workflows with hyphens in their names now resolve their tier registry correctly.
+- `ai_workflows/workflows/_compiler.py` LOW-1: Tier 1 sugar (`prompt_template=`) synthesised
+  `prompt_fn` now returns `(None, [{"role": "user", "content": rendered}])` instead of
+  `(rendered, [])`. Gemini's API requires at least one user-role message; system-only requests were
+  silently rejected.
+- `ai_workflows/workflows/__init__.py` LOW-3: `_reset_for_tests()` now also removes all
+  `sys.modules["ai_workflows.workflows._compiled_*"]` entries, preventing stale synthetic modules
+  from accumulating across the test suite.
+- `tests/workflows/test_compiler.py` — 4 regression tests added (23 total, up from 20):
+  `test_compile_llm_step_with_retry_none_wires_default_retry_policy` (MEDIUM-1),
+  `test_compile_workflow_name_with_hyphen_resolves_tier_registry` (MEDIUM-2),
+  `test_compile_llm_step_with_prompt_template_synthesizes_prompt_fn` updated to assert
+  `(None, [user-role-message])` tuple shape (LOW-1),
+  `test_reset_for_tests_clears_synthetic_compiled_modules` (LOW-3).
+
+**KDRs:** KDR-006 (default-on RetryingEdge when retry=None), KDR-013 (user workflow names
+with hyphens work correctly).
+
+### Added — M19 Task 02: Spec → StateGraph compiler (2026-04-26)
+
+- `ai_workflows/workflows/_compiler.py` — `compile_spec(spec)` synthesises a LangGraph `StateGraph`
+  from a `WorkflowSpec`. Owns: state-class derivation (`TypedDict` functional form, all input/output
+  schema fields + LLM intermediate output keys + framework-internal keys), START/END wiring,
+  `initial_state` hook synthesis, `FINAL_STATE_KEY` resolution, per-spec synthetic module injection
+  (`sys.modules["ai_workflows.workflows._compiled_{name}"]`) so `_dispatch` can locate the module.
+  KDR-004 enforced by construction: `_assert_kdr004_invariant` raises if any `LLMStep` is stitched
+  without a paired `ValidateStep`. KDR-006: three-bucket retry wired via `retrying_edge` using
+  `max_semantic_attempts` terminology (carry-over TA-LOW-07). Exports `CompiledStep` dataclass
+  (`entry_node_id`, `exit_node_id`, `nodes`, `edges`) and `GraphEdge` dataclass.
+- Each built-in step type (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`)
+  now implements `Step.compile(state_class, step_id)` via `_default_step_compile` / per-type
+  compile helpers. Custom steps that override only `execute()` receive a working single-node
+  `CompiledStep` from the base-class default (locked Q4 in T01).
+- `ai_workflows/workflows/spec.py` — `register_workflow()` stub replaced with the real
+  `compile_spec(spec)` call; `Step.compile()` default delegates to
+  `_compiler._default_step_compile` instead of raising `NotImplementedError`.
+- `tests/workflows/test_spec.py` — two tests updated to reflect T02 behaviour: custom-step
+  `compile()` now returns a `CompiledStep`; `register_workflow` builder now returns a `StateGraph`.
+- `tests/workflows/test_compiler.py` — 20 hermetic tests covering each step type + cross-step
+  stitching + KDR-004 invariant + FanOut Send-pattern + retry wiring (per Deliverable 7). All
+  tests run in < 2 s wall-clock.
+- Carry-over TA-LOW-10 absorbed: `_dispatch.run_workflow` is the correct function name (not
+  `_dispatch._run_workflow`); synthetic module registration verified against actual call site.
+
+**ACs satisfied:** AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8 (compiler), carry-over TA-LOW-07,
+carry-over TA-LOW-10.
+
+**KDRs:** KDR-004 (ValidatorNode by construction), KDR-006 (RetryingEdge/max_semantic_attempts),
+KDR-009 (StateGraph compiles via `builder().compile(checkpointer=...)` unchanged),
+KDR-013 (TransformStep/custom-step bodies are user-owned; framework does not police them).
+
+### Added — M19 Task 01: WorkflowSpec + step-type taxonomy + register_workflow entry point (2026-04-26)
+
+- `ai_workflows/workflows/spec.py` — `WorkflowSpec` pydantic model + `Step` base + built-in step
+  types (`LLMStep`, `ValidateStep`, `GateStep`, `TransformStep`, `FanOutStep`) + `register_workflow`.
+  KDR-004 enforced by construction: `LLMStep.response_format` is required; an unvalidated LLM step
+  cannot be expressed in the type system. `register_workflow()` validates cross-step invariants
+  (empty step list, unknown tier references with typo-detection, FanOutStep field-resolvability
+  warning) then calls the existing `register(name, builder)`. Builder thunk raises
+  `NotImplementedError("compiler lands in M19 T02")` at T01 time.
+- `ai_workflows/workflows/__init__.py` re-exports the spec surface alongside `RetryPolicy`
+  (re-exported from `ai_workflows.primitives.retry` per locked Q1; the spec API does not invent a
+  parallel retry surface). Existing M16 surface preserved.
+- `tests/workflows/test_spec.py` — 16 hermetic tests covering the data-model surface (spec
+  construction invariants, `LLMStep` prompt-source exclusivity via model validator, `Step.execute`
+  default behaviour, `register_workflow` cross-step validation including the typo-detection contract
+  from Q3 refinement, FanOutStep warn-not-raise, frozen-model invariant, RetryPolicy re-export
+  identity).
+- ADR-0008 (declarative authoring surface) status: Accepted; M19 T01 is the data-model precursor;
+  T02 (compiler) follows.
+
+### Added — M16 Task 01: external workflow module discovery (2026-04-24)
+
+Downstream consumers (CS-300 is the first) register their own workflow
+modules against `aiw` and `aiw-mcp` without forking the wheel. Dotted
+Python module paths via `AIW_EXTRA_WORKFLOW_MODULES` (env var,
+comma-separated) or `--workflow-module` (repeatable CLI flag on both
+surfaces). Ships as **0.2.0** — pure additive surface, unset env +
+absent flag = zero behavioural change from 0.1.3.
+
+**New files:**
+
+- `ai_workflows/workflows/loader.py` — `ExternalWorkflowImportError`
+  (`ImportError` subclass) + `load_extra_workflow_modules(*, cli_modules=None)`.
+  Imports each dotted path once via `importlib.import_module`; the
+  module's top-level `register(...)` call populates the existing
+  registry. Eagerly pre-imports shipped workflows so the existing
+  `register()` collision check catches external modules trying to
+  shadow in-package names.
+- `tests/workflows/test_external_module_loader.py` — 10 loader tests
+  (env-unset, single-env, comma-separated, env+CLI compose, import
+  failure, idempotent, non-registering-module is non-fatal,
+  shipped-name collision raises via `register()`, `_eager_import_…`
+  helper requests the shipped modules, dispatch routing to external
+  registrations).
+- `tests/cli/test_external_workflow.py` — 3 integration tests (env-var
+  round-trip, `--workflow-module` flag round-trip, bad-module-path
+  exits 2 with the module name + `ModuleNotFoundError` cause).
+- `tests/mcp/test_external_workflow.py` — 4 surface-parity tests
+  (stdio via `tool.fn`, HTTP via `fastmcp.Client`, `--workflow-module`
+  option exposed on the MCP Typer command, flag threads through to
+  the loader).
+- `design_docs/adr/0007_user_owned_code_contract.md` — records the
+  dotted-path-over-directory-scan decision + the user-owned-code risk
+  posture + rejected alternatives (entry points, directory scan,
+  plugin protocol, sandboxing, linting user code).
+
+**Touched:**
+
+- `ai_workflows/workflows/__init__.py` — re-exports
+  `ExternalWorkflowImportError` + `load_extra_workflow_modules`.
+- `ai_workflows/workflows/_dispatch.py::_import_workflow_module` —
+  consults `_REGISTRY` first; external workflows resolve via
+  `sys.modules[builder.__module__]`. In-package lazy-import fallback
+  preserved.
+- `ai_workflows/cli.py` — root Typer callback gains
+  `--workflow-module`; calls `load_extra_workflow_modules` and maps
+  `ExternalWorkflowImportError` to `typer.Exit(code=2)`.
+- `ai_workflows/mcp/__main__.py` — `_cli` gains `--workflow-module`;
+  same error handling as the CLI root.
+- `design_docs/architecture.md` §9 — KDR-013 row (external workflow
+  module discovery contract).
+- `docs/writing-a-workflow.md` — new §External workflows from a
+  downstream consumer with the CS-300 worked example.
+- `README.md` — one-line pointer in the MCP server section.
+
+**ACs satisfied (AC-1 through AC-18 per task spec).** Four-layer
+contract preserved (`import-linter` 4 kept). `uv run pytest` 640
+passed / 6 skipped; `uv run ruff check` clean.
+
+**Not in this release:**
+
+- No `AIW_WORKFLOWS_PATH` directory scan (superseded).
+- No `AIW_PRIMITIVES_PATH` (deferred).
+- No `aiw inspect` / `aiw list-workflows` external-source flag (deferred).
+- No programmatic-import logging default in `ai_workflows/__init__.py` (deferred).
+- No entry-point discovery, hot-reload, sandboxing, or user-code linting (all deferred to triggers that have not fired).
+
+### Fixed — 0.1.3 patch: post-0.1.2 audit fixes (2026-04-23)
+
+Three parallel audit agents run against 0.1.2 surfaced 20 findings.
+0.1.3 absorbs the "code/doc drift + observability drift + onboarding
+hygiene" subset; the remaining findings are mapped to M15/M16/M17
+milestones or `nice_to_have.md` entries with triggers in
+[post_0.1.2_audit_disposition.md](design_docs/analysis/post_0.1.2_audit_disposition.md).
+
+**Observability drift (KDR StructuredLogger-only):**
+
+- `ai_workflows/graph/ollama_fallback_gate.py` — dropped the redundant
+  `logging.getLogger(__name__).warning(...)` call that dual-logged next
+  to the structlog emit; removed the now-unused `import logging`.
+- `ai_workflows/evals/capture_callback.py` — switched `_LOG` from
+  `logging.getLogger(__name__)` to `structlog.get_logger(__name__)`;
+  rewrote the `.warning(...)` call shape (snake-case event name,
+  kwargs instead of `extra=`). Eval-capture errors now emit
+  structured JSON events consistent with the rest of the package.
+- `ai_workflows/primitives/retry.py` — `classify()` now surfaces the
+  `stderr` body of a `subprocess.CalledProcessError` (e.g. from the
+  `claude` CLI subprocess) via a structlog warning **before** the
+  error is reclassified as `NonRetryable`. Hard-to-diagnose CLI-version
+  mismatches / OAuth-expiry signals are no longer silently dropped.
+  Truncated at 2000 chars to cap log volume.
+
+**`tiers.yaml` dead-config cleanup:**
+
+- Deleted the `planner:` and `implementer:` entries (both mapped to
+  `gemini/gemini-2.5-flash` — never the actual runtime plan). `tiers.yaml`
+  is **not loaded by the dispatch path** — each shipped workflow
+  defines its own tier registry in Python via
+  `<workflow>_tier_registry()`. The file was a schema-smoke fixture
+  pretending to be authoritative; the header comment now names it as
+  such and points at the Python registries as the source of truth.
+  `tests/primitives/test_tiers_loader.py` expectations updated in
+  lockstep. M15 T04 relocates the file to `docs/tiers.example.yaml`
+  once the `AIW_TIERS_PATH` overlay ships.
+
+**Onboarding hygiene:**
+
+- New `.env.example` at repo root documenting required + optional
+  env vars (`GEMINI_API_KEY` with Google-AI-Studio link;
+  `OLLAMA_BASE_URL` / `AIW_STORAGE_DB` / `AIW_CHECKPOINT_DB`; the
+  Claude-Code-OAuth no-API-key note per KDR-003; testing gates
+  `AIW_E2E` / `AIW_EVAL_LIVE` / `AIW_EVALS_ROOT` / `AIW_CAPTURE_EVALS`).
+  `PYPI_TOKEN` deliberately omitted — release-maintainer-only.
+
+**Version:**
+
+- `ai_workflows/__init__.py` — `__version__` bumped to `0.1.3`.
+- `uv.lock` regenerated.
+
+**Gates green on `design_branch`:** `uv run pytest` 629 passed + 6
+skipped (unchanged test count; two structlog-capture tests rewritten
+from `caplog` to `structlog.testing.capture_logs`); `uv run
+lint-imports` 4 kept, 0 broken; `uv run ruff check` clean.
+
+**`design_branch`-only:** this mirror entry under `[Unreleased]`.
+`main` gets the `[0.1.3]` release block plus README (version claim
+trim + MCP security notes) and `docs/writing-a-workflow.md` rewrite
+(tier names + phantom `get_run_status` removal + "Where tiers come
+from" subsection) in a separate release-prep commit.
+
+**Published (post-release stamp, cherry-pick from `main:7145c34`):**
 
 - **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.1.3/>
 - **Wheel:** `jmdl_ai_workflows-0.1.3-py3-none-any.whl` (160070 bytes).
 - **SHA256:** `9a54e566a00e89e3e024890eec5990458cc725dff3b15ada6da5e4df3c5f428d`
-- **Publish-side commit:** `main:b01b1ec` (the release-prep commit whose
-  wheel was uploaded).
+- **Publish-side commit:** `main:b01b1ec` (the release-prep commit
+  whose wheel was uploaded).
 - **Post-publish live smoke:** `uvx --refresh --from
-  jmdl-ai-workflows==0.1.3 aiw version` from `/tmp` prints `0.1.3`; a
-  companion `python -c "import ai_workflows.cli; ..."` from `/tmp` with
-  a `.env` sentinel round-tripped green — the 0.1.1 dotenv auto-load
-  and the 0.1.2 single-source-of-truth version contract both stay
-  intact under the 0.1.3 observability-cleanup diff.
+  jmdl-ai-workflows==0.1.3 aiw version` from `/tmp` prints `0.1.3`.
+  Companion `python -c "import ai_workflows.cli; ..."` round-tripped
+  the `.env` sentinel — 0.1.1 dotenv auto-load + 0.1.2 version
+  contract both survive the 0.1.3 observability-cleanup diff.
 
-## [0.1.2] — 2026-04-23
+### Fixed — 0.1.2 patch: single-source-of-truth version config (2026-04-23)
 
-Fix-forward for a version-reporting regression in 0.1.1. The
-dotenv auto-load behaviour 0.1.1 shipped is functionally correct and
-present in the 0.1.2 wheel; this release only corrects the
-package's self-reported version string and closes the possibility of
-the dunder drifting from `pyproject.toml` again.
+0.1.1 shipped with a stale `ai_workflows/__init__.py:__version__ =
+"0.1.0"` while `pyproject.toml` said `version = "0.1.1"` — the two
+hardcoded literals drifted. The published 0.1.1 wheel was
+functionally correct (the `.env` auto-load fix landed as intended),
+but `aiw version` from a 0.1.1 install reported `0.1.0`. PyPI does
+not permit re-uploading the same version, so `0.1.1` stays published
+with the cosmetic regression and `0.1.2` is the fix-forward release.
 
-### Fixed
+**Root-cause fix:** single source of truth for the version string.
 
-- **`aiw version` prints the correct version after install.** 0.1.1's
-  release-prep commit bumped `pyproject.toml` from `0.1.0` to `0.1.1`
-  but forgot to bump the literal `ai_workflows/__init__.py:__version__`,
-  so a `uvx`-installed 0.1.1 reported `0.1.0` via `aiw version` and
-  `ai_workflows.__version__`. The wheel metadata (what PyPI / `uv tool
-  list` show) was correct; only the in-Python dunder drifted. PyPI
-  does not permit re-uploading `0.1.1`, so this fix rides forward in
-  `0.1.2`.
-
-### Changed
-
-- **Single source of truth for the package version.** The Python
-  dunder at `ai_workflows/__init__.py:__version__` is now
-  authoritative; `pyproject.toml` declares
-  `dynamic = ["version"]` and a `[tool.hatch.version]` section with
-  `path = "ai_workflows/__init__.py"`. Hatchling parses the Python
-  assignment at build time and stamps it into the wheel metadata.
-  Bumping the release version is now a single-line edit; the two
-  locations cannot diverge again.
-
-### Added
-
-- **`tests/test_version_dunder.py`** — two regression tests that pin
-  the new invariant: (1) `ai_workflows.__version__` equals
+- `ai_workflows/__init__.py` — `__version__` is now authoritative;
+  bumped to `"0.1.2"`. Module docstring calls out the new contract.
+- `pyproject.toml` — dropped the literal `version = "0.1.1"`; added
+  `dynamic = ["version"]` to `[project]` and a new
+  `[tool.hatch.version]` section with `path = "ai_workflows/__init__.py"`.
+  Hatchling's built-in regex version source parses the
+  `__version__ = "..."` assignment at build time and stamps it into
+  the wheel metadata. Edit the Python dunder, rebuild, publish — the
+  two can never diverge again.
+- `tests/test_version_dunder.py` (new) — two regression tests:
+  (1) `ai_workflows.__version__` equals
   `importlib.metadata.version("jmdl-ai-workflows")`; (2) the dunder
-  is well-formed SemVer. Either side drifting away from the other
-  is a 0.1.2 regression.
+  parses as well-formed SemVer.
 
-### Published
+**`design_branch`-only:** this mirror entry under `[Unreleased]`.
+
+**Gates green on `design_branch`:** `uv run pytest` 629 passed + 6
+skipped (+2 over 0.1.1 baseline of 627); `uv run lint-imports` 4
+kept, 0 broken; `uv run ruff check` clean.
+
+**Published (post-release stamp, cherry-pick from `main:0f97f7f`):**
 
 - **PyPI:** <https://pypi.org/project/jmdl-ai-workflows/0.1.2/>
 - **Wheel:** `jmdl_ai_workflows-0.1.2-py3-none-any.whl` (159198 bytes).
 - **SHA256:** `9a5a6108f2c362a63b121bccbf95e70ffe180e13493058129dee60a98d95ba1b`
-- **Publish-side commit:** `main:a0f3fd0` (the release-prep commit whose
-  wheel was uploaded).
+- **Publish-side commit:** `main:a0f3fd0` (the release-prep commit
+  whose wheel was uploaded).
 - **Post-publish live smoke:** `uvx --refresh --from
-  jmdl-ai-workflows==0.1.2 aiw version` from `/tmp` prints `0.1.2` (the
-  `__version__` regression fix verified end-to-end). A companion
-  `uvx --from jmdl-ai-workflows==0.1.2 python -c "import
-  ai_workflows.cli; ..."` from `/tmp` with a `.env` sentinel also
-  round-tripped green, confirming the 0.1.1 dotenv auto-load stays
+  jmdl-ai-workflows==0.1.2 aiw version` from `/tmp` prints `0.1.2`
+  (the `__version__` regression fix verified end-to-end). Companion
+  dotenv smoke round-tripped green — the 0.1.1 auto-load stays
   intact across the version-config rewire.
 
-## [0.1.1] — 2026-04-23
+### Fixed — 0.1.1 patch: `.env` auto-load at CLI + MCP entry points (2026-04-23)
 
-First-run onboarding patch. 0.1.0 shipped without end-user setup guidance
-and without `.env` auto-load at the CLI / MCP entry points. A `uvx`-installed
-user with a `.env` in their working directory got nothing — the process
-only saw shell-exported vars. 0.1.1 closes both gaps. No runtime feature
-change; no schema change; no MCP surface change.
+A post-publish review of `jmdl-ai-workflows==0.1.0` surfaced a first-run
+onboarding gap: `python-dotenv` was declared in `pyproject.toml` but
+`load_dotenv()` was invoked **only** from `tests/conftest.py`. A
+`uvx`-installed user with a `.env` in their current directory got
+nothing — the process only saw shell-exported vars. Reported as a
+"declared dep that doesn't do what users expect" trap.
 
-### Fixed
+**Code diff (both branches, byte-identical):**
 
-- **`aiw` and `aiw-mcp` auto-load `.env` from the current directory at
-  startup.** `python-dotenv` was declared in `pyproject.toml` as a dev
-  dependency but `load_dotenv()` was invoked only from the test
-  conftest. Both CLI surfaces now call
-  `load_dotenv(override=False)` at module top, so a shell-exported
-  variable still wins over the `.env` value (right precedence for CI
-  pipelines and one-off inline overrides). `python-dotenv>=1.0`
-  promoted from `[dependency-groups.dev]` to `[project.dependencies]`
-  so the wheel ships with the runtime dependency.
+- `ai_workflows/cli.py` — `from dotenv import load_dotenv` + module-top
+  `load_dotenv(override=False)` before any `ai_workflows` submodule
+  import. `override=False` keeps shell-exported vars winning — same
+  precedence the test conftest uses.
+- `ai_workflows/mcp/__main__.py` — same, since `aiw-mcp` is a separate
+  process entry and does not share `aiw`'s module-import graph.
+- Module docstrings updated in both files to cite the 0.1.1 patch.
 
-### Changed
+**Tests (both branches):**
 
-- **Root `README.md` gains a `## Setup` section** between `## Install`
-  and `## Getting started`. Documents: required env var
-  (`GEMINI_API_KEY` with a link to Google AI Studio), optional vars
-  (`OLLAMA_BASE_URL`, `AIW_STORAGE_DB`, `AIW_CHECKPOINT_DB`), the
-  `claude` CLI OAuth path (no API key needed — KDR-003), the `.env`
-  auto-load behaviour with precedence rules, and a one-line
-  troubleshooting note for `401 Unauthorized` from LiteLLM. The
-  `## Getting started` section's `export GEMINI_API_KEY=...` line is
-  trimmed (redundant with the new Setup section).
+- `tests/test_dotenv_autoload.py` (new) — three subprocess-isolated
+  tests: (1) `ai_workflows.cli` picks up cwd-local `.env`; (2)
+  `ai_workflows.mcp.__main__` picks up cwd-local `.env`; (3) a
+  shell-exported var wins over the `.env` value (override=False
+  precedence). Subprocess isolation is load-bearing — the repo's own
+  conftest already loads the repo-root `.env` into the test process,
+  so an in-process reload would not exercise the user-facing cwd
+  lookup.
+- `tests/test_wheel_contents.py` — extended with
+  `test_built_wheel_excludes_dotenv_and_loose_yaml` (belt-and-braces
+  that no `.env*` or bare-root `*.yaml` can ship in the wheel).
 
-### Added
+**Version bump:** `pyproject.toml` `0.1.0` → `0.1.1`; `uv.lock`
+regenerated.
 
-- **`tests/test_dotenv_autoload.py`** — three subprocess-isolated
-  tests that pin the auto-load invariant end-to-end: (1) importing
-  `ai_workflows.cli` from a cwd with `.env` populates `os.environ`;
-  (2) importing `ai_workflows.mcp.__main__` likewise; (3) a shell-
-  exported variable wins over the `.env` value.
-- **`tests/test_wheel_contents.py`** — new assertion
-  `test_built_wheel_excludes_dotenv_and_loose_yaml` as a
-  belt-and-braces guard against accidental `.env*` / bare-root
-  `*.yaml` leakage into future wheels. Current packaging
-  (`packages = ["ai_workflows"]`) already holds this invariant by
-  construction; this test pins it at the wheel layer.
+**`design_branch`-side-only:** this mirror entry under `[Unreleased]`
++ no other files.
 
-### Published
+**Gates green on `design_branch`:** pending sweep at commit time.
 
-<!-- stamped post-publish, same shape as the [0.1.0] block -->
-- **PyPI:** _pending_
-- **Wheel:** _pending_
-- **SHA256:** _pending_
-- **Publish-side commit:** _pending_
-- **Post-publish live smoke:** _pending_
+**Release flow:** `main` gets the `[0.1.1]` block + README `## Setup`
+section rewrite in a separate release-prep commit; `uv publish` runs
+from `main` with the project-scoped PyPI token rotated at T07 close.
+
+### Changed — 0.1.1 patch: README `## Setup` section (main only — mirrored here for audit trail) (2026-04-23)
+
+Root `README.md` on `main` gains a new `## Setup` section between
+`## Install` and `## Getting started`. Content:
+
+- Required env vars — `GEMINI_API_KEY` with link to Google AI Studio
+  (`https://aistudio.google.com/apikey`).
+- Optional env vars — `OLLAMA_BASE_URL`, `AIW_STORAGE_DB`,
+  `AIW_CHECKPOINT_DB`.
+- Claude Code tier note — `claude` CLI via OAuth; no API key needed
+  (KDR-003).
+- `.env` auto-load behaviour — documented as the primary
+  key-configuration path, with the `override=False` precedence spelled
+  out.
+- Troubleshooting one-liner for the `401 Unauthorized` case.
+
+Plus the `## Getting started` section's `export GEMINI_API_KEY=...`
+line is trimmed (redundant with the new `## Setup` section).
+
+`design_branch`-side entry is this note for audit trail only — the
+`README.md` on `design_branch` is unchanged (the `main`-side diff
+cherry-picks the code + tests + version bump; the README rewrite is
+`main`-only per the two-branch model).
+
+## [M13 v0.1.0 release - builder audit trail] - 2026-04-22
+
+### Changed — M13 Task 08: Milestone Close-out (2026-04-22)
+
+Flips M13 to `✅ Complete (2026-04-22)`. Promotes the eight
+`[Unreleased]` M13 builder-mode entries (T01 through T07 pre-publish +
+T07 rename + T07 `### Published`-footer stamp) into this dated
+`[M13 v0.1.0 release - builder audit trail] - 2026-04-22` section.
+Zero runtime-code diff in `ai_workflows/` at T08 — all deliverables
+land under `design_docs/`, `CHANGELOG.md`, and the root `README.md`
+milestone-status table.
+
+**Files touched (`design_branch`):**
+
+- `design_docs/phases/milestone_13_v0_release/README.md` — Status
+  flipped to `✅ Complete (2026-04-22)`; `## Outcome` section added
+  covering T01–T08 with the release artefact, PyPI rename footnote,
+  and green-gate snapshot; `## Propagation status` section filled in
+  (no forward-deferral, no `nice_to_have.md` entries generated, next
+  load-bearing milestones M10 + M12).
+- `design_docs/roadmap.md` — M13 row flipped from
+  `planned (depends on M11 + M14 — both complete; unblocked)` to
+  `✅ complete (2026-04-22)`.
+- `CHANGELOG.md` — this entry at the top of the new dated section;
+  the eight `[Unreleased]` M13 entries promoted below it
+  (byte-identical — this is a re-section, not a rewrite).
+- `README.md` — milestone status table row for M13 flipped from
+  `In progress` to `Complete (2026-04-22)` (cherry-picked onto `main`
+  in a separate commit — the root README is the one cross-branch
+  overlap at T08).
+- `design_docs/phases/milestone_13_v0_release/task_08_milestone_closeout.md`
+  — spec (drafted at T08 kickoff 2026-04-22, marked `✅ Complete` at
+  close).
+- `design_docs/phases/milestone_13_v0_release/issues/task_08_issue.md`
+  — audit file, `✅ PASS` on first cycle (close-out is a doc-only
+  flip).
+
+**Green-gate snapshot (2026-04-22, T08 close):**
+
+- `uv run pytest` — `main` 610 passed + 9 skipped; `design_branch`
+  623 passed + 6 skipped (T07 baseline unchanged).
+- `uv run lint-imports` — 4 contracts kept, 0 broken on both branches
+  (no new layer contract at M13).
+- `uv run ruff check` — clean on both branches.
+
+**Release-commits pair (pre-T08 tips):**
+
+- `main:9fe1898` — CHANGELOG `### Published` footer stamped
+  post-publish.
+- `design_branch:6cd43e6` — T07 audit close-out with post-publish
+  artefact values.
+
+**Zero CHANGELOG change on `main` at T08.** The `[0.1.0]` block there
+already carries the user-facing release narrative; M13's builder-mode
+audit trail does not belong on `main`.
+
+**ACs satisfied (spec §Acceptance Criteria):** AC-1 through AC-10.
+
+### Changed — M13 Task 07: PyPI distribution renamed to `jmdl-ai-workflows` (2026-04-22)
+
+First `uv publish` against pypi.org returned `400 The name 'ai-workflows'
+is too similar to an existing project.` — PyPI's similarity check is
+stricter than the `/pypi/<name>/json` 404 lookup recorded at T02 close.
+No artefact was uploaded (reject came before byte transfer). Renamed the
+sdist/wheel distribution name to `jmdl-ai-workflows` (author's initials
+prefix). **Unchanged:** Python module name `ai_workflows`, entry points
+`aiw` + `aiw-mcp`, MCP server name `ai-workflows` in `claude mcp add`,
+GitHub repo URL `yeevon/ai-workflows`, storage conventions under
+`~/.ai-workflows/`.
+
+**Files touched (both branches, cherry-pick):**
+
+- `pyproject.toml` — `name = "jmdl-ai-workflows"`.
+- `README.md` — install + MCP `uvx --from` examples.
+- `CHANGELOG.md [0.1.0]` — MCP-surfaces bullet, install-paths bullet,
+  `### Published` footer PyPI URL + wheel filename.
+- `docs/writing-a-workflow.md:9` — install snippet.
+- `scripts/release_smoke.sh`, `tests/test_wheel_contents.py` — loosen
+  wheel glob to `*.whl` (one-wheel assertion preserved).
+- `uv.lock` — regenerated.
+
+**`design_branch`-only:**
+
+- `design_docs/phases/milestone_9_skill/skill_install.md` — `uvx --from
+  jmdl-ai-workflows` examples.
+- `design_docs/phases/milestone_13_v0_release/release_runbook.md` — §1
+  scope wording + §5 T07 smoke-log entry.
+- `design_docs/phases/milestone_13_v0_release/task_07_changelog_publish.md`
+  — new "Rename addendum (2026-04-22)" section above Deliverables;
+  `### Published` footer placeholder URL updated.
+- `design_docs/phases/milestone_13_v0_release/issues/task_07_issue.md`
+  — audit file amendment documenting the 400 reject + rename.
+
+**Verified pre-publish:** `release_smoke.sh` green against renamed wheel
+(`jmdl_ai_workflows-0.1.0-py3-none-any.whl`, 157723 bytes, SHA256
+`1087075fb90d3ae9e760366620f118e37eb4325264cc1c96133c1acc1def6fa8`);
+`uv run pytest` → 610 passed, 9 skipped; `uv run lint-imports` → 4
+contracts kept; `uv run ruff check` → clean.
+
+### Added — M13 Task 07: `[0.1.0]` CHANGELOG block + first PyPI publish — `design_branch` mirror entry (2026-04-22)
+
+`design_branch`-side footprint for the T07 release commit pair. The user-
+facing `## [0.1.0] — 2026-04-22` block lands below (byte-identical on both
+branches for the `### Added` inventory); on `main` the block directly
+replaces the free-standing M13 T05 + T06 blocks under `[Unreleased]` (user-
+facing release notes do not carry builder-mode audit trail). On
+`design_branch` the free-standing T01–T06 entries are preserved intact —
+this mirror entry only records that the T07 work happened, not what it
+absorbed.
+
+**Files touched (`design_branch` only, pre-publish):**
+
+- `CHANGELOG.md` — this mirror entry under `[Unreleased]` + the new
+  `## [0.1.0] — 2026-04-22` block (body per T07 spec Deliverable 1).
+- `design_docs/phases/milestone_13_v0_release/task_07_changelog_publish.md`
+  — T07 spec (drafted 2026-04-22 at T06 close).
+- `design_docs/phases/milestone_13_v0_release/issues/task_07_issue.md`
+  — pre-publish audit file. AC-1 through AC-6, AC-10, AC-11 graded at
+  this commit; AC-7 (PyPI upload), AC-8 (post-publish live smoke), AC-9
+  (`### Published` footer stamping) marked `⏳ pending-publish`.
+- `design_docs/phases/milestone_13_v0_release/release_runbook.md` — §5
+  gains a second smoke entry for the T07 pre-publish re-run of
+  `scripts/release_smoke.sh` (distinct from the T06 entry at SHA
+  `8f1fd8e`; T07 re-runs the smoke against the CHANGELOG commit on
+  `main` to catch any `pyproject.toml` / wheel-build regression that
+  the CHANGELOG commit itself might have introduced).
+
+**Post-publish amendment (cherry-picked from `main`):** the `### Published`
+footer of the `[0.1.0]` block gets the four captured values stamped in
+(pypi.org URL, wheel filename, SHA256 digest, publish-side commit SHA).
+Cherry-pick is clean because both branches carry the block byte-identical
+pre-publish.
+
+**Not touched on `design_branch`:** `ai_workflows/` (no runtime change),
+`pyproject.toml` (version already `0.1.0` post-T01), `tests/`, `migrations/`,
+`evals/`, `.claude/skills/`.
+
+### Changed — M13 Task 06: skill_install.md uvx option + pre-publish release-smoke run (2026-04-22)
+
+Adds the "Option A-bis — via `uvx` (no clone required)" sub-section to
+`design_docs/phases/milestone_9_skill/skill_install.md §2` and logs the
+T06 pre-publish `scripts/release_smoke.sh` run against `main` HEAD
+`8f1fd8e` in `release_runbook.md §5`. Post-T06, a first-time user who
+has never cloned the repo can register `aiw-mcp` with Claude Code
+directly from PyPI via `claude mcp add ai-workflows --scope user --
+uvx --from ai-workflows aiw-mcp`.
+
+**Files touched (`design_branch` only):**
+
+- `design_docs/phases/milestone_9_skill/skill_install.md` — §2
+  rewritten with Option A (clone-based, contributors) + Option A-bis
+  (uvx, no clone required) sub-headings; §3 intro grows a
+  one-sentence skill-disk-requirement note.
+- `design_docs/phases/milestone_13_v0_release/release_runbook.md` — new
+  §5 "Release smoke invocation log" with the T06 entry (SHA `8f1fd8e`,
+  branch `main`, all six stages green, stage 6 intentionally skipped).
+- `design_docs/phases/milestone_13_v0_release/task_06_skill_uvx_release_smoke.md`
+  — spec drafted at T06 kickoff.
+- `design_docs/phases/milestone_13_v0_release/issues/task_06_issue.md`
+  — audit file.
+- `CHANGELOG.md` — this entry.
+
+**Release-smoke outcome:** 6/6 stages green from clean `main` working
+tree; hermetic path (stages 1–5) exercised; live-provider stage 6
+deliberately skipped (`AIW_E2E` unset) — T07 owns the post-publish
+live round-trip. Pre-T07 "last known good" reference recorded in
+`release_runbook.md §5`.
+
+**Not touched:** `ai_workflows/` (no runtime change); `pyproject.toml`
+(no dep); `main` branch (skill_install.md is design_branch-only;
+README.md `## MCP server` on `main` already carries the `uvx --from
+ai-workflows aiw-mcp` command form from T04 so no cherry-pick is
+needed).
+
+**ACs satisfied (spec §Acceptance Criteria):** AC-1 through AC-12.
+
+### Changed — M13 Task 05: branch split — `design_branch` mirror entry (2026-04-22)
+
+Mirror of the `main` T05 CHANGELOG block — the branch-split itself
+landed on `main` as commit `8f1fd8e`. This entry records the
+`design_branch`-side footprint so audit trails exist on both branches.
+
+**On `design_branch` (this commit):**
+
+- New: `design_docs/phases/milestone_13_v0_release/task_05_branch_split.md`
+  (spec — landed in predecessor commit `4541372`).
+- New: `design_docs/phases/milestone_13_v0_release/issues/task_05_issue.md`
+  (audit file).
+- New: `.github/CONTRIBUTING.md` — cherry-picked from `main` so both
+  branches carry the one-paragraph design-branch pointer.
+- New: `tests/test_main_branch_shape.py` — cherry-picked from `main`
+  for cross-branch byte-identical test surface (the `AIW_BRANCH=design`
+  inversion makes it green here too).
+- Edited: `tests/test_scaffolding.py` — three tests now gated on
+  `AIW_BRANCH=design` (they read `design_docs/` content that does not
+  ship on `main`); ADR-metadata assertion extracted to a new
+  `test_adr_0001_metadata_on_design_branch` function so the runtime-
+  invariant half of `test_workflow_hash_module_is_retired_per_adr_0001`
+  still runs on both branches.
+- Edited: `CHANGELOG.md` — this mirror entry under `## [Unreleased]`.
+
+**Not touched on `design_branch`:** `design_docs/` (kept in full —
+this is the builder branch), `CLAUDE.md`, `.claude/commands/`,
+`tests/skill/`, `ai_workflows/`, `migrations/`, `evals/`,
+`.claude/skills/`.
+
+**Gates green on `design_branch`** (`AIW_BRANCH=design uv run pytest`):
+623 passed + 6 skipped; `uv run lint-imports` → 4 kept, 0 broken;
+`uv run ruff check` → clean.
+
+**`main` commit reference:** `8f1fd8e M13 T05 — branch split: user-facing release slice on main (KDR-002)`.
+See the full T05 block on `main:CHANGELOG.md` under `## [Unreleased]`
+for the deletion + adoption details.
+
+### Changed — M13 Task 04: trim root `README.md` to user-facing intro + shape test (2026-04-22)
+
+Closes M13 exit criteria §4 (root README rewritten to user-facing
+intro) and §5 adjacency (readiness for the T05 branch split). Pre-T04
+`README.md` was 235 lines of builder-facing narrative with milestone
+headings, `CLAUDE.md` / `.claude/commands/` references, and four
+separate `design_docs/` deep-links. Post-T04 it is a thin, PyPI-
+friendly intro.
+
+**`README.md` rewritten 235 → 109 lines (target ≤ 150).** Ten
+sections, in order: title + one-paragraph hook, Status table
+(milestones M1–M14 mirrored from `design_docs/roadmap.md`), What it
+is, Architecture at a glance (four-layer ASCII diagram + pointer into
+[`docs/architecture.md`](docs/architecture.md) / `docs/writing-a-
+workflow.md` / `docs/writing-a-graph-primitive.md`), Install (uvx one-
+shot + `uv tool install` persistent — both reference the wheel by the
+public package name), Getting started (three-command demo: set
+`GEMINI_API_KEY`, `aiw run planner`, `aiw resume --approve`, `aiw
+list-runs`), MCP server (single `claude mcp add` line + the HTTP
+transport opt-in for browser-origin hosts), Contributing / from
+source (clone + `uv sync` + builder-workflow pointer at the `design`
+branch), Development (three gates: `uv run pytest`, `uv run lint-
+imports`, `uv run ruff check`), Next (single pointer at
+`design_docs/roadmap.md` with the `(builder-only, on design branch)`
+marker).
+
+**Exactly one `design_docs/` reference post-trim** — the roadmap
+pointer in `## Next`, carrying the builder-only marker so a PyPI user
+understands the link is a repo-clone-on-design-branch surface rather
+than a broken path. All other `design_docs/*` deep-links removed
+(builder detail lives under `docs/` now). Zero references to
+`CLAUDE.md`, `.claude/commands/`, or `nice_to_have.md` — those are
+`design`-branch-only surfaces.
+
+**New `tests/docs/test_readme_shape.py` — hermetic shape guard.**
+Three test functions pin the README's invariants: (1) line-count cap
+— `len(README.md.splitlines()) ≤ 150`, with failure message reporting
+the actual count so an operator can see how far over; (2) user-facing
+section presence — three required headings (`## Install`, `##
+Contributing / from source`, `## Development`) must each appear
+exactly once (matched as literal lines, not substrings — catches
+accidental duplication); (3) `design_docs/` reference audit — exactly
+one line mentioning `design_docs/`, and that line must carry the
+`(builder-only, on design branch)` marker. Pure string-scan + no
+subprocess, mirrors the hermetic shape of the sibling T03 link test.
+
+**Lockstep edit — deleted `tests/skill/test_doc_links.py::
+test_root_readme_links_skill_install`.** The original M9 T03 AC-2
+asserted that the root README contained a link to `design_docs/
+phases/milestone_9_skill/skill_install.md`. T04's AC-5 requires zero
+`design_docs/` references except the single roadmap pointer, which
+supersedes that M9 AC for the main-branch README. The skill install
+walkthrough surface moves to T06 (uvx option) behind a different
+entry point, so the main-branch test is deleted rather than
+relocated. Module docstring amended in place to record the
+supersession and point at T04 / T06. Same lockstep-sibling-test
+pattern as T03's `tests/test_scaffolding.py` one-line rename.
+
+**Files touched:** `README.md` (rewrite 235 → 109 lines),
+`tests/docs/test_readme_shape.py` (new, 3 tests),
+`tests/skill/test_doc_links.py` (one test function deleted + module
+docstring amended in lockstep),
+`design_docs/phases/milestone_13_v0_release/task_04_readme_trim.md`
+(new — spec drafted at T04 kickoff), `CHANGELOG.md` (this entry).
+**Not touched:** `ai_workflows/` (README-only — AC-13);
+`pyproject.toml` (no new dep); `docs/` (T03 owns the walkthroughs);
+`design_docs/phases/milestone_9_skill/skill_install.md` (T06 owns
+the uvx option on a different surface).
+
+ACs satisfied: AC-1 (README rewritten, 109 lines ≤ 150), AC-2
+(Install section present as `## Install` with both uvx + `uv tool
+install` paths), AC-3 (`## Contributing / from source` renamed from
+the old `## Getting started` / build-from-source split), AC-4
+(`## Development` kept — three gates), AC-5 (exactly one
+`design_docs/` link, carrying `(builder-only, on design branch)`),
+AC-6 (zero `CLAUDE.md` / `.claude/commands/` / `nice_to_have.md`
+references), AC-7 (Status table mirrors `design_docs/roadmap.md` —
+manually sync-verified at write time; silent roadmap drift caught by
+M13 T08 milestone-close-out cross-check), AC-8 (Architecture at a
+glance points at the three `docs/*.md` files from T03), AC-9
+(Getting started demo shows the end-to-end planner run), AC-10
+(`aiw-mcp` surface line shows both stdio + HTTP-transport registration
+forms), AC-11 (`tests/docs/test_readme_shape.py` — three-function
+hermetic shape guard, green), AC-12 (gates green: `uv run pytest`
+620 passed + 5 skipped, `uv run lint-imports` 4/4 kept, `uv run ruff
+check` clean), AC-13 (zero changes under `ai_workflows/`).
+
+Blockers: none. Stop-points for the human operator (T05 branch
+creation, T07 PyPI publish authorization) remain the next two
+handoffs.
+
+### Changed — M13 Task 03: populate `docs/` — architecture.md + writing-a-workflow.md + writing-a-graph-primitive.md + link test (2026-04-22)
+
+Closes M13 exit criterion §5 (`docs/` populated) without touching any
+`ai_workflows/` runtime code. Documentation + test only.
+
+**Three docs rewritten from 5-line pre-pivot placeholders to
+user-facing content.**
+
+- [`docs/architecture.md`](docs/architecture.md) — 65 lines (target ≤
+  200). Six sections: what this project is, four-layer model, LangGraph
+  substrate, public surfaces, KDR summary (5-row load-bearing set), and
+  where-to-go-next pointers. Zero links into `design_docs/` on the main
+  body (the only `(builder-only, on design branch)` references point at
+  the deep-dive KDR grid). No pre-pivot "components" vocabulary.
+- [`docs/writing-a-workflow.md`](docs/writing-a-workflow.md) — 120
+  lines (target ≤ 250). Seven sections: prerequisites, `StateGraph`
+  shape, composing graph primitives (`TieredNode` / `ValidatorNode` /
+  `HumanGate` / `RetryingEdge`), registration, worked `echo` workflow
+  (~30 lines of copy-pasteable Python that references real class names
+  + real `register` API), testing via `StubLLMAdapter`, surfaces-
+  automatic pointer.
+- [`docs/writing-a-graph-primitive.md`](docs/writing-a-graph-primitive.md)
+  — 108 lines (target ≤ 250). Seven sections: when-to-promote heuristic,
+  layer contract, composition pattern, worked `MaxLatencyNode` example
+  (~40 lines), testing, KDR alignment self-check (cites KDR-003 /
+  KDR-006 / KDR-007 / KDR-009 by id), where-to-deep-dive pointers.
+
+**`docs/writing-a-component.md` → `docs/writing-a-graph-primitive.md`
+rename.** "Component" was a pre-pivot artefact from the abandoned
+substrate; "graph primitive" matches the current LangGraph vocabulary.
+`tests/test_scaffolding.py`'s parametrised scaffolding set updated
+in lockstep (one-line edit — swaps the old name for the new).
+
+**New `tests/docs/test_docs_links.py` — hermetic relative-link test.**
+Three test functions: (1) main scan — every `*.md` under `docs/` is
+parsed, every relative markdown link target resolved against disk, any
+broken link or unmarked builder-only link is reported with the source
+file + line number; (2) marker-enforcement smoke — in `tmp_path` the
+test writes a fake `.md` with an unmarked `../design_docs/` link and
+asserts the scanner reports exactly one violation; (3) marker-
+acceptance smoke — companion case that pins the scanner passes a
+well-formed builder-only link silently. Fenced code blocks are
+skipped (``[text](url)`` inside a ``` ... ``` span is not a real link —
+the worked `echo` and `MaxLatencyNode` examples would otherwise false-
+positive). Pure filesystem + regex; zero `uv build` dependency. Empty
+`tests/docs/__init__.py` lands alongside for pytest collection.
+
+**Spec deviation + addition called out.** Spec §Deliverables 4 called
+for "target: 2" link tests; shipped 3. The third (marker-acceptance)
+pins the positive case alongside the negative, blocking scanner drift
+into over-flagging. Recorded verbatim in T03 audit issue file under
+"additions beyond spec".
+
+**Files touched:** `docs/architecture.md` (rewrite),
+`docs/writing-a-workflow.md` (rewrite),
+`docs/writing-a-graph-primitive.md` (new — replaces
+`writing-a-component.md`), `docs/writing-a-component.md` (deleted),
+`tests/docs/__init__.py` (new, empty), `tests/docs/test_docs_links.py`
+(new, 3 tests), `tests/test_scaffolding.py` (one-line rename in
+scaffolding parametrize list),
+`design_docs/phases/milestone_13_v0_release/task_03_populate_docs.md`
+(new — spec drafted at T03 kickoff), `CHANGELOG.md` (this entry).
+**Not touched:** `ai_workflows/` (documentation-only — AC-13);
+`pyproject.toml` (no new dep); `README.md` (T04 owns the root trim);
+`skill_install.md` (T06 owns the uvx option).
+
+ACs satisfied: AC-1 (architecture.md rewritten, 65 lines ≤ 200, six
+sections), AC-2 (zero unmarked `design_docs/` links — enforced by link
+test), AC-3 (writing-a-workflow.md rewritten, 120 lines ≤ 250, seven
+sections), AC-4 (worked `echo` workflow references real classes +
+real `register` signature), AC-5 (writing-a-component.md deleted,
+writing-a-graph-primitive.md exists, 108 lines ≤ 250, seven sections),
+AC-6 (four KDRs named by id + primitives cited by file path), AC-7
+(tests/docs/test_docs_links.py + __init__.py land, pass), AC-8
+(marker-enforcement smoke drives the scanner against a mutated
+tmp_path file, asserts exactly one violation), AC-9 (`uv run pytest`
+618 tests — 615 T02 baseline + 3 new docs tests; T03 shipped 3 tests
+vs. spec target 2 — addition justified), AC-10 (`uv run lint-imports`
+4 kept), AC-11 (`uv run ruff check` clean), AC-12 (this CHANGELOG
+entry, above T02's block), AC-13 (`git diff --name-only` shows zero
+`ai_workflows/` paths).
+
+### Changed — M13 Task 02: PyPI name claim + release smoke + wheel excludes (2026-04-22)
+
+Closes three more M13 exit criteria without touching any `ai_workflows/`
+runtime code. Composes over T01: reuses the `built_wheel` module-scoped
+fixture; depends on the `force-include` hook T01 installed.
+
+**PyPI name `ai-workflows` confirmed available.** `curl -sS -o /dev/null
+-w '%{http_code}\n' https://pypi.org/pypi/ai-workflows/json` returned
+`404` as of 2026-04-22. The `[project].name = "ai-workflows"` stamp
+from T01 stands — no namespace alternative needed. Claim is held
+passively by the first successful `uv publish` at T07.
+
+**New `scripts/release_smoke.sh` — manual release gate.** Six-stage
+bash script that: (1) `uv build --wheel` into a temp dir, (2) creates
+a fresh venv outside the repo, (3) installs the wheel into it, (4)
+help-smokes `aiw` + `aiw-mcp`, (5) runs `aiw list-runs` against a
+fresh `AIW_STORAGE_DB` — exercises the migrations-from-wheel path
+T01's `force-include` unlocked, (6) optional real-provider planner
+run gated by `AIW_E2E=1 + GEMINI_API_KEY`. `set -euo pipefail`; cleans
+up via `trap cleanup EXIT`. Not wired into CI — the hermetic stages
+duplicate `tests/test_wheel_contents.py`; the live stage would cost
+real money per PR. Invoked manually from T07's runbook.
+
+**New `design_docs/phases/milestone_13_v0_release/release_runbook.md`
+— builder-only runbook.** Four sections covering when to run the
+smoke, pre-flight checks (release branch, clean tree, intended SHA,
+`uv` on PATH), stage-by-stage failure guide, optional live-provider
+pass costs and caveats. Stays on `design` branch — M13 T05 prunes it
+from `main`.
+
+**`tests/test_wheel_contents.py` gains
+`test_built_wheel_excludes_builder_mode_artefacts`.** Asserts
+`design_docs/`, `CLAUDE.md`, `.claude/commands/` are absent from the
+built wheel archive. Reuses the `built_wheel` module-scoped fixture
+— no new fixture, one extra cheap zipfile assertion. Closes the
+other half of milestone README §Exit criteria 2 (T01 shipped the
+inclusion half).
+
+**Spec deviation recorded.** Milestone README §Exit criteria 3 +
+task_02 spec §Deliverables 2 called for the smoke to run `aiw run
+planner --goal 'wheel-smoke' --run-id wheel-smoke --no-wait` against
+a stubbed provider. Two gaps prevented a literal implementation:
+(a) `aiw run` has no `--no-wait` flag (adding one would be
+graph-surface scope — out-of-scope for a packaging task); (b) there
+is no shell-surface provider stub (`StubLLMAdapter` is a Python
+test helper, not an `AIW_*` env-configurable runtime swap). The
+shipped script substitutes `aiw list-runs` for `aiw run` in the
+hermetic default path — `list-runs` exercises the same
+`SQLiteStorage.open()` + migrations-apply path the smoke is meant
+to gate, with zero provider dependency. The real-provider `aiw run`
+path lives in stage 6 behind the standard `AIW_E2E=1 +
+GEMINI_API_KEY` double-gate that `tests/e2e/` uses today. Recorded
+verbatim in [T02 audit issue file](design_docs/phases/milestone_13_v0_release/issues/task_02_issue.md).
+
+**Files touched:** `scripts/release_smoke.sh` (new),
+`design_docs/phases/milestone_13_v0_release/task_02_name_claim_release_smoke.md`
+(new — spec drafted at T02 kickoff),
+`design_docs/phases/milestone_13_v0_release/release_runbook.md`
+(new — builder-only), `tests/test_wheel_contents.py` (one test
+appended), `CHANGELOG.md` (this entry). **Not touched:**
+`pyproject.toml` (T02 records the name claim; no pyproject edit);
+anything under `ai_workflows/` (packaging-only, AC-12).
+
+ACs satisfied: AC-1 (name claim recorded), AC-2 (smoke script
+executable + `set -euo pipefail` + `trap` cleanup), AC-3 (stages 1-5
+green on current tip — verified manually), AC-4 (stage 6 double-gated
+by `AIW_E2E=1 + GEMINI_API_KEY`, skips cleanly when missing), AC-5
+(smoke not in ci.yml — grep-verified), AC-6 (runbook exists, covers
+the four sections, stays on `design` branch), AC-7 (new test lands
+green, reuses `built_wheel` fixture), AC-8 (`uv run pytest` 615
+tests), AC-9 (`uv run lint-imports` 4 kept), AC-10 (`uv run ruff
+check` clean), AC-11 (this CHANGELOG entry), AC-12 (zero
+`ai_workflows/` diff — `git diff --name-only` confirms).
+
+### Changed — M13 Task 01: pyproject polish + wheel migrations bundle (2026-04-22)
+
+Closes the first two M13 shipping-blockers: PyPI listing metadata and
+the silently-omitted `migrations/` directory. Zero runtime behaviour
+change — a running-from-repo `uv run aiw …` / `uv run aiw-mcp`
+invocation is byte-identical; the fix is about what lands inside the
+published wheel.
+
+**`pyproject.toml [project]` metadata filled in.** `authors`,
+`urls.Homepage` / `urls.Repository` / `urls.Issues`, `keywords`
+(`langgraph`, `mcp`, `claude-code`, `ai-workflow`, `litellm`,
+`ollama`), and `classifiers` (`Development Status :: 3 - Alpha`,
+`Intended Audience :: Developers`,
+`License :: OSI Approved :: MIT License`,
+`Operating System :: OS Independent`,
+`Programming Language :: Python :: 3` + `Python :: 3.12`,
+`Topic :: Software Development :: Libraries`). No dependency change.
+No version bump — `0.1.0` stays (the `[0.1.0]` CHANGELOG release
+section lands at T07).
+
+**`pyproject.toml [tool.hatch.build.targets.wheel]` force-includes
+`migrations/`.** `packages = ["ai_workflows"]` alone sweeps the source
+package; the repo-root `migrations/` directory is silently omitted
+from the wheel. `yoyo-migrations` reads migration scripts from an
+on-disk path, so a `uvx --from ai-workflows aiw run planner …` from a
+clean machine would fail on first-run with a "no migration scripts
+found"-equivalent error. New
+`[tool.hatch.build.targets.wheel.force-include]` block maps
+`"migrations" = "migrations"`, landing the directory at
+`site-packages/migrations/` on install — which is exactly where
+`ai_workflows/primitives/storage.py`'s existing
+`Path(__file__).parent.parent.parent / "migrations"` walk-up
+resolves. Zero `ai_workflows/` diff (option 1 in the task spec §Storage
+layer — the current lookup already works with `force-include`;
+`importlib.resources` rewrite not needed).
+
+**New hermetic test `tests/test_wheel_contents.py`.** Two tests
+sharing a module-scoped `built_wheel` fixture that shells out to
+`uv build --wheel --out-dir <tmp>`:
+
+- `test_built_wheel_includes_migrations` — asserts `001_initial.sql`
+  and `002_reconciliation.sql` are present in the archive, plus a
+  whole-set equality check between the shipped `migrations/*.sql`
+  entries and the files currently in the repo's `migrations/`
+  directory (catches future migrations silently missing from the
+  wheel — e.g. `003_artifacts.sql` which exists today and the task
+  spec did not know about).
+- `test_built_wheel_includes_ai_workflows_package` — sanity guard
+  that the `force-include` edit does not regress the
+  `packages = ["ai_workflows"]` sweep.
+
+Skips loudly when `uv` is not on PATH (matches the e2e-smoke skip
+pattern); CI always has it.
+
+**Files touched:** `pyproject.toml` (metadata block + force-include
+block), `tests/test_wheel_contents.py` (new), `CHANGELOG.md` (this
+entry). **Not touched:** `ai_workflows/primitives/storage.py` (the
+existing walk-up resolves correctly against the `force-include`
+layout — confirmed by the new test).
+
+ACs satisfied: AC-1 (metadata block), AC-2 (force-include block),
+AC-3 (`uv build` includes migrations), AC-4 (Storage walk-up resolves
+under wheel layout — no code change needed), AC-5 (both tests land
+green), AC-6 (no dependency change, no version bump), AC-7 (no diff
+under `ai_workflows/workflows/` / `mcp/` / `graph/`), AC-8 (gates
+green), AC-9 (this entry).
 
 ## [0.1.0] — 2026-04-22
 

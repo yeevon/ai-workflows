@@ -5,8 +5,12 @@
 # Each shipped workflow defines its own tier registry in Python via a
 # `<workflow>_tier_registry()` function. The dispatch layer
 # (`ai_workflows.workflows._dispatch._resolve_tier_registry()`) calls
-# that function to resolve tier bindings for a run — `tiers.yaml` is
+# that function to resolve tier bindings for a run — this file is
 # never loaded on the dispatch path.
+#
+# M15 shipped: this file has been relocated from `tiers.yaml` to
+# `docs/tiers.example.yaml` as a user-facing schema-reference example.
+# It is not loaded at runtime.
 #
 # This file exists so `tests/primitives/test_tiers_loader.py` has a
 # real on-disk example to parse against the `TierRegistry.load()`
@@ -32,11 +36,6 @@
 # * `local_coder` — Qwen via Ollama (local, zero-cost).
 # * `opus` / `sonnet` / `haiku` — Claude Code CLI subprocess using the
 #    developer's Claude Max subscription (OAuth; no Anthropic API key).
-#
-# Forward-looking: M15 introduces `AIW_TIERS_PATH` + `~/.ai-workflows/
-# tiers.yaml` as a user-supplied overlay that merges with workflow
-# registries at dispatch time. This file becomes the reference/example
-# `docs/tiers.example.yaml` once M15 ships.
 
 local_coder:
   route:

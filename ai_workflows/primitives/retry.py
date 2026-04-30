@@ -58,6 +58,7 @@ _LOG = structlog.get_logger(__name__)
 _STDERR_LOG_CAP = 2_000
 
 __all__ = [
+    "AuditFailure",
     "NonRetryable",
     "RetryPolicy",
     "RetryableSemantic",
@@ -100,6 +101,81 @@ class NonRetryable(Exception):
     continue (§8.2). Two of these in the same run trigger the
     double-failure hard-stop.
     """
+
+
+def _render_audit_feedback(
+    *,
+    primary_original: str,
+    failure_reasons: list[str],
+    suggested_approach: str | None,
+    primary_context: str,
+) -> str:
+    """Render the audit-feedback re-prompt template (KDR-011, exit criterion 3).
+
+    Exact shape pinned by ``tests/primitives/test_audit_feedback_template.py``:
+
+        <primary_original>
+
+        <audit-feedback>
+        Reasons:
+        - <reason 1>
+        - <reason 2>
+        Suggested approach: <suggested_approach or "(none)">
+        </audit-feedback>
+
+        <primary_context>
+
+    Trailing newline omitted. The reasons block always renders (empty list
+    → ``"Reasons:\\n- (none)"``); suggested_approach renders ``"(none)"`` when
+    the auditor returned None. Module-private — not exported via ``__all__``
+    and not imported by ``audit_cascade.py`` or any other module. Single
+    ownership site: ``AuditFailure`` constructs the hint at ``__init__`` time.
+    """
+    reasons_block = "\n".join(f"- {r}" for r in failure_reasons) or "- (none)"
+    suggested = suggested_approach or "(none)"
+    return (
+        f"{primary_original}\n\n"
+        f"<audit-feedback>\n"
+        f"Reasons:\n{reasons_block}\n"
+        f"Suggested approach: {suggested}\n"
+        f"</audit-feedback>\n\n"
+        f"{primary_context}"
+    )
+
+
+class AuditFailure(RetryableSemantic):
+    """Auditor verdict was passed=False — the primary's output failed semantic review.
+
+    Carries the structured verdict payload + the rendered revision-guidance
+    template the primary node will pick up on its next re-fire. Bucketed
+    ``RetryableSemantic`` per KDR-006 so the existing ``RetryingEdge`` routes
+    it back to the primary without taxonomy edits.
+
+    Introduced by M12 Task 02 (KDR-011 foundation row 2). The ``revision_hint``
+    is built by the module-private ``_render_audit_feedback`` helper; callers
+    read it via ``exc.revision_hint`` — they never call the helper directly.
+    """
+
+    def __init__(
+        self,
+        *,
+        failure_reasons: list[str],
+        suggested_approach: str | None,
+        primary_original: str,
+        primary_context: str,
+    ) -> None:
+        revision_hint = _render_audit_feedback(
+            primary_original=primary_original,
+            failure_reasons=failure_reasons,
+            suggested_approach=suggested_approach,
+            primary_context=primary_context,
+        )
+        super().__init__(
+            reason=f"audit_failed: {len(failure_reasons)} reason(s)",
+            revision_hint=revision_hint,
+        )
+        self.failure_reasons = failure_reasons
+        self.suggested_approach = suggested_approach
 
 
 class RetryPolicy(BaseModel):
@@ -183,6 +259,15 @@ def classify(
                 stderr_truncated=len(stderr) > _STDERR_LOG_CAP,
             )
         return NonRetryable
+    # M12 T02: bucket instances already carry their classification as their type.
+    # AuditFailure is a RetryableSemantic subclass; passing a pre-classified
+    # bucket exception to classify() returns the correct bucket class without a
+    # taxonomy change.  This also covers RetryableSemantic instances raised by
+    # ValidatorNode that are forwarded to classify() by an outer catch block.
+    if isinstance(exc, RetryableSemantic):
+        return RetryableSemantic
+    if isinstance(exc, RetryableTransient):
+        return RetryableTransient
     return NonRetryable
 
 

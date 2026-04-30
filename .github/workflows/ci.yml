@@ -35,6 +35,11 @@ jobs:
         run: uv run lint-imports
       - name: Ruff
         run: uv run ruff check .
+      - name: Audit infrastructure files (md discoverability + skills efficiency)
+        run: |
+          uv run python scripts/audit/md_discoverability.py --check section-budget --target .claude/agents/
+          uv run python scripts/audit/md_discoverability.py --check section-budget --target agent_docs/
+          uv run python scripts/audit/skills_efficiency.py --check all --target .claude/skills/
 
   secret-scan:
     runs-on: ubuntu-latest

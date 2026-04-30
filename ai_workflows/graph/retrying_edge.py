@@ -23,6 +23,12 @@ Relationship to sibling modules
   transparently (the hint lives on the exception instance already
   stored in ``state['last_exception']``; the edge does not copy or
   touch it).
+* ``graph/audit_cascade.py`` (M12 T02) — emits :class:`AuditFailure`
+  (a ``RetryableSemantic`` subclass) from the audit-verdict node when
+  the auditor reports ``passed=False``. This edge routes it back to
+  the primary ``tiered_node`` via the same ``on_semantic`` hop used for
+  shape failures; the primary picks up the rendered audit-feedback
+  template via ``state['last_exception'].revision_hint`` on re-entry.
 
 Exponential backoff is **not** implemented here — per the spec it
 belongs in the self-loop target as an ``asyncio.sleep`` wrapper so

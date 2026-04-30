@@ -107,6 +107,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
   "e2e: end-to-end test that hits a real API; only runs when AIW_E2E=1",
+  "benchmark: manual wall-clock benchmark; run with uv run pytest -m benchmark",
 ]
 
 [tool.ruff]
@@ -187,6 +188,16 @@ name = "evals cannot import surfaces"
 type = "forbidden"
 source_modules = ["ai_workflows.evals"]
 forbidden_modules = [
+    "ai_workflows.cli",
+    "ai_workflows.mcp",
+]
+
+[[tool.importlinter.contracts]]
+name = "audit_cascade composes only graph + primitives"
+type = "forbidden"
+source_modules = ["ai_workflows.graph.audit_cascade"]
+forbidden_modules = [
+    "ai_workflows.workflows",
     "ai_workflows.cli",
     "ai_workflows.mcp",
 ]

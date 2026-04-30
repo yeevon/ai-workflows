@@ -65,6 +65,47 @@ def my_workflow_tier_registry() -> dict[str, TierConfig]:
     }
 ```
 
+### Fallback chains
+
+When a route's retry budget exhausts (after `RetryingEdge`'s three-bucket cycle), `TieredNode`
+walks the tier's `fallback` list in declaration order, attempting each route against a fresh
+retry counter. If all routes fail, it raises `AllFallbacksExhaustedError` carrying a
+`attempts: list[TierAttempt]` log for diagnostics.
+
+Declare a fallback chain in `TierConfig.fallback`:
+
+```python
+from ai_workflows.primitives.tiers import ClaudeCodeRoute, LiteLLMRoute, TierConfig
+
+
+def planner_tier_registry() -> dict[str, TierConfig]:
+    return {
+        "planner-synth": TierConfig(
+            name="planner-synth",
+            route=ClaudeCodeRoute(cli_model_flag="opus"),
+            fallback=[
+                ClaudeCodeRoute(cli_model_flag="sonnet"),   # first fallback
+                LiteLLMRoute(model="gemini/gemini-2.5-flash"),  # last-resort
+            ],
+        ),
+    }
+```
+
+**Semantics:**
+- `fallback` is a flat list — no nested fallbacks. `TierConfig` rejects fallback routes that
+  carry their own `fallback` field at schema-validation time.
+- Cascade triggers *after retry-budget exhaustion*, not on the first error signal. The retry
+  budget is the primary correctness surface.
+- Cost attribution is truthful — every attempted route (primary + each fallback) logs its
+  `TokenUsage`. `CostTracker.total(run_id)` reflects the aggregate.
+- The `ValidatorNode` downstream of an `LLMStep` runs unchanged: it always validates the
+  final successful route's output. Semantic-validation failure is a primary-route concern and
+  does *not* trigger the cascade.
+
+See [`docs/tiers.example.yaml`](tiers.example.yaml) for a YAML-syntax schema reference.
+See [ADR-0006](../design_docs/adr/0006_tier_fallback_cascade_semantics.md) (builder-only, on design branch) for the design
+rationale and rejected alternatives.
+
 ### Minimum viable spec
 
 A one-step no-LLM workflow — validates a field, returns immediately:
@@ -92,6 +133,55 @@ register_workflow(WorkflowSpec(
     ],
 ))
 ```
+
+## Scaffolding a workflow
+
+`scaffold_workflow` (M17) is an alternative entry point for authors who prefer to describe a
+workflow in plain English rather than writing a `WorkflowSpec` by hand. The scaffold takes a
+natural-language goal and produces a `.py` file containing a `WorkflowSpec` definition plus a
+`register_workflow(spec)` call — the same shape as the §Minimum viable spec example above.
+
+### What the scaffold produces
+
+The output is a standalone Python module ready for the M16 external-module load path:
+
+```bash
+aiw run-scaffold \
+  --goal "generate exam questions from a textbook chapter" \
+  --target ~/my-workflows/question_gen.py
+
+# After approval at the HumanGate, the file is written.
+# Load it via AIW_EXTRA_WORKFLOW_MODULES (module stem = file stem, no .py):
+PYTHONPATH=~/my-workflows \
+  AIW_EXTRA_WORKFLOW_MODULES=question_gen \
+  aiw run question_gen \
+    --input chapter_text="Chapter 4 content here" \
+    --input num_questions=10
+```
+
+### Validator scope and ownership
+
+The scaffold validates two things only (KDR-004 + ADR-0010):
+
+1. `spec_python` parses as valid Python.
+2. The parsed AST contains at least one `register_workflow(...)` call.
+
+No `ruff`, no `pytest`, no `import-linter` is run on the generated artefact. The `HumanGate`
+that precedes the write is a **user-review gate** — "here is what I'll write to disk; approve
+to save or reject to retry with different guidance." The user is the reviewer; ai-workflows
+does not certify code quality.
+
+From the moment the file is written to disk, it is **user-owned**. The user edits, tests, and
+maintains it independently of the framework. See
+[ADR-0010](../design_docs/adr/0010_user_owned_generated_code.md) (builder-only, on design branch) for the full risk-ownership
+framing.
+
+### Full CLI walkthrough
+
+See
+[`design_docs/phases/milestone_9_skill/skill_install.md` §Generating your own workflow](../design_docs/phases/milestone_9_skill/skill_install.md#7-generating-your-own-workflow) (builder-only, on design branch)
+for the end-to-end walkthrough: invocation, gate review, approve/reject, write path,
+`AIW_EXTRA_WORKFLOW_MODULES` handoff, and iteration guidance.
 
 ### Reserved field names
 
@@ -515,8 +605,8 @@ Each entry is imported via `importlib.import_module(...)` at startup; the module
 in the shared registry. The module must already be importable via the running interpreter's
 `sys.path` — the typical layout is a pip-installable package, editable or otherwise.
 
-See [ADR-0007](https://github.com/yeevon/ai-workflows/blob/design_branch/design_docs/adr/0007_user_owned_code_contract.md) (builder-only, on design branch) for the discovery contract and
-[ADR-0008](https://github.com/yeevon/ai-workflows/blob/design_branch/design_docs/adr/0008_declarative_authoring_surface.md) (builder-only, on design branch) for the authoring-surface decision.
+See [ADR-0007](../design_docs/adr/0007_user_owned_code_contract.md) (builder-only, on design branch) for the discovery contract and
+[ADR-0008](../design_docs/adr/0008_declarative_authoring_surface.md) (builder-only, on design branch) for the authoring-surface decision.
 
 ### Minimum module shape
 
@@ -606,7 +696,7 @@ partial loads, and the framework does not fake atomicity.
 
 Imported modules run in-process with full Python privileges. The framework surfaces import
 errors but does not lint, test, or sandbox user code — that is the user's risk surface, not
-ai-workflows' (see [ADR-0007](https://github.com/yeevon/ai-workflows/blob/design_branch/design_docs/adr/0007_user_owned_code_contract.md) (builder-only, on design branch)). Name collisions with shipped workflows are caught by the
+ai-workflows' (see [ADR-0007](../design_docs/adr/0007_user_owned_code_contract.md) (builder-only, on design branch)). Name collisions with shipped workflows are caught by the
 existing registration re-binding check and fail loudly.
 
 Entry-point discovery (PEP 621 `[project.entry-points.'ai_workflows.workflows']`) is a future

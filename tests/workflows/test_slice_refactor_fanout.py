@@ -397,13 +397,18 @@ def test_slice_refactor_tier_registry_composes_planner_tiers() -> None:
     sub-graph at runtime needs ``planner-explorer`` / ``planner-synth``
     to be resolvable from the same mapping. Composition lives in this
     helper at the module level so production dispatch picks up all
-    three tiers without dispatch knowing about the composition.
+    tiers without dispatch knowing about the composition.
+
+    M12 Task 01 adds ``auditor-sonnet`` and ``auditor-opus`` to the
+    planner registry; they propagate here automatically via composition.
     """
     reg = slice_refactor_tier_registry()
     assert set(reg.keys()) == {
         "planner-explorer",
         "planner-synth",
         "slice-worker",
+        "auditor-sonnet",
+        "auditor-opus",
     }
     slice_worker = reg["slice-worker"]
     assert isinstance(slice_worker.route, LiteLLMRoute)

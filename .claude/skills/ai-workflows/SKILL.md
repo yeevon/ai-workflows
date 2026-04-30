@@ -1,6 +1,7 @@
 ---
 name: ai-workflows
 description: Invoke ai-workflows planner / slice_refactor workflows through the MCP server (primary) or the aiw CLI (fallback). Use when the user asks for a plan from a goal, or to refactor a slice of code across parallel branches.
+allowed-tools: Bash
 ---
 
 # ai-workflows
@@ -91,6 +92,25 @@ row. This is the single cost surface the MCP server exposes.
 
 Returns `status="cancelled"` if the row was pending, or
 `status="already_terminal"` if the run had already finished.
+
+- **Cascade fixture layout** (M12 T06) — when capturing fixtures from a
+  cascade-enabled run (`AIW_CAPTURE_EVALS=<dataset>` + cascade env-var
+  flipped on), authors land under `evals/<dataset>/<workflow>/<cascade_name>_primary/`
+  and auditors under `<cascade_name>_auditor/`. See `evals/README.md` for
+  the full convention (planner: `<cascade_name>=planner_explorer_audit`;
+  slice_refactor: `<cascade_name>=slice_worker_audit`).
+
+### `run_audit_cascade(run_id_ref?, artefact_kind?, inline_artefact_ref?, tier_ceiling?)`
+
+Audit a completed run's artefact (or an inline dict you pass directly) via an `auditor-{sonnet,opus}` tier. Useful for:
+
+- **Spot-checking a plan** before committing to executing it.
+- **Auditing a draft artefact** without kicking off a full workflow run.
+- **Confidence-checking an artefact** from a completed run when you want a higher-tier opinion than the run's own cascade produced.
+
+Exactly one of `run_id_ref` / `inline_artefact_ref` must be set. When `run_id_ref` is set, `artefact_kind` is also required (caller picks the kind — planner uses `"plan"`, slice_refactor uses `"applied_artifacts"`; external workflows declare their own kinds in their workflow code per KDR-013). `tier_ceiling` defaults to `"opus"` (highest auditor tier — Max flat-rate $0). Use `"sonnet"` for cheaper audits when the artefact is short or pre-vetted.
+
+Returns `{passed, verdicts_by_tier, suggested_approach, total_cost_usd, by_role}`. On `passed=False`, surface the `suggested_approach` to the user verbatim — that's the auditor's recommendation. Standalone audit is single-pass (no retry, no HumanGate); the verdict comes back in the function return.
 
 ## Fallback surface — `aiw` CLI
 

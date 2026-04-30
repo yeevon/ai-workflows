@@ -14,7 +14,8 @@ Responsibilities
 * ``ClaudeCodeRoute`` — tier routed through the ``claude`` CLI subprocess
   (KDR-003 — no Anthropic API key is consulted).
 * ``Route`` — discriminated union; Pydantic picks the variant from ``kind``.
-* ``TierConfig`` — name + route + concurrency cap + per-call timeout.
+* ``TierConfig`` — name + route + concurrency cap + per-call timeout +
+  optional ``fallback: list[Route]`` cascade chain (M15 T01).
 * ``ModelPricing`` — per-million-token rates loaded from ``pricing.yaml``.
   Loaded by :func:`load_pricing` for the M2 Claude Code subprocess driver
   to compute per-call cost (LiteLLM enriches its own responses;
@@ -44,7 +45,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class UnknownTierError(Exception):
@@ -86,12 +87,39 @@ class TierConfig(BaseModel):
     ``max_concurrency`` caps in-flight calls at the provider semaphore
     level (architecture.md §8.6). ``per_call_timeout_s`` is the
     driver-level wall-clock timeout enforced by the M2 drivers.
+
+    The ``fallback`` field (added in M15 T01) holds an ordered list of
+    ``Route`` objects tried after the primary route's retry budget exhausts
+    (KDR-006). Cascade logic lives in ``TieredNode`` (M15 T02). Flat only
+    — nested fallbacks are rejected at schema-validation time per ADR-0006.
     """
 
     name: str
     route: Route
     max_concurrency: int = 1
     per_call_timeout_s: int = 120
+    # Added in M15 T01 (fallback cascade).
+    fallback: list[Route] = Field(
+        default_factory=list,
+        description=(
+            "Ordered fallback routes tried after this tier's retry budget "
+            "exhausts (M15). Flat only — routes in this list cannot themselves "
+            "carry a `fallback` field. Cascade logic lives in TieredNode (T02)."
+        ),
+    )
+
+    @field_validator("fallback", mode="before")
+    @classmethod
+    def _reject_nested_fallback(cls, v: Any) -> Any:
+        """Nested fallback is architecturally forbidden (ADR-0006)."""
+        if isinstance(v, list):
+            for i, item in enumerate(v):
+                if isinstance(item, dict) and "fallback" in item:
+                    raise ValueError(
+                        f"nested fallback is not allowed: fallback[{i}] "
+                        "declares its own fallback field."
+                    )
+        return v
 
 
 class ModelPricing(BaseModel):

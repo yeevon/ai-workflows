@@ -72,6 +72,7 @@ from ai_workflows.evals._capture_cli import (  # noqa: E402
 )
 from ai_workflows.primitives.logging import configure_logging  # noqa: E402
 from ai_workflows.primitives.storage import SQLiteStorage, default_storage_path  # noqa: E402
+from ai_workflows.primitives.tiers import ClaudeCodeRoute, LiteLLMRoute  # noqa: E402
 from ai_workflows.workflows import (  # noqa: E402
     ExternalWorkflowImportError,
     load_extra_workflow_modules,
@@ -439,6 +440,75 @@ def _emit_cli_run_result(result: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# `aiw run-scaffold` (M17 Task 01 — thin alias for scaffold_workflow)
+# ---------------------------------------------------------------------------
+
+
+@app.command("run-scaffold")
+def run_scaffold(
+    goal: str = typer.Option(
+        ...,
+        "--goal",
+        help="Description of the workflow to scaffold.",
+    ),
+    target: Path = typer.Option(
+        ...,
+        "--target",
+        help="Absolute path to write the .py file to.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite an existing file at target.",
+    ),
+    tier_override: list[str] = typer.Option(
+        [],
+        "--tier-override",
+        help=(
+            "Override a tier for this run (name=replacement). "
+            "Example: --tier-override scaffold-synth=planner-synth."
+        ),
+    ),
+    run_id: str | None = typer.Option(
+        None,
+        "--run-id",
+        help="Override the auto-generated run id.",
+    ),
+    budget_cap_usd: float | None = typer.Option(
+        None,
+        "--budget",
+        help="Per-run USD cap enforced by CostTrackingCallback.",
+    ),
+) -> None:
+    """Alias for ``aiw run scaffold_workflow`` with the scaffold's specific flags.
+
+    Routes through the existing ``aiw run <workflow>`` dispatch with
+    ``workflow="scaffold_workflow"`` and the scaffold's ``ScaffoldWorkflowInput``
+    shape.  This alias exists so users can pass ``--goal`` / ``--target`` /
+    ``--force`` directly instead of encoding them as ``--input KEY=VALUE`` pairs
+    on the generic ``aiw run`` surface.
+
+    M17 Task 01.
+    """
+    configure_logging(level="INFO")
+    tier_overrides = _parse_tier_overrides(tier_override)
+    inputs: dict[str, Any] = {
+        "goal": goal,
+        "target_path": str(target),
+        "force": force,
+    }
+    asyncio.run(
+        _run_async(
+            workflow="scaffold_workflow",
+            inputs=inputs,
+            budget_cap_usd=budget_cap_usd,
+            run_id=run_id,
+            tier_overrides=tier_overrides,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # `aiw show-inputs` (M19 T04 — locked H1, refinement #4)
 # ---------------------------------------------------------------------------
 
@@ -709,6 +779,124 @@ def _emit_list_runs_table(rows: list[dict[str, Any]]) -> None:
 
     typer.echo(_fmt(headers))
     for tup in formatted:
+        typer.echo(_fmt(tup))
+
+
+# ---------------------------------------------------------------------------
+# `aiw list-tiers` (M15 Task 03)
+# ---------------------------------------------------------------------------
+
+
+@app.command("list-tiers")
+def list_tiers(
+    workflow: str | None = typer.Option(
+        None,
+        "--workflow",
+        "-w",
+        help=(
+            "Filter to a single workflow (exact match). "
+            "If omitted, all registered workflows are listed."
+        ),
+    ),
+) -> None:
+    """Print the effective tier registry for registered workflows.
+
+    Shows: tier name, route kind (LiteLLM or ClaudeCode), model / CLI
+    flag, max concurrency, per-call timeout (s), and any configured
+    fallback chain (M15). Pure read — no dispatch is triggered.
+
+    For spec-API workflows (registered via ``register_workflow``) the
+    tier table comes from ``get_spec(name).tiers``.  Imperative
+    workflows (registered via ``register()`` only) are shown with a
+    single ``"(no tier registry exported)"`` row.
+
+    M15 Task 03 — implements AC-1, AC-2, AC-3, AC-4.
+    Relationship: surfaces layer import from workflows layer (allowed).
+    """
+    configure_logging(level="WARNING")
+    # Eager-import in-package workflow modules so their register() calls fire
+    # before we read the registry.  Decision 1 from Auditor cycle 1 (MED-01):
+    # without this, ``aiw list-tiers`` always prints "(no workflows registered)"
+    # because no other code path has imported the sibling modules yet.
+    workflows._eager_import_in_package_workflows()
+
+    names = workflows.list_workflows()
+    if workflow is not None:
+        if workflow not in names:
+            raise typer.BadParameter(
+                f"workflow {workflow!r} not registered",
+                param_hint="--workflow",
+            )
+        names = [workflow]
+
+    rows: list[tuple[str, ...]] = []
+    for name in names:
+        spec = workflows.get_spec(name)
+        if spec is None:
+            rows.append((name, "(no tier registry exported)", "", "", "", "", ""))
+        else:
+            for tier_name, tier in spec.tiers.items():
+                route = tier.route
+                if isinstance(route, LiteLLMRoute):
+                    kind = "LiteLLM"
+                    model_flag = route.model
+                elif isinstance(route, ClaudeCodeRoute):
+                    kind = "ClaudeCode"
+                    model_flag = route.cli_model_flag
+                else:
+                    kind = "unknown"
+                    model_flag = "(unknown route kind)"
+
+                fallback_parts: list[str] = []
+                for fb_route in tier.fallback:
+                    if isinstance(fb_route, LiteLLMRoute):
+                        fallback_parts.append(fb_route.model)
+                    else:
+                        fallback_parts.append(fb_route.cli_model_flag)
+                fallback_str = ", ".join(fallback_parts) if fallback_parts else "—"
+
+                rows.append((
+                    name,
+                    tier_name,
+                    kind,
+                    model_flag,
+                    str(tier.max_concurrency),
+                    str(tier.per_call_timeout_s),
+                    fallback_str,
+                ))
+
+    _emit_list_tiers_table(rows)
+
+
+def _emit_list_tiers_table(rows: list[tuple[str, ...]]) -> None:
+    """Render the tier table produced by ``aiw list-tiers``.
+
+    Column order: workflow | tier | kind | model/flag | concurrency |
+    timeout_s | fallback.  The fallback column contains ``—`` (em-dash)
+    when no fallback routes are configured; comma-joined route
+    identifiers otherwise.
+
+    M15 Task 03 — pure rendering helper; no I/O side effects beyond
+    :func:`typer.echo`.
+    """
+    headers = ("workflow", "tier", "kind", "model/flag", "concurrency", "timeout_s", "fallback")
+
+    if not rows:
+        typer.echo(" | ".join(headers))
+        typer.echo("(no workflows registered)")
+        return
+
+    widths = [len(h) for h in headers]
+    for tup in rows:
+        for i, value in enumerate(tup):
+            if len(value) > widths[i]:
+                widths[i] = len(value)
+
+    def _fmt(cols: tuple[str, ...]) -> str:
+        return " | ".join(col.ljust(widths[i]) for i, col in enumerate(cols))
+
+    typer.echo(_fmt(headers))
+    for tup in rows:
         typer.echo(_fmt(tup))
 
 

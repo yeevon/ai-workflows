@@ -7,6 +7,14 @@ annotations (KDR-008), so this module is the source of truth for both
 the tool-call request shape and the response shape every MCP host
 (Claude Code, Cursor, Zed, ...) consumes.
 
+M12 Task 05 adds :class:`RunAuditCascadeInput` and
+:class:`RunAuditCascadeOutput` for the standalone ``run_audit_cascade``
+MCP tool.  :class:`~ai_workflows.graph.audit_cascade.AuditVerdict` is
+imported from its canonical owner (``graph/audit_cascade.py:75``) for the
+``verdicts_by_tier`` type hint only — it is NOT added to ``__all__`` here
+(KDR-008 schema-first discipline; ``AuditVerdict`` is a graph primitive,
+not an MCP surface model).
+
 Relationship to other modules
 -----------------------------
 * :mod:`ai_workflows.mcp.server` — registers each tool with a signature
@@ -14,6 +22,9 @@ Relationship to other modules
 * :mod:`ai_workflows.primitives.storage` — the shape of :class:`RunSummary`
   mirrors the dict keys ``SQLiteStorage.list_runs`` returns so M4 T04 can
   construct summaries via ``RunSummary(**row)`` without a translation step.
+* :mod:`ai_workflows.graph.audit_cascade` — canonical owner of
+  :class:`~ai_workflows.graph.audit_cascade.AuditVerdict`; imported here
+  for the ``verdicts_by_tier`` type hint only (M12 T05).
 * [architecture.md §4.4](../../design_docs/architecture.md) — lists the
   four M4 tools (`run_workflow`, `resume_run`, `list_runs`, `cancel_run`);
   the originally-planned fifth tool ``get_cost_report`` was dropped at
@@ -36,7 +47,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from ai_workflows.graph.audit_cascade import AuditVerdict  # type-hint only; not in __all__
 
 __all__ = [
     "RunWorkflowInput",
@@ -47,6 +60,8 @@ __all__ = [
     "ListRunsInput",
     "CancelRunInput",
     "CancelRunOutput",
+    "RunAuditCascadeInput",
+    "RunAuditCascadeOutput",
 ]
 
 
@@ -310,3 +325,152 @@ class CancelRunOutput(BaseModel):
 
     run_id: str
     status: Literal["cancelled", "already_terminal"]
+
+
+class RunAuditCascadeInput(BaseModel):
+    """Arguments to the ``run_audit_cascade`` tool.
+
+    Audit an existing artefact via the M12 auditor tier outside of a
+    workflow run. The artefact is supplied via one of the two source
+    fields below — exactly one must be set; the validator rejects the
+    payload if zero or both are set.
+
+    Per ADR-0004 §Decision item 7 (amendment to land at M12 T07 close-out
+    — standalone tool is an adjacent caller of the auditor tier, not a
+    re-use of the compiled cascade graph; H1 Option A locked 2026-04-27),
+    this is the standalone invocation surface that lets a caller spot-
+    check a completed plan, draft spec, or generated code slice without
+    kicking off a full workflow.
+
+    A future task may extend the input with a ``file_path_ref`` slot for
+    sandboxed-root file-path artefact resolution; deferred from T05 per
+    scope discipline (see spec §Propagation status).
+    """
+
+    run_id_ref: str | None = Field(
+        default=None,
+        description=(
+            "Audit an artefact from a completed `aiw run` with this "
+            "run_id. MUST be paired with ``artefact_kind`` (caller "
+            "picks which kind — different workflows write under "
+            "different kinds: planner uses 'plan', slice_refactor uses "
+            "'applied_artifacts'). The tool calls "
+            "``storage.read_artifact(run_id, kind)``. Raises ToolError "
+            "if (run_id, kind) is not found."
+        ),
+    )
+    artefact_kind: str | None = Field(
+        default=None,
+        description=(
+            "Kind argument to ``storage.read_artifact(run_id, kind)``. "
+            "Required iff ``run_id_ref`` is set; rejected (ValidationError) "
+            "if ``run_id_ref`` is unset. Caller-known values include "
+            "``'plan'`` (planner workflow) and ``'applied_artifacts'`` "
+            "(slice_refactor workflow); external workflows declare their "
+            "own kinds via ``storage.write_artifact(run_id, kind, ...)`` "
+            "calls in their workflow code (KDR-013)."
+        ),
+    )
+    inline_artefact_ref: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Audit this dict verbatim. The dict shape is opaque to the "
+            "tool — the caller is responsible for shaping it consistent "
+            "with what the auditor's prompt expects. Useful for spot-"
+            "checking a draft artefact before committing it to a run."
+        ),
+    )
+    tier_ceiling: Literal["sonnet", "opus"] = Field(
+        default="opus",
+        description=(
+            "Auditor tier. 'opus' uses ``auditor-opus`` (highest tier). "
+            "'sonnet' uses ``auditor-sonnet`` (cheaper). Default 'opus' "
+            "matches ADR-0004's standalone-spot-check intent (Max flat-"
+            "rate $0). Per ADR-0009 / KDR-014: this is a per-call input "
+            "(operator picks which tier to spend on for this specific "
+            "audit), NOT a quality knob (which would be a workflow "
+            "default the framework owns). The framework default is "
+            "'opus'; the per-call override is the operator's privilege."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _exactly_one_artefact_source(self) -> RunAuditCascadeInput:
+        """Enforce one-of {run_id_ref, inline_artefact_ref}.
+
+        Require artefact_kind iff run_id_ref is set.
+        """
+        sources = [self.run_id_ref, self.inline_artefact_ref]
+        set_count = sum(1 for s in sources if s is not None)
+        if set_count != 1:
+            raise ValueError(
+                f"exactly one of run_id_ref / inline_artefact_ref must be set (got {set_count})"
+            )
+        if self.run_id_ref is not None and self.artefact_kind is None:
+            raise ValueError(
+                "artefact_kind is required when run_id_ref is set "
+                "(caller picks the kind: planner uses 'plan', "
+                "slice_refactor uses 'applied_artifacts', etc.)"
+            )
+        if self.run_id_ref is None and self.artefact_kind is not None:
+            raise ValueError(
+                "artefact_kind is only meaningful when run_id_ref is set"
+            )
+        return self
+
+
+class RunAuditCascadeOutput(BaseModel):
+    """Response from the ``run_audit_cascade`` tool.
+
+    Carries the verdict structure the caller can act on, plus
+    telemetry for the cost-aware operator.
+    """
+
+    passed: bool = Field(
+        description=(
+            "True iff the auditor returned `passed=True` on the artefact. "
+            "False on `passed=False`. The standalone tool uses single-pass "
+            "dispatch (RetryPolicy(max_transient_attempts=1, "
+            "max_semantic_attempts=1)) so there is no retry-cycle path."
+        ),
+    )
+    verdicts_by_tier: dict[str, AuditVerdict] = Field(
+        default_factory=dict,
+        description=(
+            "Map of {tier_name: AuditVerdict} for the auditor tier "
+            "invoked. T05 lands single-tier audit (one entry: "
+            "{auditor_tier_used: AuditVerdict(...)}); future multi-tier "
+            "cascading would populate multiple entries. AuditVerdict is "
+            "the same model T02's cascade primitive emits."
+        ),
+    )
+    suggested_approach: str | None = Field(
+        default=None,
+        description=(
+            "The auditor's suggested-approach text from the verdict "
+            "(matches `AuditVerdict.suggested_approach`). Populated on "
+            "`passed=False`; None on `passed=True`."
+        ),
+    )
+    total_cost_usd: float = Field(
+        default=0.0,
+        description=(
+            "Total USD cost of the audit invocation. Includes the auditor "
+            "LLM call; excludes the original artefact production cost. "
+            "Cost is $0 today under Claude Max flat-rate pricing "
+            "(`pricing.yaml`); a future per-tier-pricing change would "
+            "surface non-zero values without a schema break."
+        ),
+    )
+    by_role: dict[str, float] | None = Field(
+        default=None,
+        description=(
+            "Per-role cost breakdown via T04's "
+            "``CostTracker.by_role(audit_run_id)``. Populated only when "
+            "the audit call actually ran (not on early ToolError paths). "
+            "For the standalone single-pass audit (Option A bypasses the "
+            "cascade primitive — no primary call), one entry: "
+            "``{'auditor': <cost>}``. The author/primary key does NOT "
+            "appear because the supplied artefact is never re-generated."
+        ),
+    )

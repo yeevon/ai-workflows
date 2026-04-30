@@ -78,6 +78,12 @@ class TokenUsage(BaseModel):
     "local_coder" / ...). It isn't one of the three fields the task
     spec names under "extend", but ``CostTracker.by_tier`` cannot
     function without it — see T08 CHANGELOG deviations.
+
+    ``role`` (M12 T04 — KDR-011) is the cascade role tag (``"author"`` /
+    ``"auditor"`` / ``"verdict"``). Empty string for non-cascade calls.
+    ``CostTracker.by_role`` reads it. Stamped by :func:`tiered_node`
+    before handing the record to the cost callback, mirroring the
+    existing ``tier`` stamp at ``tiered_node.py:264-268``.
     """
 
     input_tokens: int = 0
@@ -87,6 +93,12 @@ class TokenUsage(BaseModel):
     cost_usd: float = 0.0
     model: str = ""
     tier: str = ""
+    role: str = ""
+    """M12 T04 — KDR-011: cascade role tag (``"author"`` / ``"auditor"`` /
+    ``"verdict"``).  Empty string for non-cascade calls.
+    ``CostTracker.by_role`` reads it.  Stamped by :func:`tiered_node` before
+    handing the record to the cost callback, mirroring the existing ``tier``
+    stamp at ``tiered_node.py:264-268``."""
     sub_models: list[TokenUsage] = Field(default_factory=list)
 
 
@@ -137,6 +149,24 @@ class CostTracker:
         totals: dict[str, float] = defaultdict(float)
         for entry in self._entries.get(run_id, ()):
             _accumulate_by_model(entry, totals, include_sub_models=include_sub_models)
+        return dict(totals)
+
+    def by_role(self, run_id: str) -> dict[str, float]:
+        """Return ``{role: cost_usd}`` for ``run_id``. Sub-model costs roll into
+        the parent entry's role — sub-calls inherit the orchestrating role.
+
+        Empty-string role (non-cascade calls) shows under the ``""`` key.  Callers
+        that want only the cascade roles can ignore the empty key with
+        ``{r: c for r, c in tracker.by_role(run_id).items() if r}``.
+
+        M12 T04 — KDR-011 telemetry: feeds the empirical-tuning loop that decides
+        when to flip a workflow's ``_AUDIT_CASCADE_ENABLED_DEFAULT`` to ``True``
+        (ADR-0004 §Decision item 6). Aggregating by role surfaces the
+        author-vs-auditor cost split per run.
+        """
+        totals: dict[str, float] = defaultdict(float)
+        for entry in self._entries.get(run_id, ()):
+            totals[entry.role] += _roll_cost(entry)
         return dict(totals)
 
     def check_budget(self, run_id: str, cap_usd: float) -> None:
