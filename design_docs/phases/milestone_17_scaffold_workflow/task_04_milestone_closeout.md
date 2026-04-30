@@ -1,6 +1,6 @@
 # Task 04 — Milestone Close-out
 
-**Status:** 📝 Planned.
+**Status:** ✅ Done (2026-04-30).
 **Grounding:** [milestone README](README.md) · [CLAUDE.md](../../../CLAUDE.md) close-out conventions · [M12 T07](../milestone_12_audit_cascade/task_07_milestone_closeout.md) (pattern mirrored) · [design_docs/roadmap.md](../../roadmap.md) · [CHANGELOG.md](../../../CHANGELOG.md) · [pyproject.toml](../../../pyproject.toml) (version bump to 0.4.0).
 
 ## What to Build
@@ -67,6 +67,6 @@ Also fix two stale references on the M17 narrative line (line 58 at spec-generat
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-02 — Dependency-auditor terminal-gate framing** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-02 — Dependency-auditor terminal-gate framing** (severity: LOW, source: task_analysis.md round 1)
       AC-7's dependency-auditor gate runs as a parallel terminal-gate reviewer alongside sr-dev / sr-sdet (autopilot boundary, locked 2026-04-27). No deps change at T04, so the audit is short — but it must run.
       **Recommendation:** Auditor and orchestrator will trigger dep-auditor automatically per CLAUDE.md; this carry-over is a reminder that it is not optional even for a version-bump-only commit.

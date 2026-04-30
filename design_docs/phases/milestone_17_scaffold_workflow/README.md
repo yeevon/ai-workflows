@@ -1,6 +1,6 @@
 # Milestone 17 — `scaffold_workflow` Meta-Workflow
 
-**Status:** 📝 Planned (drafted 2026-04-23).
+**Status:** ✅ Complete (2026-04-30).
 **Grounding:** [architecture.md §4.2 + §4.3](../../architecture.md) · [roadmap.md](../../roadmap.md) · [analysis/post_0.1.2_audit_disposition.md](../../analysis/post_0.1.2_audit_disposition.md) · [M15 README](../milestone_15_tier_overlay/README.md) (tier fallback chains — deferred; not a hard M17 dependency) · [M16 README](../milestone_16_external_workflows/README.md) (external load path — precondition, shipped 2026-04-24) · [M11 README](../milestone_11_gate_review/README.md) (gate-pause projection — M17 uses `HumanGate` with reviewable state).
 
 ## Why this milestone exists
@@ -87,7 +87,7 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 - [x] **CLI surface.** `aiw run-scaffold --goal ... --target ~/path/file.py [--force]` alias added. Also works via `aiw run scaffold_workflow --input goal=... --input target_path=...`.
 - [x] **Skill-install doc extension.** New `§Generating your own workflow` section in [`skill_install.md`](../milestone_9_skill/skill_install.md) — T03 deliverable.
 - [x] **ADR-0010 added** under `design_docs/adr/0010_user_owned_generated_code.md`. Full text drafted at T03.
-- [ ] **CS300 dogfood smoke.** T02 deliverable (live run + CHANGELOG entry operator-dependent; smoke file + prompt iteration landed at T02).
+- [ ] **CS300 dogfood smoke.** T02 deliverable (live run + CHANGELOG entry operator-dependent; smoke file + prompt iteration landed at T02). **Deferred** — operator-dependent; live smoke requires `AIW_E2E=1` + Claude Code CLI auth. Not a blocker for 0.4.0.
 - [x] **Hermetic tests.** New `tests/workflows/test_scaffold_workflow.py` covering:
     - Validator: parseable Python passes; unparseable Python rejects; missing `register_workflow()` call rejects; valid `register_workflow(SPEC)` with Name-reference passes.
     - Write safety: target inside `ai_workflows/` rejects; nonexistent parent rejects; existing file without `--force` rejects; existing file with `--force` overwrites.
@@ -127,7 +127,7 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 | 01 | [`scaffold_workflow` graph + validator + write-safety + CLI/MCP wiring](task_01_scaffold_workflow.md) | code + test | ✅ Built (cycle 1) |
 | 02 | Prompt template iteration + live-mode smoke + CS300 dogfood | prompt + test | ✅ Built (cycle 1) |
 | 03 | ADR-0010 + skill-install §Generating-your-own-workflow + `docs/writing-a-workflow.md` §Scaffolding | doc | ✅ Done |
-| 04 | Milestone close-out | doc | 📝 Planned |
+| 04 | Milestone close-out | doc | ✅ Done |
 
 Per-task specs land as each predecessor closes.
 
@@ -165,3 +165,13 @@ Filled in at audit time. Anticipated forward-deferrals:
 ## Issues
 
 Land under [issues/](issues/) after each task's first audit.
+
+## Outcome
+
+*(Bullets ordered chronologically by landing date.)*
+
+- **T01 — `scaffold_workflow` graph + validator + write safety + CLI/MCP wiring** (2026-04-30): New modules `scaffold_workflow.py`, `_scaffold_write_safety.py`, `_scaffold_validator.py`, `scaffold_workflow_prompt.py`. `ScaffoldWorkflowInput`, `ScaffoldedWorkflow`, `WriteOutcome`, `ScaffoldState` pydantic models. `build_scaffold_workflow()` + `scaffold_workflow_tier_registry()` + module-top `register("scaffold_workflow", build_scaffold_workflow)`. `aiw run-scaffold` CLI alias. `HumanGate` preview with `spec_python` + write-target summary. Atomic write to disk (`mkstemp` + `os.replace`). Write-safety guards (package-path rejection, non-writable parent, existing-file / `--force` guard). KDR-003/004/006/008/009/013/014 compliant. 25 hermetic tests in `tests/workflows/test_scaffold_workflow.py` + 1 HTTP round-trip in `tests/mcp/test_scaffold_workflow_http.py`.
+- **T02 — Prompt template iteration + live-mode smoke** (2026-04-30): `SCAFFOLD_PROMPT_TEMPLATE` iterated to teach `WorkflowSpec` field inventory, `register_workflow(spec)` calling convention, four-layer contract, tier-naming convention, and canonical example step. Inner imports hoisted to module-level (ADV-1). `atomic_write` docstring corrected (`NamedTemporaryFile` → `mkstemp`, ADV-2). `test_render_scaffold_prompt_brace_escaping` test added (LOW-3). `tests/cli/test_run_scaffold_alias.py` with 5 CLI-runner tests (LOW-2). `tests/release/test_scaffold_live_smoke.py` (AIW_E2E=1-gated). CS300 dogfood smoke deferred to operator (operator-dependent; `AIW_E2E=1` + Claude Code CLI auth required).
+- **T03 — ADR-0010 + skill-install §Generating-your-own-workflow + `docs/writing-a-workflow.md` §Scaffolding** (2026-04-30): `design_docs/adr/0010_user_owned_generated_code.md` — ADR-0010 records risk-ownership framing, validator-scope decision, write-target safety rules, `AIW_EXTRA_WORKFLOW_MODULES` handoff, no-auto-registration. `skill_install.md` §7 appended. `docs/writing-a-workflow.md` §Scaffolding inserted after §Minimum viable spec (TA-LOW-03). ADR-0007 attribution corrected `M16 T03 → M16 T01` (TA-LOW-01).
+- **T04 — Milestone close-out** (2026-04-30): version bump `0.3.1 → 0.4.0` in `ai_workflows/__init__.py`. `[Unreleased]` CHANGELOG entries promoted to `## [0.4.0] - 2026-04-30`. roadmap.md M17 row flipped ✅ complete; stale refs fixed (`ADR-0008 → ADR-0010`, `AIW_WORKFLOWS_PATH → AIW_EXTRA_WORKFLOW_MODULES`). Root README.md M17 row flipped Complete. Milestone README Status + task row 04 + exit criteria updated. Issue file created.
+- **Green-gate snapshot:** `uv run pytest` ✅ (1510 passed, 12 skipped) · `uv run lint-imports` ✅ (5 contracts) · `uv run ruff check` ✅.

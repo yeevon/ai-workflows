@@ -24,7 +24,7 @@ A LangGraph-native workflow framework for solo developers. Orchestrates multi-st
 | **M14 — MCP HTTP transport** | Complete (2026-04-22) |
 | M15 — Tier overlay + fallback chains | Planned |
 | **M16 — External workflows + primitives load path** | Complete (2026-04-24) |
-| M17 — `scaffold_workflow` meta-workflow | Planned |
+| **M17 — `scaffold_workflow` meta-workflow** | Complete (2026-04-30) |
 | **M19 — Declarative authoring surface** | Complete (2026-04-26) |
 | **M20 — Autonomy loop optimization** | Complete (2026-04-28) |
 | **M21 — Autonomy loop continuation** | Complete (2026-04-29) |

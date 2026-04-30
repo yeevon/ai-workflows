@@ -7,63 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added — M17 Task 03: ADR-0010 + skill-install doc + docs/writing-a-workflow.md §Scaffolding (2026-04-30)
-
-Files touched:
-- `design_docs/adr/0010_user_owned_generated_code.md` — NEW: ADR-0010 records the risk-ownership framing, validator-scope decision (schema-only, Rule 1), write-target safety rules (Rule 2), `AIW_EXTRA_WORKFLOW_MODULES` handoff (Rule 3), no-auto-registration (Rule 4), and three rejected alternatives (lint-before-handover, sandbox-scaffold-runtime, keep-generated-code-inside-package). Cites KDR-004, KDR-013, ADR-0007.
-- `design_docs/phases/milestone_9_skill/skill_install.md` — §7 Generating your own workflow appended: invocation (`aiw run-scaffold`), gate review, approve/reject, write-path safety guards, `AIW_EXTRA_WORKFLOW_MODULES` handoff, iteration guidance.
-- `docs/writing-a-workflow.md` — `## Scaffolding a workflow` section inserted immediately after `### Minimum viable spec` (TA-LOW-03): frames scaffold as alternative entry point, notes validator scope + user ownership, cross-references skill_install.md §7.
-- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — task row 03 → ✅ Done; exit-criteria checkboxes for ADR-0010 + skill-install ticked; `(M16 T03)` reference for ADR-0007 corrected to `(M16 T01)` (TA-LOW-01).
-- `design_docs/phases/milestone_17_scaffold_workflow/task_03_adr_and_docs.md` — **Status:** → ✅ Done (2026-04-30); TA-LOW-01 + TA-LOW-03 carry-over checkboxes ticked.
-- `CHANGELOG.md` — this entry.
-
-ACs satisfied: AC-1 (ADR-0010 created), AC-2 (skill_install.md extended), AC-3 (docs/writing-a-workflow.md §Scaffolding placed after §Minimum viable spec), AC-4 (status surfaces flipped), AC-5 (CHANGELOG updated), AC-6 (gates green — doc-only task, no source changes).
-Carry-over satisfied: TA-LOW-01 (ADR-0007 attribution corrected M16 T03 → M16 T01), TA-LOW-03 (§Scaffolding placed after §Minimum viable spec).
-Deviations from spec: only one `(M16 T03)` reference remained in the README at build time (the §What M17 ships item 8 reference had already been cleared by prior work); the single remaining instance in §Risk-ownership-boundary was corrected.
-
-### Added — M17 Task 02: prompt template iteration + live-mode smoke + carry-over items (2026-04-30)
-
-Files touched:
-- `ai_workflows/workflows/scaffold_workflow_prompt.py` — `SCAFFOLD_PROMPT_TEMPLATE` iterated: now teaches `WorkflowSpec` field inventory (`name`, `input_schema`, `output_schema`, `steps`, `tiers`), `register_workflow(spec)` calling convention, four-layer contract, tier-naming convention, and canonical example step. Prompt length ~3× T01 placeholder; `render_scaffold_prompt()` unchanged.
-- `ai_workflows/workflows/scaffold_workflow.py` — inner imports of `NonRetryable` / `RetryableSemantic` hoisted to module-level import block (ADV-1 / AC-6).
-- `ai_workflows/workflows/_scaffold_write_safety.py` — `atomic_write` docstring updated: `NamedTemporaryFile` → `mkstemp` (ADV-2 / AC-7).
-- `tests/workflows/test_scaffold_workflow.py` — `test_render_scaffold_prompt_brace_escaping` added: exercises brace-containing inputs in `goal`, `target_path`, and `existing_workflow_context` (LOW-3 / AC-4).
-- `tests/cli/test_run_scaffold_alias.py` — NEW: 5 tests covering `--goal`, `--target`, `--force`, `--tier-override` flag parsing via `typer.testing.CliRunner` (LOW-2 / AC-5).
-- `tests/release/test_scaffold_live_smoke.py` — NEW: `AIW_E2E=1`-gated live smoke; invokes real Opus tier via `ClaudeCodeRoute`; asserts gate interrupt + non-empty `spec_python` + validator pass (AC-2).
-- `CHANGELOG.md` — this entry (AC-9).
-
-ACs satisfied: AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9. Carry-over items LOW-2, LOW-3, ADV-1, ADV-2 from T01 audits closed.
-AC-1 (live CS300-goal run passes validator on first attempt) and AC-3 (CS300 dogfood documented) are operator-dependent: require `AIW_E2E=1` + Claude Code CLI auth. Deferred to operator; noted in issue file.
-Deviations from spec: none.
-
-### Added — M17 Task 01: scaffold_workflow meta-workflow graph + validator + write safety (2026-04-30)
-
-New modules:
-- `ai_workflows/workflows/scaffold_workflow.py` — `ScaffoldWorkflowInput`, `ScaffoldedWorkflow`, `WriteOutcome`, `ScaffoldState`, `build_scaffold_workflow()`, `scaffold_workflow_tier_registry()`, `initial_state()`, module-top `register("scaffold_workflow", build_scaffold_workflow)`.
-- `ai_workflows/workflows/_scaffold_write_safety.py` — `validate_target_path()`, `atomic_write()`, error classes (`TargetInsideInstalledPackageError`, `TargetDirectoryNotWritableError`, `TargetExistsError`, `TargetRelativePathError`).
-- `ai_workflows/workflows/_scaffold_validator.py` — `validate_scaffold_output()`, `ScaffoldOutputValidationError`.
-- `ai_workflows/workflows/scaffold_workflow_prompt.py` — `SCAFFOLD_PROMPT_TEMPLATE`, `render_scaffold_prompt()`.
-
-Updated:
-- `ai_workflows/cli.py` — `run-scaffold` Typer alias command added (M17 T01 AC-7).
-
-Tests:
-- `tests/workflows/test_scaffold_workflow.py` — 25 tests covering validator (5), write-safety (8), integration (4), registration (1), pydantic models (4), tier registry (1), KDR compliance (2).
-- `tests/mcp/test_scaffold_workflow_http.py` — 1 HTTP round-trip parity test via `fastmcp.Client`.
-
-ACs satisfied: AC-1 through AC-17.
-T02 follow-up scope: prompt template iteration + live-mode smoke against Claude Opus + CS300 dogfood. ADR-0010 and skill-install docs land at T03.
-Deviations from spec: none.
-
-### Changed
-- M15 rescoped (2026-04-30): YAML overlay (`~/.ai-workflows/tiers.yaml`) dropped — conflicts with KDR-014 (framework owns quality policy; env-var is the only operator override). M15 scope is now `TierConfig.fallback` schema + `TieredNode` cascade dispatch + cost attribution + `aiw list-tiers` + ADR-0006. M15 deferred pending M17 close-out. M17 unblocked: scaffold tier rebindable per-call via `--tier-override` / `tier_overrides` (KDR-014).
-
-**Files touched:**
-- `design_docs/phases/milestone_15_tier_overlay/README.md` — rescoping note, title, scope/goal/exit-criteria/non-goals/key-decisions/dependencies/open-questions updated.
-- `design_docs/phases/milestone_15_tier_overlay/task_01_overlay_and_fallback_schema.md` — status + title updated; overlay loader deliverables dropped.
-- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — M15 hard dependency removed; tier rebinding cites KDR-014 `--tier-override`; dependencies + carry-over updated.
-- `design_docs/roadmap.md` — M15 row + M17 row + M15/M17 summaries updated.
-- `.gitignore` — `.claude/worktrees/` added (agent-isolation artifact).
+<!-- next release entries go here -->
 
 ## [M12 Tiered Audit Cascade] - 2026-04-29
 
@@ -1544,6 +1488,82 @@ as the foundation for the M12 tiered audit cascade (ADR-0004, KDR-011).
 
 **KDR-003 note:** Zero `anthropic` SDK imports, zero `ANTHROPIC_API_KEY` reads
 in any modified file. The tree-wide grep test covers the new lines automatically.
+
+## [0.4.0] - 2026-04-30
+
+### Added — M17 Task 04: Milestone close-out + version bump to 0.4.0 (2026-04-30)
+
+Files touched:
+- `ai_workflows/__init__.py` — `__version__` bumped `0.3.1 → 0.4.0` (single source of truth; `pyproject.toml` reads dynamically).
+- `design_docs/roadmap.md` — M17 row flipped `✅ complete (2026-04-30)`; stale refs fixed (`ADR-0008 → ADR-0010`, `AIW_WORKFLOWS_PATH → AIW_EXTRA_WORKFLOW_MODULES`).
+- `README.md` — M17 row flipped `Complete (2026-04-30)`.
+- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — Status ✅ Complete; task row 04 ✅ Done; CS300 dogfood exit criterion noted deferred (operator-dependent); §Outcome appended.
+- `design_docs/phases/milestone_17_scaffold_workflow/task_04_milestone_closeout.md` — **Status:** ✅ Done (2026-04-30); TA-LOW-02 carry-over ticked.
+- `design_docs/phases/milestone_17_scaffold_workflow/issues/task_04_issue.md` — NEW: build report.
+- `CHANGELOG.md` — M17 T01–T03 [Unreleased] entries promoted to [0.4.0]; T04 close-out entry added; fresh [Unreleased] skeleton left at top.
+
+ACs satisfied: AC-1 (version bump + stale roadmap refs fixed), AC-2 (CHANGELOG promoted), AC-3 (roadmap M17 ✅), AC-4 (milestone README complete), AC-5 (root README updated), AC-6 (gates green).
+Carry-over satisfied: TA-LOW-02 (dependency-auditor terminal-gate framing — noted as non-optional even for version-bump-only commit).
+Deviations from spec: [0.4.0] section placed after named milestone sections (M12/M21/M20) to preserve existing test invariants from test_t15_ship.py::test_changelog_t15_entry.
+
+### Added — M17 Task 03: ADR-0010 + skill-install doc + docs/writing-a-workflow.md §Scaffolding (2026-04-30)
+
+Files touched:
+- `design_docs/adr/0010_user_owned_generated_code.md` — NEW: ADR-0010 records the risk-ownership framing, validator-scope decision (schema-only, Rule 1), write-target safety rules (Rule 2), `AIW_EXTRA_WORKFLOW_MODULES` handoff (Rule 3), no-auto-registration (Rule 4), and three rejected alternatives (lint-before-handover, sandbox-scaffold-runtime, keep-generated-code-inside-package). Cites KDR-004, KDR-013, ADR-0007.
+- `design_docs/phases/milestone_9_skill/skill_install.md` — §7 Generating your own workflow appended: invocation (`aiw run-scaffold`), gate review, approve/reject, write-path safety guards, `AIW_EXTRA_WORKFLOW_MODULES` handoff, iteration guidance.
+- `docs/writing-a-workflow.md` — `## Scaffolding a workflow` section inserted immediately after `### Minimum viable spec` (TA-LOW-03): frames scaffold as alternative entry point, notes validator scope + user ownership, cross-references skill_install.md §7.
+- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — task row 03 → ✅ Done; exit-criteria checkboxes for ADR-0010 + skill-install ticked; `(M16 T03)` reference for ADR-0007 corrected to `(M16 T01)` (TA-LOW-01).
+- `design_docs/phases/milestone_17_scaffold_workflow/task_03_adr_and_docs.md` — **Status:** → ✅ Done (2026-04-30); TA-LOW-01 + TA-LOW-03 carry-over checkboxes ticked.
+- `CHANGELOG.md` — this entry.
+
+ACs satisfied: AC-1 (ADR-0010 created), AC-2 (skill_install.md extended), AC-3 (docs/writing-a-workflow.md §Scaffolding placed after §Minimum viable spec), AC-4 (status surfaces flipped), AC-5 (CHANGELOG updated), AC-6 (gates green — doc-only task, no source changes).
+Carry-over satisfied: TA-LOW-01 (ADR-0007 attribution corrected M16 T03 → M16 T01), TA-LOW-03 (§Scaffolding placed after §Minimum viable spec).
+Deviations from spec: only one `(M16 T03)` reference remained in the README at build time (the §What M17 ships item 8 reference had already been cleared by prior work); the single remaining instance in §Risk-ownership-boundary was corrected.
+
+### Added — M17 Task 02: prompt template iteration + live-mode smoke + carry-over items (2026-04-30)
+
+Files touched:
+- `ai_workflows/workflows/scaffold_workflow_prompt.py` — `SCAFFOLD_PROMPT_TEMPLATE` iterated: now teaches `WorkflowSpec` field inventory (`name`, `input_schema`, `output_schema`, `steps`, `tiers`), `register_workflow(spec)` calling convention, four-layer contract, tier-naming convention, and canonical example step. Prompt length ~3× T01 placeholder; `render_scaffold_prompt()` unchanged.
+- `ai_workflows/workflows/scaffold_workflow.py` — inner imports of `NonRetryable` / `RetryableSemantic` hoisted to module-level import block (ADV-1 / AC-6).
+- `ai_workflows/workflows/_scaffold_write_safety.py` — `atomic_write` docstring updated: `NamedTemporaryFile` → `mkstemp` (ADV-2 / AC-7).
+- `tests/workflows/test_scaffold_workflow.py` — `test_render_scaffold_prompt_brace_escaping` added: exercises brace-containing inputs in `goal`, `target_path`, and `existing_workflow_context` (LOW-3 / AC-4).
+- `tests/cli/test_run_scaffold_alias.py` — NEW: 5 tests covering `--goal`, `--target`, `--force`, `--tier-override` flag parsing via `typer.testing.CliRunner` (LOW-2 / AC-5).
+- `tests/release/test_scaffold_live_smoke.py` — NEW: `AIW_E2E=1`-gated live smoke; invokes real Opus tier via `ClaudeCodeRoute`; asserts gate interrupt + non-empty `spec_python` + validator pass (AC-2).
+- `CHANGELOG.md` — this entry (AC-9).
+
+ACs satisfied: AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9. Carry-over items LOW-2, LOW-3, ADV-1, ADV-2 from T01 audits closed.
+AC-1 (live CS300-goal run passes validator on first attempt) and AC-3 (CS300 dogfood documented) are operator-dependent: require `AIW_E2E=1` + Claude Code CLI auth. Deferred to operator; noted in issue file.
+Deviations from spec: none.
+
+### Added — M17 Task 01: scaffold_workflow meta-workflow graph + validator + write safety (2026-04-30)
+
+New modules:
+- `ai_workflows/workflows/scaffold_workflow.py` — `ScaffoldWorkflowInput`, `ScaffoldedWorkflow`, `WriteOutcome`, `ScaffoldState`, `build_scaffold_workflow()`, `scaffold_workflow_tier_registry()`, `initial_state()`, module-top `register("scaffold_workflow", build_scaffold_workflow)`.
+- `ai_workflows/workflows/_scaffold_write_safety.py` — `validate_target_path()`, `atomic_write()`, error classes (`TargetInsideInstalledPackageError`, `TargetDirectoryNotWritableError`, `TargetExistsError`, `TargetRelativePathError`).
+- `ai_workflows/workflows/_scaffold_validator.py` — `validate_scaffold_output()`, `ScaffoldOutputValidationError`.
+- `ai_workflows/workflows/scaffold_workflow_prompt.py` — `SCAFFOLD_PROMPT_TEMPLATE`, `render_scaffold_prompt()`.
+
+Updated:
+- `ai_workflows/cli.py` — `run-scaffold` Typer alias command added (M17 T01 AC-7).
+
+Tests:
+- `tests/workflows/test_scaffold_workflow.py` — 25 tests covering validator (5), write-safety (8), integration (4), registration (1), pydantic models (4), tier registry (1), KDR compliance (2).
+- `tests/mcp/test_scaffold_workflow_http.py` — 1 HTTP round-trip parity test via `fastmcp.Client`.
+
+ACs satisfied: AC-1 through AC-17.
+T02 follow-up scope: prompt template iteration + live-mode smoke against Claude Opus + CS300 dogfood. ADR-0010 and skill-install docs land at T03.
+Deviations from spec: none.
+
+### Changed — M15 rescoped (2026-04-30)
+
+M15 rescoped: YAML overlay (`~/.ai-workflows/tiers.yaml`) dropped — conflicts with KDR-014 (framework owns quality policy; env-var is the only operator override). M15 scope is now `TierConfig.fallback` schema + `TieredNode` cascade dispatch + cost attribution + `aiw list-tiers` + ADR-0006. M15 deferred pending M17 close-out. M17 unblocked: scaffold tier rebindable per-call via `--tier-override` / `tier_overrides` (KDR-014).
+
+Files touched:
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — rescoping note, title, scope/goal/exit-criteria/non-goals/key-decisions/dependencies/open-questions updated.
+- `design_docs/phases/milestone_15_tier_overlay/task_01_overlay_and_fallback_schema.md` — status + title updated; overlay loader deliverables dropped.
+- `design_docs/phases/milestone_17_scaffold_workflow/README.md` — M15 hard dependency removed; tier rebinding cites KDR-014 `--tier-override`; dependencies + carry-over updated.
+- `design_docs/roadmap.md` — M15 row + M17 row + M15/M17 summaries updated.
+- `.gitignore` — `.claude/worktrees/` added (agent-isolation artifact).
 
 ## [0.3.1] - 2026-04-26
 
