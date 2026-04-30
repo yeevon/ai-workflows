@@ -1,7 +1,10 @@
 # M17 — Task Analysis
 
-**Round:** 3 | **Analyzed on:** 2026-04-30 | **Analyst:** task-analyzer agent
-**Specs analyzed:** `task_01_scaffold_workflow.md` + milestone `README.md` (T02–T04 incremental-spec, absent by design).
+**Round:** 2 — T02/T03/T04 spec review | **Analyzed on:** 2026-04-30 | **Analyst:** task-analyzer agent
+**Specs analyzed:** `task_02_prompt_iteration_live_smoke.md`, `task_03_adr_and_docs.md`, `task_04_milestone_closeout.md`
+**For reference (not re-graded):** `task_01_scaffold_workflow.md` shipped at 95dc592 (2026-04-30).
+
+> **Round 1 history.** Four MEDIUM findings (M1, M2, M3, M4) and three LOW findings — all applied between rounds. Round 2 verifies the fixes against the live tree and re-sweeps for any new drift.
 
 ## Summary
 
@@ -9,73 +12,129 @@
 | --- | --- |
 | 🔴 HIGH | 0 |
 | 🟡 MEDIUM | 0 |
-| 🟢 LOW | 4 |
+| 🟢 LOW | 0 |
 
-**Stop verdict:** LOW-ONLY
+**Stop verdict:** CLEAN
 
-Round-3 hostile re-read confirms the round-2 HIGH+MEDIUM fixes all landed correctly:
+## Round 1 fixes — verification
 
-- **H1 (round 2):** README:64 now reads `aiw resume scaffold-qg-1 --gate-response approved   # or --gate-response rejected to retry`. Verified `cli.py:525-527` matches: `--gate-response` is the only flag exposed; no `--approve` / `--reject` strings remain anywhere in the M17 specs (`grep -n -- "--approve\|--reject"` returns zero hits).
-- **M1 (round 2):** README §Why + §What M17 ships swept to `WorkflowSpec` + `register_workflow(spec)` voice. Lines 31, 40, 41, 44, 48, 61, 78, 92, 101, 116 all consistent — validator framing is `register_workflow()` everywhere it matters; the only bare `register(...)` mention is the deliberate Tier-4 escape-hatch sentence at README:76 which now correctly reads *"Tier-4 escape-hatch — the scaffold itself is imperative; the code it emits uses the declarative `WorkflowSpec` + `register_workflow(spec)` API"*. T01:22 + T01:105 carry the matching "Why register_workflow, not register" rationale.
-- **M2 (round 2):** AC-3 at T01:182 now reads *"Five validator tests pass (three reject cases + two accept cases including the Name-reference form)"* — arithmetic now matches the list at lines 136–140 (3 reject + 2 accept = 5).
-- **M3 (round 2):** Risk #1 at T01:216 now reads *"a single `register_workflow(SPEC)` call importing the spec from elsewhere"* — post-pivot canonical form. No bare `register(...)` example remains.
-- **M4 (round 2):** README:148 collapsed to *"`RetryingEdge` retries the LLM call (per the `classify()` taxonomy). The validator's failure message is re-rendered into the next prompt attempt to guide the model. T01 scope is the retry wiring; retry-budget tuning and gate-surfacing on exhaustion are T02 scope."* — aligns with T01 AC-10 (retry wiring at T01, budget tuning at T02). The orchestrator chose option (b) — keep T01 scope minimal.
+All four MEDIUM findings from round 1 are correctly applied; the three LOW findings were pushed to spec carry-over. Verification:
 
-The four LOWs from round 2 (L1–L4) are re-evaluated below — none promote to MEDIUM/HIGH; L1–L3 carry forward to spec carry-over per LOW-ONLY discipline; L4 was already applied in round 2 and is closed as a no-op.
+### M1 + M2 — `roadmap.md` stale ADR-0008 + `AIW_WORKFLOWS_PATH` references
 
-No new findings from the hostile re-read. Specs ready for `/clean-implement`.
+**Spec landing:** `task_04_milestone_closeout.md:38-40` — explicit deliverable bullets:
+> Also fix two stale references on the M17 narrative line (line 58 at spec-generation time):
+> - Replace `[ADR-0008](adr/0008_user_owned_generated_code.md)` (twice) with `[ADR-0010](adr/0010_user_owned_generated_code.md)` …
+> - Replace `AIW_WORKFLOWS_PATH` with `AIW_EXTRA_WORKFLOW_MODULES` — M16 shipped with the env-var renamed (verified at `ai_workflows/workflows/loader.py:46`).
 
-## Findings
+And in `task_04_milestone_closeout.md:49`, AC-1 reinforces:
+> Also fix two stale roadmap.md references: ADR-0008 → ADR-0010, `AIW_WORKFLOWS_PATH` → `AIW_EXTRA_WORKFLOW_MODULES`.
 
-### 🟢 LOW
+**Live-tree verification:**
+- `roadmap.md:58` still has the stale references (expected — fix lands at T04 close-out, not earlier).
+- `ai_workflows/workflows/loader.py:46` has `ENV_VAR_NAME = "AIW_EXTRA_WORKFLOW_MODULES"` ✓.
+- `design_docs/adr/` listing confirms `0008_declarative_authoring_surface.md` occupies slot 0008; slot 0010 is genuinely free ✓.
 
-#### L1 — Validator minimum-length-floor + `test_validator_rejects_trivially_short_source` retune as T02 carry-over
+**Status:** ✅ Resolved (deliverable + AC both name the fix).
 
-**Task:** T01.
-**Location:** `task_01_scaffold_workflow.md:140` (test) + `task_01_scaffold_workflow.md:216` (Risk #1).
-**Issue:** Risk #1 mentions tunability but T01 has no carry-over section binding the 80-char floor to the test's expected-rejection length. If T02 retunes the floor without retuning the test, the test silently passes for the wrong reason (rejection happens for a different fixture).
-**Recommendation:** Add a carry-over note at the bottom of T01.
-**Push to spec:** Add to `task_01_scaffold_workflow.md` carry-over section: *"Carry-over to T02 — the validator's 80-char minimum-length floor and the `test_validator_rejects_trivially_short_source` fixture's source length must retune together. T02's prompt iteration may surface a more realistic floor; if it changes, both the floor and the test fixture move in lockstep."*
+### M3 — T02 live-smoke `ainvoke` call shape
 
-#### L2 — Risk #5 (re-registration on re-run) doesn't address gate-rejection retry path
+**Spec landing:** `task_02_prompt_iteration_live_smoke.md:24` rewritten as:
+> Mirrors `tests/workflows/test_scaffold_workflow.py::test_scaffold_end_to_end_with_stub_adapter` (same checkpointer + config + initial-state pattern), but the stub adapter is replaced by the real `ClaudeCodeRoute(cli_model_flag="opus")` tier (no `_StubLiteLLMAdapter.script` injection). The initial state is built inline as `{"run_id": run_id, "input": ScaffoldWorkflowInput(goal="generate exam questions from a textbook chapter", target_path=tmp_path / "question_gen.py")}` and invoked via `await app.ainvoke(initial, config=cfg, durability="sync")`.
 
-**Task:** T01.
-**Location:** `task_01_scaffold_workflow.md:220` (Risk #5).
-**Issue:** Risk #5 covers the user-reruns-with-`--force` path but not the *gate-rejected* → *fresh-run-id* → *new-goal* iteration loop. Operators iterating on a scaffold prompt may expect rejection to leave a recoverable artefact (it does not).
-**Recommendation:** Brief carry-over note clarifying rejection terminates the run.
-**Push to spec:** Add a final risk bullet (or extend Risk #5) at `task_01_scaffold_workflow.md:220`: *"Gate rejection on a `run_id` is terminal for that run; users iterate by invoking `aiw run scaffold_workflow` again with a fresh `run_id` + revised `--goal`. The scaffold does not store rejected attempts for later review."*
+**Live-tree verification:** Pattern matches `tests/workflows/test_scaffold_workflow.py:399-407` exactly:
+```python
+initial = {
+    "run_id": run_id,
+    "input": ScaffoldWorkflowInput(
+        goal="Generate exam questions from a textbook chapter.",
+        target_path=target,
+    ),
+}
+await app.ainvoke(initial, config=cfg, durability="sync")
+```
 
-#### L3 — `os.replace` atomicity claim should call out same-filesystem requirement explicitly
+**Status:** ✅ Resolved.
 
-**Task:** T01.
-**Location:** `task_01_scaffold_workflow.md:71-77` (`atomic_write` docstring) + Risk #4 at line 219.
-**Issue:** The docstring says *"Uses `tempfile.NamedTemporaryFile` in the same directory, then `os.replace()` to swap"* — "same directory" implies same FS, but a reviewer skimming may miss the load-bearing constraint that `os.replace()` is only POSIX-atomic across same-FS targets.
-**Recommendation:** Strengthen the docstring to make the same-FS dependency explicit.
-**Push to spec:** Edit `task_01_scaffold_workflow.md:74` (`atomic_write` docstring): change *"Uses tempfile.NamedTemporaryFile in the same directory, then os.replace() to swap"* → *"Uses `tempfile.NamedTemporaryFile(dir=target.parent)` to guarantee same-filesystem placement (required for `os.replace` atomicity on POSIX), then `os.replace()` to swap."*
+### M4 — T02 gate detection via `aget_state` not `GraphInterrupt`
 
-#### L4 — CHANGELOG branch-pair already correct (round-2 confirmed; closing as no-op)
+**Spec landing:** `task_02_prompt_iteration_live_smoke.md:25-27` rewritten as:
+> - Asserts the graph pauses at the `preview_gate` HumanGate (use `await app.aget_state(cfg)` and check that `state.next` contains the gate node name — equivalent to the existing test's `assert not target.exists()` pattern).
+> - Asserts the paused graph state's `scaffolded` field has non-empty `spec_python` content.
+> - Asserts `validate_scaffold_output(state.values["scaffolded"])` does not raise.
 
-**Task:** T01.
-**Location:** `task_01_scaffold_workflow.md:176` (Deliverable §9 CHANGELOG entry) + `task_01_scaffold_workflow.md:196` (AC-17).
-**Issue:** Round-1 L4 wanted the "on both branches" framing replaced with `design_branch` only + promotion-to-`main` at T04 close-out. Verified line 176 now reads *"Under `[Unreleased]` on `design_branch` — new `### Added — M17 Task 01: …` entry. Names the new modules… and the ADR-0010 placeholder (filled at T03). Promotion to `main` happens at milestone close-out (T04 scope)."* AC-17 at line 196 mirrors the same framing.
-**Recommendation:** None. Closed.
+**Live-tree verification:** Existing hermetic test calls `await app.aget_state(cfg)` and reads `state.values.get(...)` (lines 424-426 of the test file). The `preview_gate` node name is verified at `scaffold_workflow.py:395` (`g.add_node("preview_gate", gate)`).
+
+**Status:** ✅ Resolved.
+
+### Version-source fix — T04 §pyproject.toml + AC-1
+
+**Spec landing:** `task_04_milestone_closeout.md:14-16` (the §Version bump section) now correctly cites `ai_workflows/__init__.py:33` as the single source of truth:
+> Bump `__version__` from `"0.3.1"` to `"0.4.0"` in `ai_workflows/__init__.py:33`. This is the single source of truth — `pyproject.toml` declares `dynamic = ["version"]` and reads from there. No `pyproject.toml` version line to change directly.
+
+**Live-tree verification:**
+- `ai_workflows/__init__.py:33` → `__version__ = "0.3.1"` ✓.
+- `pyproject.toml:13` → `dynamic = ["version"]` ✓.
+- `pyproject.toml:70` → `[tool.hatch.version]` block (no literal version line) ✓.
+
+**Status:** ✅ Resolved. AC-1 also names `__init__.py` (not `pyproject.toml` directly).
+
+### LOW carry-overs pushed to spec
+
+- **TA-LOW-01** (was L1 — M16 T03 → M16 T01 attribution): present in `task_03_adr_and_docs.md:84-86` ✓.
+- **TA-LOW-02** (was L2 — dep-auditor as parallel terminal-gate reviewer): present in `task_04_milestone_closeout.md:70-72` ✓.
+- **TA-LOW-03** (was L3 — §Scaffolding placement hint): present in `task_03_adr_and_docs.md:88-90` ✓.
+
+**Status:** ✅ All three carry-overs survive in the specs as actionable Builder hints.
+
+## Round 2 — independent re-verification
+
+A second pass against the live tree found no new findings. Specific re-checks:
+
+- **All five symbol references in T02 verify:** `SCAFFOLD_PROMPT_TEMPLATE` (`scaffold_workflow_prompt.py:20`), `validate_scaffold_output` (imported `scaffold_workflow.py:52`, used `:259`), `build_scaffold_workflow` (`scaffold_workflow.py:328`), `_make_scaffold_validator_node` (`scaffold_workflow.py:218`), `atomic_write` (`_scaffold_write_safety.py:105`).
+- **All four T02 carry-over IDs (LOW-2, LOW-3, ADV-1, ADV-2)** trace to the issue file lines noted in round 1.
+- **`tests/release/`** exists (`__init__.py`, `__pycache__`, `test_install_smoke.py`); the new `test_scaffold_live_smoke.py` slots in cleanly.
+- **`tests/cli/`** exists (`test_eval_commands.py`, `test_external_workflow.py`, `test_list_runs.py`, `test_resume.py`, `test_run.py`, `test_tier_override.py`, `conftest.py`); `test_run_scaffold_alias.py` follows convention.
+- **ADR slot 0010 still free** (`design_docs/adr/` listing: 0001/0002/0004/0005/0007/0008/0009 — slot 0010 next).
+- **CHANGELOG `[Unreleased]`** has the M17 T01 entry; T02–T04 will append.
+- **`ai_workflows/workflows/loader.py:46`** confirms `ENV_VAR_NAME = "AIW_EXTRA_WORKFLOW_MODULES"`.
+- **No new layer-rule violations.** T02 source-touches are confined to `ai_workflows/workflows/` (prompt + scaffold modules); T03/T04 are doc + version-bump only.
+- **No new KDR violations.** KDR-003 (no Anthropic SDK), KDR-004 (validator pairing), KDR-006 (RetryingEdge), KDR-008 (FastMCP), KDR-009 (SqliteSaver), KDR-013 (user-owned code), KDR-014 (per-call rebind) all preserved.
+- **SEMVER:** 0.3.1 → 0.4.0 is additive minor (new workflow, new CLI alias, new MCP-exposed workflow, no API breakage). Correctly framed in `README.md:142-143`.
+- **Status surfaces in T04** correctly enumerate four flips: per-task spec, milestone README task row + exit criteria + Outcome, `roadmap.md`, root `README.md`.
+- **`nice_to_have.md` slot drift sweep:** none of the new specs cite a slot number; no risk.
 
 ## What's structurally sound
 
-- **All round-1 + round-2 HIGH+MEDIUM fixes verified.** ADR-0010 sweep, `gate_response` sweep (CLI + MCP), `AIW_EXTRA_WORKFLOW_MODULES` sweep, `list_workflows()` Python API in AC-1, WorkflowSpec/`register_workflow(spec)` pivot complete on all surfaces. Bare `register(...)` only appears in the four legitimate Tier-4 escape-hatch contexts: T01:22, T01:105, T01:180 (AC-1), README:76. Each is gated by explicit "the scaffold *itself* uses Tier-4; the code *it generates* is declarative" framing.
-- **CLI flag verified against source.** `cli.py:525-527` exposes `--gate-response` / `-r` only; `cli.py:423` and `cli.py:588` re-emit the literal `aiw resume {run_id} --gate-response <approved|rejected>` stdout pin. README + T01 match.
-- **Symbol grounding verified.** `register_workflow` lives at `ai_workflows/workflows/spec.py:372` and is re-exported from `ai_workflows/workflows/__init__.py:85` (in `__all__` at line 106). T01:4 grounding cites `__init__.py:54-110` as the public-surface block — matches the docstring + re-export region. `WorkflowSpec` at `spec.py:329`. `list_workflows` at `__init__.py:167` (in `__all__`). `summarize.py:121` uses `register_workflow(_SPEC)` — confirms the WorkflowSpec form is the canonical shipped pattern. (Note: `planner.py:849` and `slice_refactor.py:1812` still use bare `register(...)` — those are pre-M19 imperative workflows. The scaffold mirrors planner/slice_refactor for its *own* graph and emits summarize-style declarative code — internally consistent.)
-- **Tier-registry naming convention verified load-bearing.** `_dispatch.py:264` defines `_resolve_tier_registry(workflow, module)` and `_dispatch.py:581 + :921` invoke it on the workflow module. T01 AC-9 + spec line 21 carry the load-bearing-name warning.
-- **Layer rule + four-kept claim.** New modules (`scaffold_workflow.py`, `_scaffold_write_safety.py`, `_scaffold_validator.py`) all in `workflows/`. AC-12 4-kept claim is reachable.
-- **KDR alignment.** KDR-003 (no Anthropic SDK) — AC-14. KDR-004 (validator pairing) — AC-13. KDR-006 (RetryingEdge) — AC-10 + graph diagram. KDR-008 (FastMCP) — AC-8 (no schema drift). KDR-009 (SqliteSaver) — implicit, no checkpoint changes. KDR-013 (user-owned external code) — entire risk-ownership boundary section. KDR-014 (per-call tier rebind) — `tier_preferences` dropped, `--tier-override` / `tier_overrides` everywhere.
-- **ADR-0010 slot still free.** `design_docs/adr/` lists 0001/0002/0004/0005/0007/0008/0009 — slot 0010 remains open and unclaimed.
-- **0.4.0 framing intact.** Additive-minor: scaffold workflow + CLI alias + MCP exposure (existing tool, new workflow name). No breaking changes.
-- **Status surfaces consistent.** README:127 task-table row Kind = `code + test`; T01 `Status: 📝 Planned`. Both match.
+**T02:**
+- Three deliverable groups (prompt iteration, live-smoke test, CS300 dogfood) each map to ACs (AC-1, AC-2, AC-3) and tests in the §Tests table.
+- Carry-over from T01 audits (LOW-2/LOW-3/ADV-1/ADV-2) closes cleanly via AC-4 through AC-7.
+- Live-smoke is correctly gated behind `AIW_E2E=1` (matches `tests/release/test_install_smoke.py` precedent).
+- Sandbox dependency (Claude Code CLI auth) called out explicitly.
+- Out-of-scope is sharp (no auto-evaluation, no validator-rule additions, no ADR text).
+
+**T03:**
+- Doc-only task (zero `ai_workflows/` source touches) — correctly framed and out-of-scope-fenced.
+- ADR-0010 §Decision lists four binding rules (validator scope / write-target safety / `AIW_EXTRA_WORKFLOW_MODULES` handoff / no auto-registration) traced to the README's exit criteria.
+- §Alternatives rejected covers three (lint-the-generated-code / sandbox the runtime / keep generated code in-package).
+- Carry-overs TA-LOW-01 + TA-LOW-03 are properly framed as Builder hints (not new ACs).
+- §Out of scope correctly defers source code, prompt template, version bump.
+
+**T04:**
+- Pattern mirrors M12 T07 (verified at `design_docs/phases/milestone_12_audit_cascade/task_07_milestone_closeout.md`).
+- Version-source citation at `ai_workflows/__init__.py:33` is correct.
+- Roadmap fix (ADR-0008 → ADR-0010, `AIW_WORKFLOWS_PATH` → `AIW_EXTRA_WORKFLOW_MODULES`) named explicitly in §Deliverables and AC-1.
+- AC-7 wheel-contents check matches CLAUDE.md non-negotiables verbatim.
+- §Out of scope correctly excludes `uv publish` (manual-only per autonomous-mode boundary, locked 2026-04-27).
+- Carry-over TA-LOW-02 (dep-auditor as parallel terminal-gate reviewer) is informational, not blocking.
 
 ## Cross-cutting context
 
-- **Memory + state:** project memory (`project_m13_shipped_cs300_next.md`) flags M17 as spec'd-not-yet-implemented; autopilot is paused on M21 T15 (`project_m21_autopilot_2026_04_29_checkpoint.md`). M17 is pre-implementation hygiene only — no in-flight implementation.
-- **All round-2 LOWs re-evaluated.** Re-read confirms none promote: L1 is small spec ergonomics (Builder can absorb); L2 is operator-affordance prose; L3 is docstring strengthening; L4 is closed.
-- **No new round-3 findings.** Hostile re-read confirms the H2 WorkflowSpec pivot + H1 CLI-flag fix are now consistent across all surfaces. No new drift, no new contradictions, no new dependency holes.
-- **LOW-ONLY → push to carry-over.** Per orchestrator convention, the three actionable LOWs (L1–L3) get pushed to T01's carry-over section (or applied as one-line edits) before `/clean-implement` kicks off. L4 needs no action.
-- **Specs ready for implementation.** Once L1–L3 are carry-over'd, the M17 specs are clean for `/clean-implement m17 t01`.
+- **Project memory.** `project_m13_shipped_cs300_next.md` confirms M16 T01 shipped (2026-04-24). No on-hold flag on M17. CS300 trigger framing applies — T02's CS300 dogfood is the first external-consumer smoke, documented (not automated).
+- **Autonomous-mode boundary** preserved: T04 version bump + CHANGELOG promotion run on `design_branch`; only the operator runs `uv publish` after merge. KDR additions on isolated commits — T04 has no KDR additions.
+- **Build-clean is necessary, not sufficient.** T02 AC-2 (live-smoke) is the only wire-level proof that the prompt actually works against Claude Opus + the validator. AC-8 (`pytest + lint-imports + ruff`) is build-clean only — correctly framed.
+- **Status-surface flip plan (T04)** correctly enumerates four surfaces; no `tasks/README.md` exists for M17 (same as M12).
+
+## Recommendation
+
+The three specs are clean. Round 1 surfaced legitimate drift; round-1-to-round-2 fix-up applied each one correctly with no regression. No HIGH, MEDIUM, or LOW findings remain. The orchestrator can proceed to `/clean-implement m17 t02`.
