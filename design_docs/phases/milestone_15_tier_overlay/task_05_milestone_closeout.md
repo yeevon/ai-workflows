@@ -1,6 +1,6 @@
 # Task 05 — Milestone Close-out
 
-**Status:** 📝 Planned.
+**Status:** ✅ Complete (2026-04-30).
 **Grounding:** [milestone README](README.md) · [CLAUDE.md](../../../CLAUDE.md) close-out conventions · [M12 T07](../milestone_12_audit_cascade/task_07_milestone_closeout.md) (pattern mirrored) · [KDR-014](../../architecture.md) (framework owns quality policy).
 
 ## What to Build
@@ -143,24 +143,24 @@ git diff --stat HEAD~1..HEAD -- ai_workflows/  # must be empty
 
 ## Carry-over from prior audits
 
-- [ ] **M15-T04-LOW-02 — `architecture.md §4.1` stale `tiers.yaml` reference** (severity: LOW, source: M15 T04 audit, 2026-04-30)
+- [x] **M15-T04-LOW-02 — `architecture.md §4.1` stale `tiers.yaml` reference** (severity: LOW, source: M15 T04 audit, 2026-04-30)
       `design_docs/architecture.md:67` TierConfig row still references `tiers.yaml`. After M15 T04, `tiers.yaml` no longer exists at the repo root; the relocated file is `docs/tiers.example.yaml` (schema-smoke fixture, not loaded at dispatch time).
       **Recommendation:** Update the architecture.md §4.1 TierConfig row as described in CO-1 above. Also optionally refresh `TierRegistry.load()` docstrings in `ai_workflows/primitives/tiers.py` to clarify that the `root/tiers.yaml` lookup is dev-fixture only — non-blocking, cosmetic.
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Outcome §gate-snapshot pytest count pre-asserted as `1532 passed`** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-01 — Outcome §gate-snapshot pytest count pre-asserted as `1532 passed`** (severity: LOW, source: task_analysis.md round 1)
       The spec's Outcome section hard-codes `1532 passed` from the T04 gate run. T05 may inherit a different count.
       **Recommendation:** At close-out commit, run `uv run pytest` and update the Outcome §gate-snapshot count to the live value.
 
-- [ ] **TA-LOW-02 — Outcome §"KDR additions: none" missing cross-link to ADR-0006** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-02 — Outcome §"KDR additions: none" missing cross-link to ADR-0006** (severity: LOW, source: task_analysis.md round 1)
       The "KDR-014 strengthened by ADR-0006 YAML-overlay rejection" note has no hyperlink to ADR-0006.
       **Recommendation:** Hyperlink `ADR-0006` inline in the Outcome section so reviewers can jump to the rejection rationale.
 
-- [ ] **TA-LOW-03 — T04 audit LOW-1 carry-over checkboxes unticked** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-03 — T04 audit LOW-1 carry-over checkboxes unticked** (severity: LOW, source: task_analysis.md round 1)
       `task_04_issue.md:71-75` flags four `[ ]` carry-over checkboxes in `task_04_adr_0006_and_tiers_doc_relocation.md` that remain unticked despite resolved diffs. Auditor suggested rolling this into T05 close-out.
       **Recommendation:** Optionally tick the four carry-over checkboxes in `task_04_adr_0006_and_tiers_doc_relocation.md` to `[x]` during T05 (one-line bookkeeping fix; non-blocking).
 
-- [ ] **TA-LOW-04 — CO-1 does not clarify that `pricing.yaml` reference stays** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-04 — CO-1 does not clarify that `pricing.yaml` reference stays** (severity: LOW, source: task_analysis.md round 1)
       `architecture.md:67` cell reads `` `pricing.yaml` / `tiers.yaml` ``. CO-1 only directs the Builder to fix the `tiers.yaml` half. Builder should not accidentally remove the `pricing.yaml` reference.
       **Recommendation:** In CO-1 implementation, preserve the `pricing.yaml` reference — CO-1 only touches the `tiers.yaml` half of the cell heading.

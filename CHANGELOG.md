@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- next release entries go here -->
 
+### Added — M15 Task 05: Milestone close-out (2026-04-30)
+
+M15 milestone closed. All five tasks shipped.
+
+**Files touched:**
+- `design_docs/architecture.md` — §4.1 TierConfig row: stale `tiers.yaml` reference removed; `docs/tiers.example.yaml` (schema-reference example, not loaded at dispatch time) noted; `pricing.yaml` reference preserved (CO-1 / M15-T04-LOW-02).
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — Status flipped to ✅ Complete; task-05 row updated; exit criterion #10 lint-imports count corrected from 4 to 5 contracts; all 10 exit criteria annotated with satisfying task (T01–T04/T05); **Outcome** section added (T01–T05 summaries + gate snapshot).
+- `design_docs/roadmap.md` — M15 §Milestones table row flipped to ✅ complete (2026-04-30); §Deferred narrative entry prefixed with ✅ Shipped and rewritten to past tense.
+- `README.md` — M15 row updated to Complete (2026-04-30).
+- `CHANGELOG.md` — this entry.
+- `design_docs/phases/milestone_15_tier_overlay/task_05_milestone_closeout.md` — Status flipped to ✅ Complete.
+- `design_docs/phases/milestone_15_tier_overlay/issues/task_05_issue.md` — issue file created.
+
+**ACs satisfied:** AC-1 (architecture.md TierConfig row corrected), AC-2 (milestone README Status flipped), AC-3 (task-05 row updated), AC-4 (exit criterion #10 corrected; all 10 annotated), AC-5 (Outcome section added), AC-6 (roadmap.md updated), AC-7 (root README.md updated), AC-8 (CHANGELOG updated), AC-9 (zero ai_workflows/ diff), AC-10 (pytest 1532 passed), AC-11 (lint-imports 5 contracts), AC-12 (ruff check passes).
+
+**Deviations from spec:** None.
+
 ### Added — M15 Task 04: ADR-0006 + tiers.yaml relocation + writing-a-workflow.md tier-config section (2026-04-30)
 
 **Deliverable A — ADR-0006:**

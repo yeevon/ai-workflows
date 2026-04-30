@@ -1,6 +1,6 @@
 # Milestone 15 — Tier Fallback Chains
 
-**Status:** 📝 Planned (rescoped 2026-04-30; deferred — implement after M17 close-out).
+**Status:** ✅ Complete (2026-04-30).
 **Rescoping note (2026-04-30):** The original YAML-overlay scope (`~/.ai-workflows/tiers.yaml` user-config) was dropped because it conflicts with KDR-014 (framework owns tier policy; env-var is the only operator override). M15 now covers only the `TierConfig.fallback` schema + `TieredNode` cascade dispatch + cost attribution + `aiw list-tiers` + ADR-0006. If a persistent-config override path is needed later, it requires a KDR-014 amendment and its own milestone.
 **Grounding:** [architecture.md §4.1 + §9](../../architecture.md) · [roadmap.md](../../roadmap.md) · [analysis/post_0.1.2_audit_disposition.md](../../analysis/post_0.1.2_audit_disposition.md) · [M8 README](../milestone_8_ollama/README.md) (post-gate tier override — the reactive precedent that M15 generalises) · [M13 README](../milestone_13_v0_release/README.md) (v0.1.0 release baseline) · [KDR-003 / KDR-006 / KDR-007 / KDR-011 / KDR-014](../../architecture.md) (provider-routing constraints + framework-owns-policy rule).
 
@@ -43,16 +43,16 @@ With this registry in place:
 
 ## Exit criteria
 
-1. **Fallback chain schema.** `TierConfig` gains `fallback: list[Route] = Field(default_factory=list)`. Nested fallbacks are rejected at schema-validation time (fallback routes cannot themselves carry a `fallback` field — flat only, avoids infinite chains). Existing `TierConfig` instances without `fallback` round-trip unchanged.
-2. **Fallback dispatch logic.** `TieredNode._dispatch()` (or equivalent) walks the chain after retry-budget exhaustion: primary → `fallback[0]` → `fallback[1]` → … → raise `AllFallbacksExhaustedError` with `attempts: list[TierAttempt]` naming every route tried + its final classification.
-3. **Cost attribution.** Every attempt (primary + fallbacks) contributes its `TokenUsage` to `CostTracker`. `runs.total_cost_usd` reflects the aggregate. A new test pins this.
-4. **Validator interaction explicit.** The `ValidatorNode` downstream of a `TieredNode` with fallback receives the output of whichever route succeeded. Schema validation runs normally; if validation fails, the `RetryingEdge` retries the validator-paired primary (not fallback) per KDR-004 — a ValidatorNode failure is a *primary-route output* failure, not an infrastructure-level fallback trigger.
-5. **CircuitOpen cascade coverage.** When the M8 Ollama circuit-breaker trips mid-run and `planner-explorer`'s retry budget exhausts against `CircuitOpen`, the fallback chain fires. One new test exercises this round-trip end-to-end via the MCP HTTP transport (absorbs audit finding #12 — the HTTP envelope shape on CircuitOpen is now pinned).
-6. **`aiw list-tiers` inspection command.** New `aiw list-tiers [--workflow <name>]` CLI command prints the workflow's effective tier registry with the route kind, model string / CLI flag, concurrency cap, timeout, and any configured fallback chain. Pure read; no dispatch side-effects. Absorbs the discoverability gap flagged in the 0.1.2 audit.
-7. **`docs/tiers.example.yaml`** — the repo-root `tiers.yaml` is relocated to `docs/` as a user-facing example file, and the authoritative tier-definition path (per-workflow Python registry) is documented inline.
-8. **ADR-0006 added.** *"Tier fallback cascade semantics."* Records the decision on trigger condition (retry-budget exhaustion, not immediate error-class fast-path), cost-accounting posture (truthful — every attempt logs), validator interaction (against successful route only), nesting limit (flat — no nested fallbacks), and the rejected alternatives (immediate-fail-over, score-based routing, provider-health probes, YAML overlay). Explicitly notes that the YAML-overlay design was considered and rejected due to KDR-014.
-9. **Hermetic tests.** New `tests/primitives/test_tiered_node_fallback_schema.py` for the `TierConfig.fallback` field + nested-fallback rejection. New `tests/graph/test_tiered_node_fallback.py` for the dispatch cascade (stub adapter, deterministic). New `tests/mcp/test_http_fallback_on_circuit_open.py` for the HTTP-transport envelope shape when the cascade fires under a tripped breaker. Existing tests stay green unchanged.
-10. **Gates green.** `uv run pytest` + `uv run lint-imports` (4 contracts kept — no new layer; fallback schema in `primitives`, cascade logic in `graph`) + `uv run ruff check`.
+1. **Fallback chain schema.** `TierConfig` gains `fallback: list[Route] = Field(default_factory=list)`. Nested fallbacks are rejected at schema-validation time (fallback routes cannot themselves carry a `fallback` field — flat only, avoids infinite chains). Existing `TierConfig` instances without `fallback` round-trip unchanged. ✅ T01
+2. **Fallback dispatch logic.** `TieredNode._dispatch()` (or equivalent) walks the chain after retry-budget exhaustion: primary → `fallback[0]` → `fallback[1]` → … → raise `AllFallbacksExhaustedError` with `attempts: list[TierAttempt]` naming every route tried + its final classification. ✅ T02
+3. **Cost attribution.** Every attempt (primary + fallbacks) contributes its `TokenUsage` to `CostTracker`. `runs.total_cost_usd` reflects the aggregate. A new test pins this. ✅ T02
+4. **Validator interaction explicit.** The `ValidatorNode` downstream of a `TieredNode` with fallback receives the output of whichever route succeeded. Schema validation runs normally; if validation fails, the `RetryingEdge` retries the validator-paired primary (not fallback) per KDR-004 — a ValidatorNode failure is a *primary-route output* failure, not an infrastructure-level fallback trigger. ✅ T01/T02
+5. **CircuitOpen cascade coverage.** When the M8 Ollama circuit-breaker trips mid-run and `planner-explorer`'s retry budget exhausts against `CircuitOpen`, the fallback chain fires. One new test exercises this round-trip end-to-end via the MCP HTTP transport (absorbs audit finding #12 — the HTTP envelope shape on CircuitOpen is now pinned). ✅ T03
+6. **`aiw list-tiers` inspection command.** New `aiw list-tiers [--workflow <name>]` CLI command prints the workflow's effective tier registry with the route kind, model string / CLI flag, concurrency cap, timeout, and any configured fallback chain. Pure read; no dispatch side-effects. Absorbs the discoverability gap flagged in the 0.1.2 audit. ✅ T03
+7. **`docs/tiers.example.yaml`** — the repo-root `tiers.yaml` is relocated to `docs/` as a user-facing example file, and the authoritative tier-definition path (per-workflow Python registry) is documented inline. ✅ T04
+8. **ADR-0006 added.** *"Tier fallback cascade semantics."* Records the decision on trigger condition (retry-budget exhaustion, not immediate error-class fast-path), cost-accounting posture (truthful — every attempt logs), validator interaction (against successful route only), nesting limit (flat — no nested fallbacks), and the rejected alternatives (immediate-fail-over, score-based routing, provider-health probes, YAML overlay). Explicitly notes that the YAML-overlay design was considered and rejected due to KDR-014. ✅ T04
+9. **Hermetic tests.** New `tests/primitives/test_tierconfig_fallback.py` for the `TierConfig.fallback` field + nested-fallback rejection. New `tests/graph/test_tiered_node_fallback.py` for the dispatch cascade (stub adapter, deterministic). New `tests/mcp/test_http_fallback_on_circuit_open.py` for the HTTP-transport envelope shape when the cascade fires under a tripped breaker. Existing tests stay green unchanged. ✅ T01/T02/T03
+10. **Gates green.** `uv run pytest` + `uv run lint-imports` (5 contracts kept — no new layer; fallback schema in `primitives`, cascade logic in `graph`; audit_cascade contract was added at M12 T02 and remains in effect) + `uv run ruff check`. ✅ T01–T04
 
 ## Non-goals
 
@@ -84,7 +84,7 @@ With this registry in place:
 | 02 | [`TieredNode` fallback-cascade dispatch + cost attribution](task_02_tierednode_cascade_dispatch.md) ✅ Built (cycle 1) | code + test |
 | 03 | [`aiw list-tiers` command + HTTP CircuitOpen cascade test](task_03_aiw_list_tiers_and_circuit_open_cascade.md) ✅ Built (cycle 2) | code + test + doc |
 | 04 | [ADR-0006 + relocate `tiers.yaml` → `docs/tiers.example.yaml` + `docs/writing-a-workflow.md` tier-config section](task_04_adr_0006_and_tiers_doc_relocation.md) ✅ Built (cycle 1) | doc |
-| 05 | Milestone close-out | doc |
+| 05 | [Milestone close-out](task_05_milestone_closeout.md) ✅ Complete (2026-04-30) | doc |
 
 Per-task spec files land as each predecessor closes (same convention as M11 / M13 / M14). T01 is spec'd alongside this README; T02–T05 are written at the predecessor's close-out so the scope stays calibrated against landed surface.
 
@@ -117,3 +117,27 @@ Filled in at audit time. Anticipated forward-deferrals:
 ## Issues
 
 Land under [issues/](issues/) after each task's first audit.
+
+---
+
+## Outcome
+
+M15 closed 2026-04-30. All five tasks shipped on `design_branch`.
+
+### Task summaries
+
+- **T01** — `TierConfig.fallback: list[Route]` schema field added to `ai_workflows/primitives/tiers.py`; `AllFallbacksExhaustedError(NonRetryable)` introduced with `attempts: list[TierAttempt]`; flat-only nesting enforced at schema-validation time. Hermetic tests: `tests/primitives/test_tierconfig_fallback.py`.
+- **T02** — `TieredNode` cascade dispatch after retry-budget exhaustion; per-fallback retry counter; cost attribution accumulates across all attempts via `CostTracker`; `ValidatorNode` interaction unchanged (runs on successful route output). Tests: `tests/graph/test_tiered_node_fallback.py`.
+- **T03** — `aiw list-tiers [--workflow <name>]` CLI command; HTTP CircuitOpen cascade test (`tests/mcp/test_http_fallback_on_circuit_open.py`) pinning the MCP envelope shape when cascade fires under a tripped circuit breaker.
+- **T04** — [ADR-0006](../../adr/0006_tier_fallback_cascade_semantics.md) (fallback cascade semantics — seven decision points + four rejected alternatives; KDR-014 YAML-overlay rejection recorded); `tiers.yaml` → `docs/tiers.example.yaml` relocation; `### Fallback chains` subsection in `docs/writing-a-workflow.md`.
+- **T05** — `architecture.md` §4.1 stale `tiers.yaml` reference corrected (CO-1 / M15-T04-LOW-02); lint-imports contract count corrected to 5; status surfaces flipped.
+
+### KDR additions
+
+None. KDR-014 strengthened by [ADR-0006](../../adr/0006_tier_fallback_cascade_semantics.md)'s YAML-overlay rejection, per T04.
+
+### Gate snapshot (at T05 close)
+
+- `uv run pytest` — 1532 passed, 12 skipped
+- `uv run lint-imports` — 5 contracts kept, 0 broken
+- `uv run ruff check` — all checks passed
