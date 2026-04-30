@@ -83,7 +83,7 @@ With this registry in place:
 | 01 | [`TierConfig.fallback` schema + hermetic tests](task_01_fallback_schema.md) ✅ Built (cycle 1) | code + test |
 | 02 | [`TieredNode` fallback-cascade dispatch + cost attribution](task_02_tierednode_cascade_dispatch.md) ✅ Built (cycle 1) | code + test |
 | 03 | [`aiw list-tiers` command + HTTP CircuitOpen cascade test](task_03_aiw_list_tiers_and_circuit_open_cascade.md) ✅ Built (cycle 2) | code + test + doc |
-| 04 | ADR-0006 + relocate `tiers.yaml` → `docs/tiers.example.yaml` + `docs/writing-a-workflow.md` tier-config section | doc |
+| 04 | [ADR-0006 + relocate `tiers.yaml` → `docs/tiers.example.yaml` + `docs/writing-a-workflow.md` tier-config section](task_04_adr_0006_and_tiers_doc_relocation.md) ✅ Built (cycle 1) | doc |
 | 05 | Milestone close-out | doc |
 
 Per-task spec files land as each predecessor closes (same convention as M11 / M13 / M14). T01 is spec'd alongside this README; T02–T05 are written at the predecessor's close-out so the scope stays calibrated against landed surface.

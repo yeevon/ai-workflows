@@ -65,6 +65,47 @@ def my_workflow_tier_registry() -> dict[str, TierConfig]:
     }
 ```
 
+### Fallback chains
+
+When a route's retry budget exhausts (after `RetryingEdge`'s three-bucket cycle), `TieredNode`
+walks the tier's `fallback` list in declaration order, attempting each route against a fresh
+retry counter. If all routes fail, it raises `AllFallbacksExhaustedError` carrying a
+`attempts: list[TierAttempt]` log for diagnostics.
+
+Declare a fallback chain in `TierConfig.fallback`:
+
+```python
+from ai_workflows.primitives.tiers import ClaudeCodeRoute, LiteLLMRoute, TierConfig
+
+
+def planner_tier_registry() -> dict[str, TierConfig]:
+    return {
+        "planner-synth": TierConfig(
+            name="planner-synth",
+            route=ClaudeCodeRoute(cli_model_flag="opus"),
+            fallback=[
+                ClaudeCodeRoute(cli_model_flag="sonnet"),   # first fallback
+                LiteLLMRoute(model="gemini/gemini-2.5-flash"),  # last-resort
+            ],
+        ),
+    }
+```
+
+**Semantics:**
+- `fallback` is a flat list — no nested fallbacks. `TierConfig` rejects fallback routes that
+  carry their own `fallback` field at schema-validation time.
+- Cascade triggers *after retry-budget exhaustion*, not on the first error signal. The retry
+  budget is the primary correctness surface.
+- Cost attribution is truthful — every attempted route (primary + each fallback) logs its
+  `TokenUsage`. `CostTracker.total(run_id)` reflects the aggregate.
+- The `ValidatorNode` downstream of an `LLMStep` runs unchanged: it always validates the
+  final successful route's output. Semantic-validation failure is a primary-route concern and
+  does *not* trigger the cascade.
+
+See [`docs/tiers.example.yaml`](tiers.example.yaml) for a YAML-syntax schema reference.
+See [ADR-0006](../design_docs/adr/0006_tier_fallback_cascade_semantics.md) (builder-only, on design branch) for the design
+rationale and rejected alternatives.
+
 ### Minimum viable spec
 
 A one-step no-LLM workflow — validates a field, returns immediately:

@@ -1,7 +1,7 @@
 # Task 04 — ADR-0006 + `docs/tiers.example.yaml` relocation + `docs/writing-a-workflow.md` tier-config section
 
-**Status:** 📝 Planned.
-**Grounding:** [milestone README](README.md) · [architecture.md §9 KDR-006 / KDR-014](../../architecture.md) · [design_docs/adr/](../../adr/) · [docs/writing-a-workflow.md](../../../docs/writing-a-workflow.md) · [tiers.yaml](../../../tiers.yaml) · [KDR-006](../../architecture.md) (three-bucket retry) · [KDR-014](../../architecture.md) (framework owns tier policy).
+**Status:** ✅ Built (cycle 1, 2026-04-30).
+**Grounding:** [milestone README](README.md) · [architecture.md §9 KDR-006 / KDR-014](../../architecture.md) · [design_docs/adr/](../../adr/) · [docs/writing-a-workflow.md](../../../docs/writing-a-workflow.md) · [docs/tiers.example.yaml](../../../docs/tiers.example.yaml) · [KDR-006](../../architecture.md) (three-bucket retry) · [KDR-014](../../architecture.md) (framework owns tier policy).
 
 ## What to Build
 
@@ -201,17 +201,17 @@ grep -n "Fallback chains" docs/writing-a-workflow.md
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Grounding line cites `tiers.yaml` after the file is deleted** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-01 — Grounding line cites `tiers.yaml` after the file is deleted** (severity: LOW, source: task_analysis.md round 1)
       The spec's Grounding line cross-links `[tiers.yaml](../../../tiers.yaml)`. After Deliverable B lands, that link is broken.
       **Recommendation:** Update the Grounding line to `[docs/tiers.example.yaml](../../../docs/tiers.example.yaml)` in the same commit that deletes `tiers.yaml`.
 
-- [ ] **TA-LOW-04 — `tests/test_wheel_contents.py` docstring + error message reference `tiers.yaml`** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-04 — `tests/test_wheel_contents.py` docstring + error message reference `tiers.yaml`** (severity: LOW, source: task_analysis.md round 3)
       `tests/test_wheel_contents.py:150, 170` still name `tiers.yaml` in a docstring and assertion message. Test logic is unaffected (the "no bare-root `*.yaml` in the wheel" invariant is unchanged), but the strings are mildly stale after T04.
       **Recommendation:** Optionally update the strings to read `docs/tiers.example.yaml` in the same T04 commit; non-blocking if deferred.
 
-- [ ] **TA-LOW-03 — Dependencies §"No production-code dependency" line mentioned the dropped `yaml_path` kwarg** (severity: LOW, source: task_analysis.md round 2)
+- [x] **TA-LOW-03 — Dependencies §"No production-code dependency" line mentioned the dropped `yaml_path` kwarg** (severity: LOW, source: task_analysis.md round 2)
       Spec's Dependencies section line said "The one exception is the optional `yaml_path` kwarg on `TierRegistry.load()`…" — contradicted Deliverable 3 and Out-of-scope §1. Fixed in round 2 to read "No production-code dependency — T04 is documentation + test-path update only. `ai_workflows/primitives/tiers.py` is unchanged." No Builder action needed; already resolved inline.
 
-- [ ] **TA-LOW-02 — ADR-0006 link in `writing-a-workflow.md` should include `(builder-only, on design branch)` suffix** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-02 — ADR-0006 link in `writing-a-workflow.md` should include `(builder-only, on design branch)` suffix** (severity: LOW, source: task_analysis.md round 1)
       Existing ADR cross-links in `docs/writing-a-workflow.md` all carry the `(builder-only, on design branch)` suffix (e.g. line 568, 658, 691). The spec's content block for the `### Fallback chains` subsection omits it.
       **Recommendation:** Match the pattern — render the ADR-0006 link as `[ADR-0006](../design_docs/adr/0006_tier_fallback_cascade_semantics.md) (builder-only, on design branch)` when adding the cross-link in `docs/writing-a-workflow.md`.

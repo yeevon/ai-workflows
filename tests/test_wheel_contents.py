@@ -147,7 +147,7 @@ def test_built_wheel_excludes_dotenv_and_loose_yaml(built_wheel: Path) -> None:
     Belt-and-braces against accidental secrets leakage. The current
     ``packages = ["ai_workflows"]`` + targeted ``force-include`` for
     ``migrations/`` makes this invariant hold by construction (repo-root
-    `.env` / `tiers.yaml` / `pricing.yaml` sit outside the source
+    `.env` / `docs/tiers.example.yaml` / `pricing.yaml` sit outside the source
     package), but a future ``force-include`` edit that broadens the
     sweep could silently leak them. This test pins the invariant so
     the wheel layer catches the regression directly.
@@ -167,6 +167,6 @@ def test_built_wheel_excludes_dotenv_and_loose_yaml(built_wheel: Path) -> None:
     ]
     assert not root_yaml_leaks, (
         f"wheel leaked bare-root YAML file(s): {root_yaml_leaks}. "
-        f"Repo-root `tiers.yaml` / `pricing.yaml` are dev-time only and "
+        f"Repo-root `pricing.yaml` is dev-time only and "
         f"must never ship."
     )

@@ -20,6 +20,11 @@ Also covers:
   ``ConfigurationError`` from ``ai_workflows.primitives.llm.model_factory``,
   a module deleted by T03. The post-refit tier surface exposes a single
   ``UnknownTierError`` class; no cross-module class comparison remains.
+
+M15 Task 04: The committed schema-smoke fixture was relocated from ``tiers.yaml``
+(repo root) to ``docs/tiers.example.yaml``. ``DOCS_DIR`` + ``_load_example_tiers()``
+replace the four ``TierRegistry.load(REPO_ROOT)`` calls in the committed-file tests.
+``REPO_ROOT`` is kept for ``pricing.yaml`` and ``_write()`` helpers.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from ai_workflows.primitives.tiers import (
@@ -37,11 +43,26 @@ from ai_workflows.primitives.tiers import (
     TierConfig,
     TierRegistry,
     UnknownTierError,
+    _expand_env_recursive,
     get_tier,
     load_pricing,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
+
+
+def _load_example_tiers() -> dict:
+    """Load ``docs/tiers.example.yaml`` into a ``dict[str, TierConfig]``.
+
+    Used by committed-file smoke tests (M15 T04). Applies ``_expand_env_recursive``
+    before Pydantic validation so env-var placeholders (e.g. ``${OLLAMA_BASE_URL:-…}``)
+    resolve the same way ``TierRegistry.load()`` does.
+    """
+    with open(DOCS_DIR / "tiers.example.yaml") as f:
+        raw = yaml.safe_load(f)
+    expanded = _expand_env_recursive(raw)
+    return {k: TierConfig.model_validate({**v, "name": k}) for k, v in expanded.items()}
 
 
 def _write(path: Path, text: str) -> None:
@@ -56,7 +77,7 @@ def _write(path: Path, text: str) -> None:
 
 
 def test_committed_tiers_yaml_parses_into_tier_config_mapping():
-    """AC-1: the checked-in ``tiers.yaml`` parses into the expected mapping.
+    """AC-1: the checked-in ``docs/tiers.example.yaml`` parses into the expected mapping.
 
     0.1.3 patch: dropped the `planner` + `implementer` entries from
     `tiers.yaml`. They were never loaded at runtime (dispatch calls
@@ -66,8 +87,11 @@ def test_committed_tiers_yaml_parses_into_tier_config_mapping():
     definitions live in each workflow's Python module. See
     [post_0.1.2_audit_disposition.md](../../design_docs/analysis/
     post_0.1.2_audit_disposition.md) finding #6.
+
+    M15 T04: fixture relocated from repo-root ``tiers.yaml`` to
+    ``docs/tiers.example.yaml``; loaded via ``_load_example_tiers()``.
     """
-    tiers = TierRegistry.load(REPO_ROOT)
+    tiers = _load_example_tiers()
     # Mapping keys match the committed tier names exactly.
     assert set(tiers) == {
         "local_coder",
@@ -82,8 +106,11 @@ def test_committed_tiers_yaml_parses_into_tier_config_mapping():
 
 
 def test_committed_tiers_resolve_to_the_correct_route_variant():
-    """AC-2: each route is the correct discriminated variant."""
-    tiers = TierRegistry.load(REPO_ROOT)
+    """AC-2: each route is the correct discriminated variant.
+
+    M15 T04: fixture relocated; uses ``_load_example_tiers()``.
+    """
+    tiers = _load_example_tiers()
     # LiteLLM-routed tiers.
     assert isinstance(tiers["local_coder"].route, LiteLLMRoute)
     assert tiers["local_coder"].route.kind == "litellm"
@@ -94,8 +121,11 @@ def test_committed_tiers_resolve_to_the_correct_route_variant():
 
 
 def test_claude_code_tiers_carry_the_expected_cli_model_flags():
-    """Each Claude Code tier names the CLI model flag the M2 driver forwards."""
-    tiers = TierRegistry.load(REPO_ROOT)
+    """Each Claude Code tier names the CLI model flag the M2 driver forwards.
+
+    M15 T04: fixture relocated; uses ``_load_example_tiers()``.
+    """
+    tiers = _load_example_tiers()
     assert tiers["opus"].route.cli_model_flag == "opus"
     assert tiers["sonnet"].route.cli_model_flag == "sonnet"
     assert tiers["haiku"].route.cli_model_flag == "haiku"
@@ -108,9 +138,15 @@ def test_litellm_tier_carries_ollama_model_string():
     `implementer` entries too. Those entries were dropped — the project's
     Gemini routing lives inside individual workflow registries, not in
     this schema-smoke file.
+
+    M15 T04: fixture relocated; uses ``_load_example_tiers()``.
     """
-    tiers = TierRegistry.load(REPO_ROOT)
+    tiers = _load_example_tiers()
     assert tiers["local_coder"].route.model.startswith("ollama/")
+    api_base = tiers["local_coder"].route.api_base
+    assert api_base is not None and "${" not in api_base, (
+        f"expected env-var placeholder to be expanded in api_base, got: {api_base!r}"
+    )
 
 
 # ---------------------------------------------------------------------------

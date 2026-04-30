@@ -114,7 +114,7 @@ def test_aiw_version_command() -> None:
     "relative_path",
     [
         "pyproject.toml",
-        "tiers.yaml",
+        "docs/tiers.example.yaml",
         "pricing.yaml",
         ".gitignore",
         "migrations/001_initial.sql",

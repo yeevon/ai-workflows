@@ -9,6 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- next release entries go here -->
 
+### Added — M15 Task 04: ADR-0006 + tiers.yaml relocation + writing-a-workflow.md tier-config section (2026-04-30)
+
+**Deliverable A — ADR-0006:**
+
+New `design_docs/adr/0006_tier_fallback_cascade_semantics.md`. Records the decisions made
+and alternatives rejected when designing the M15 fallback cascade: trigger condition
+(retry-budget exhaustion after `RetryingEdge` three-bucket cycle), cost-accounting posture
+(truthful — every attempted route logs `TokenUsage`), validator interaction (against successful
+route only; semantic-validation failure is a primary-route concern — KDR-004 preserved), nesting
+limit (flat — nested fallbacks explicitly rejected), and four rejected alternatives
+(immediate-fail-over on first `NonRetryable`, score-based routing, provider-health probes,
+YAML overlay). Explicitly notes YAML-overlay rejection due to KDR-014.
+
+**Deliverable B — `tiers.yaml` → `docs/tiers.example.yaml`:**
+
+Repo-root `tiers.yaml` relocated to `docs/tiers.example.yaml`. Header comment updated to remove
+stale "Forward-looking: M15 introduces..." sentence; replaced with "M15 shipped: this file has
+been relocated..." note. `tiers.yaml` deleted from repo root. All four tier entries
+(`local_coder`, `opus`, `sonnet`, `haiku`) unchanged.
+
+**Deliverable C — `docs/writing-a-workflow.md` fallback section:**
+
+New `### Fallback chains` subsection added after `### Tier registry (\`tiers=\`)` and before
+`### Minimum viable spec` under `## The WorkflowSpec shape`. Documents `TierConfig.fallback`
+field, flat-only semantics, cascade-trigger semantics, cost-attribution note, validator
+interaction, `ClaudeCodeRoute` → `LiteLLMRoute` example, cross-links to `docs/tiers.example.yaml`
+and ADR-0006.
+
+**Files touched:**
+- `design_docs/adr/0006_tier_fallback_cascade_semantics.md` — new ADR file.
+- `docs/tiers.example.yaml` — new file (relocated from `tiers.yaml`).
+- `tiers.yaml` — deleted.
+- `docs/writing-a-workflow.md` — `### Fallback chains` subsection added.
+- `tests/primitives/test_tiers_loader.py` — `DOCS_DIR` constant + `_load_example_tiers()`
+  helper added; four committed-file tests updated to use `_load_example_tiers()`.
+- `tests/test_scaffolding.py` — parametrize entry updated from `"tiers.yaml"` to
+  `"docs/tiers.example.yaml"`.
+- `tests/test_wheel_contents.py` — stale `tiers.yaml` strings updated (TA-LOW-04).
+- `design_docs/phases/milestone_15_tier_overlay/task_04_adr_0006_and_tiers_doc_relocation.md` —
+  Grounding line updated to cite `docs/tiers.example.yaml`; Status flipped to Built.
+- `design_docs/phases/milestone_15_tier_overlay/README.md` — task-04 row updated.
+- `design_docs/phases/milestone_15_tier_overlay/issues/task_04_issue.md` — issue file created.
+
+**ACs satisfied:** AC-1 (ADR-0006 exists, seven decision points + four alternatives covered),
+AC-2 (`docs/tiers.example.yaml` exists with four tiers, stale sentence removed), AC-3
+(`tiers.yaml` deleted from repo root), AC-4 (four `test_tiers_loader.py` tests + one
+`test_scaffolding.py` entry updated), AC-5 (`### Fallback chains` section added with all
+required content + ADR-0006 cross-link), AC-6 (CHANGELOG updated), AC-7 (pytest passes),
+AC-8 (lint-imports passes), AC-9 (ruff check passes).
+
+**Carry-over items resolved:** TA-LOW-01 (Grounding line updated), TA-LOW-02 (ADR-0006 link
+includes `(builder-only, on design branch)` suffix), TA-LOW-04 (`test_wheel_contents.py`
+stale strings updated). TA-LOW-03 already resolved inline in task analysis.
+
 ### Added — M15 Task 03: aiw list-tiers command + HTTP CircuitOpen cascade test — cycle 2 (2026-04-30)
 
 **Deliverable A — `aiw list-tiers` CLI command:**
