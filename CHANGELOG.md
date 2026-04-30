@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- next release entries go here -->
 
+### Added — M15 Task 03: aiw list-tiers command + HTTP CircuitOpen cascade test — cycle 2 (2026-04-30)
+
+**Deliverable A — `aiw list-tiers` CLI command:**
+
+New `@app.command("list-tiers")` subcommand in `ai_workflows/cli.py`. Reads
+`workflows.list_workflows()` and `workflows.get_spec(name).tiers` to print a tier table with
+columns: workflow, tier, kind (LiteLLM/ClaudeCode), model/flag, concurrency, timeout_s, fallback
+(em-dash when empty, comma-joined route identifiers when non-empty). Accepts `--workflow`/`-w`
+to filter to a single workflow; unknown workflow name raises `typer.BadParameter` (exit code 2).
+Imperative workflows (registered via `register()` only, no `WorkflowSpec`) appear with a
+`"(no tier registry exported)"` row. Fully synchronous — no `asyncio.run`, no `_async` helper
+(TA-LOW-01).
+
+**Deliverable B — HTTP CircuitOpen cascade test:**
+
+New `tests/mcp/test_http_fallback_on_circuit_open.py` with one hermetic test
+`test_http_run_workflow_fallback_cascade_on_circuit_open`. Starts the MCP HTTP server in a
+background daemon thread, installs `_FallbackStubLiteLLMAdapter` (primary raises `CircuitOpen`,
+fallback returns valid JSON), invokes `run_workflow` via `fastmcp.Client` over HTTP, and asserts
+conjunctively: (a) `error=None`, (b) `run_id` present, (c) no `AllFallbacksExhaustedError` in
+payload. Pins the HTTP-envelope shape when cascade fires under a tripped circuit breaker
+(M15 exit criterion #5).
+
+**Files touched:**
+- `ai_workflows/cli.py` — `list_tiers()` command + `_emit_list_tiers_table()` helper added;
+  `ClaudeCodeRoute, LiteLLMRoute` imports added from `ai_workflows.primitives.tiers`.
+  Cycle 2: `_eager_import_in_package_workflows()` called before registry read; bare `typer.echo`
+  before `raise typer.BadParameter` dropped (LOW-02).
+- `ai_workflows/workflows/__init__.py` — `_eager_import_in_package_workflows()` helper added;
+  handles both fresh-import and already-loaded-registry-cleared cases (Decision 1 / MED-01).
+- `tests/cli/test_list_tiers.py` — restructured: 4 original tests + LOW-01 test moved into
+  `TestListTiersIsolated` class with class-scoped autouse; MED-01 test added at module level
+  (outside autouse scope); 6 total CLI tests.
+- `tests/mcp/test_http_fallback_on_circuit_open.py` — 1 HTTP-transport cascade test (cycle 1,
+  unchanged in cycle 2).
+
+**ACs satisfied:** AC-1 (list-tiers registered), AC-2 (tier table output), AC-3 (--workflow filter
++ exit code 2 / LOW-02: bare echo dropped), AC-4 (imperative workflows handled + LOW-01 test),
+AC-5 (HTTP CircuitOpen cascade test), AC-6 (6 CLI tests green), AC-7 (1532 existing tests
+unchanged in cycle 2), AC-8 (5 lint-imports contracts kept), AC-9 (all gates green), AC-10 (this
+entry). MED-01: `aiw list-tiers` smoke test now passes.
+
+**Carry-over absorbed:** TA-LOW-01 (sync implementation, no asyncio.run); TA-LOW-02 (register_workflow
+pattern from tests/workflows/test_compiler.py:215 and tests/workflows/test_spec.py:235); MED-01
+(eager-import path); LOW-01 (imperative workflow test coverage); LOW-02 (duplicate echo dropped).
+
+**Deviations from spec:** None.
+
 ### Added — M15 Task 02: TieredNode fallback-cascade dispatch + cost attribution (2026-04-30)
 
 Wires the fallback cascade into `TieredNode`. When `_dispatch()` raises an infrastructure-level

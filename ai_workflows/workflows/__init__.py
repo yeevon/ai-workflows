@@ -206,6 +206,87 @@ def auditor_tier_registry() -> dict[str, TierConfig]:
     }
 
 
+def _eager_import_in_package_workflows() -> None:
+    """Import every sibling module in :mod:`ai_workflows.workflows` so their
+    top-level :func:`register` / :func:`register_workflow` calls fire.
+
+    Used by :func:`ai_workflows.cli.list_tiers` before calling
+    :func:`list_workflows` so that ``aiw list-tiers`` (invoked with no
+    extra args) discovers the in-package workflows without the caller
+    having to know their names.  ``ModuleNotFoundError`` is suppressed so
+    an optional dependency that is absent does not abort the listing.
+
+    **Already-loaded modules whose registration was cleared** (common in
+    tests after ``_reset_for_tests()``): calling ``importlib.import_module``
+    on a module that is already in ``sys.modules`` is a no-op — the
+    module-level ``register()`` / ``register_workflow()`` calls do *not*
+    re-fire.  To handle this case without ``importlib.reload()`` (which
+    breaks class identity) or ``sys.modules`` eviction (same problem), this
+    function scans the already-loaded module's globals for two patterns:
+
+    * :class:`WorkflowSpec` instances → calls :func:`register_workflow` if
+      the spec's name is absent from ``_SPEC_REGISTRY``.
+    * A callable attribute named ``build_<short_module_name>`` → calls
+      :func:`register` with ``short_module_name`` as the key if that name
+      is absent from ``_REGISTRY``.
+
+    These two patterns cover every in-package workflow module in the current
+    codebase.  Custom step types and non-registering modules (``testing.py``,
+    ``summarize_tiers.py``) are silently skipped.
+
+    This helper is **not** called by ``aiw run`` or ``aiw resume`` — those
+    lazy-import only the requested module to keep startup cost low (KDR-013
+    principle: the framework imports user-owned modules on demand, not
+    eagerly at startup).
+
+    M15 Task 03 — Decision 1 from Auditor cycle 1 issue file.
+    Relationship: used exclusively by the surfaces layer (``cli.py``).
+    """
+    import contextlib
+    import importlib
+    import pkgutil
+    import sys
+    import types
+
+    import ai_workflows.workflows as _pkg
+
+    for mod_info in pkgutil.iter_modules(_pkg.__path__, prefix="ai_workflows.workflows."):
+        name = mod_info.name
+        short = name.split(".")[-1]
+        # Skip private/underscore modules — they don't self-register.
+        if short.startswith("_"):
+            continue
+
+        if name not in sys.modules:
+            # Fresh import: module-level register() calls fire as a side effect.
+            with contextlib.suppress(ModuleNotFoundError):
+                importlib.import_module(name)
+            continue
+
+        # Module is already in sys.modules.  Scan its globals and re-trigger
+        # registration if needed, without reload or sys.modules eviction
+        # (either of which would break class identity for other tests).
+        mod: types.ModuleType = sys.modules[name]
+
+        # Pattern 1 — spec-API: WorkflowSpec instance in module globals.
+        for _attr_val in vars(mod).values():
+            if (
+                isinstance(_attr_val, WorkflowSpec)
+                and _attr_val.name not in _SPEC_REGISTRY
+            ):
+                with contextlib.suppress(ValueError, Exception):  # noqa: BLE001
+                    register_workflow(_attr_val)
+
+        # Pattern 2 — imperative: callable named build_<short> not yet in
+        # _REGISTRY.  Convention: planner -> build_planner, scaffold_workflow
+        # -> build_scaffold_workflow, slice_refactor -> build_slice_refactor.
+        builder_attr = f"build_{short}"
+        builder = getattr(mod, builder_attr, None)
+        if callable(builder) and short not in _REGISTRY:
+            with contextlib.suppress(ValueError, Exception):  # noqa: BLE001
+                register(short, builder)
+
+
 def _reset_for_tests() -> None:
     """Clear the registry and any synthetic compiled-spec modules.
 

@@ -82,7 +82,7 @@ With this registry in place:
 |---|---|---|
 | 01 | [`TierConfig.fallback` schema + hermetic tests](task_01_fallback_schema.md) ✅ Built (cycle 1) | code + test |
 | 02 | [`TieredNode` fallback-cascade dispatch + cost attribution](task_02_tierednode_cascade_dispatch.md) ✅ Built (cycle 1) | code + test |
-| 03 | `aiw list-tiers` command + HTTP CircuitOpen cascade test | code + test + doc |
+| 03 | [`aiw list-tiers` command + HTTP CircuitOpen cascade test](task_03_aiw_list_tiers_and_circuit_open_cascade.md) ✅ Built (cycle 2) | code + test + doc |
 | 04 | ADR-0006 + relocate `tiers.yaml` → `docs/tiers.example.yaml` + `docs/writing-a-workflow.md` tier-config section | doc |
 | 05 | Milestone close-out | doc |
 

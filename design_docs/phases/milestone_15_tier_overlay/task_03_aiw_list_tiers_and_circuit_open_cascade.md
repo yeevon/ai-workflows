@@ -1,6 +1,6 @@
 # Task 03 — `aiw list-tiers` command + HTTP CircuitOpen cascade test
 
-**Status:** 📝 Planned.
+**Status:** ✅ Built (cycle 2, 2026-04-30).
 **Grounding:** [milestone README](README.md) · [architecture.md §4 + §9](../../architecture.md) · [ai_workflows/cli.py](../../../ai_workflows/cli.py) · [ai_workflows/workflows/__init__.py](../../../ai_workflows/workflows/__init__.py) · [ai_workflows/workflows/spec.py](../../../ai_workflows/workflows/spec.py) · [tests/mcp/test_http_transport.py](../../../tests/mcp/test_http_transport.py) · [KDR-002](../../architecture.md) (MCP-as-substrate) · [KDR-004](../../architecture.md) (validator pairing — cascade is infrastructure, not semantic retry) · [KDR-006](../../architecture.md) (three-bucket retry taxonomy) · [KDR-014](../../architecture.md) (framework owns tier policy).
 
 ## What to Build
@@ -172,25 +172,25 @@ naming files touched and ACs satisfied.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1: `aiw list-tiers` command registered.** `aiw list-tiers --help` exits 0 and prints the command's help text. `aiw list-tiers` (no args) lists all registered workflows without error.
+- [x] **AC-1: `aiw list-tiers` command registered.** `aiw list-tiers --help` exits 0 and prints the command's help text. `aiw list-tiers` (no args) lists all registered workflows without error.
 
-- [ ] **AC-2: Tier table output.** For a workflow with a spec, the output includes: workflow name, tier name, route kind (`LiteLLM` or `ClaudeCode`), model/CLI flag, concurrency cap, timeout, fallback column (`—` when empty, comma-joined route identifiers when non-empty).
+- [x] **AC-2: Tier table output.** For a workflow with a spec, the output includes: workflow name, tier name, route kind (`LiteLLM` or `ClaudeCode`), model/CLI flag, concurrency cap, timeout, fallback column (`—` when empty, comma-joined route identifiers when non-empty).
 
-- [ ] **AC-3: `--workflow` filter.** `aiw list-tiers --workflow <name>` shows only tiers for the named workflow. Unknown workflow name exits with exactly exit code 2 (`typer.BadParameter`); assert via `CliRunner().invoke(...).exit_code == 2`.
+- [x] **AC-3: `--workflow` filter.** `aiw list-tiers --workflow <name>` shows only tiers for the named workflow. Unknown workflow name exits with exactly exit code 2 (`typer.BadParameter`); assert via `CliRunner().invoke(...).exit_code == 2`.
 
-- [ ] **AC-4: Imperative workflows handled gracefully.** Workflows registered via `register()` only (no `WorkflowSpec`) appear in the output with a `"(no tier registry exported)"` message rather than crashing.
+- [x] **AC-4: Imperative workflows handled gracefully.** Workflows registered via `register()` only (no `WorkflowSpec`) appear in the output with a `"(no tier registry exported)"` message rather than crashing.
 
-- [ ] **AC-5: HTTP CircuitOpen cascade test.** `test_http_run_workflow_fallback_cascade_on_circuit_open` in `tests/mcp/test_http_fallback_on_circuit_open.py` passes hermetically. The test uses stub adapters (no live provider calls). Assertions must be conjunctive: (a) the response payload error field is `None`, AND (b) the run-ID field is present in the response, AND (c) no `AllFallbacksExhaustedError` text appears in the payload. No "or" clauses in AC assertions.
+- [x] **AC-5: HTTP CircuitOpen cascade test.** `test_http_run_workflow_fallback_cascade_on_circuit_open` in `tests/mcp/test_http_fallback_on_circuit_open.py` passes hermetically. The test uses stub adapters (no live provider calls). Assertions must be conjunctive: (a) the response payload error field is `None`, AND (b) the run-ID field is present in the response, AND (c) no `AllFallbacksExhaustedError` text appears in the payload. No "or" clauses in AC assertions.
 
-- [ ] **AC-6: CLI hermetic tests green.** `tests/cli/test_list_tiers.py` — 4 new tests, all pass. No provider calls.
+- [x] **AC-6: CLI hermetic tests green.** `tests/cli/test_list_tiers.py` — 4 new tests, all pass. No provider calls.
 
-- [ ] **AC-7: Existing tests unchanged.** Full `uv run pytest` green. Existing `tests/cli/` and `tests/mcp/` tests pass without modification.
+- [x] **AC-7: Existing tests unchanged.** Full `uv run pytest` green. Existing `tests/cli/` and `tests/mcp/` tests pass without modification.
 
-- [ ] **AC-8: Layer contract preserved.** `uv run lint-imports` reports 5 contracts kept, 0 broken. `aiw list-tiers` lives in `cli.py` (surfaces layer); it imports from `workflows` (allowed: surfaces → workflows). No new `primitives → graph` or other violations.
+- [x] **AC-8: Layer contract preserved.** `uv run lint-imports` reports 5 contracts kept, 0 broken. `aiw list-tiers` lives in `cli.py` (surfaces layer); it imports from `workflows` (allowed: surfaces → workflows). No new `primitives → graph` or other violations.
 
-- [ ] **AC-9: Gates green.** `uv run pytest` + `uv run lint-imports` + `uv run ruff check` all pass.
+- [x] **AC-9: Gates green.** `uv run pytest` + `uv run lint-imports` + `uv run ruff check` all pass.
 
-- [ ] **AC-10: CHANGELOG entry.** M15 T03 entry added under `[Unreleased]`.
+- [x] **AC-10: CHANGELOG entry.** M15 T03 entry added under `[Unreleased]`.
 
 ## Dependencies
 
@@ -219,10 +219,10 @@ HTTP smoke: `test_http_run_workflow_fallback_cascade_on_circuit_open` is the wir
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — Sync implementation for `list-tiers` (no `asyncio.run`)** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-01 — Sync implementation for `list-tiers` (no `asyncio.run`)** (severity: LOW, source: task_analysis.md round 3)
       The template sketch in §1 shows `asyncio.run(_list_tiers_async(...))` but the disclaimer immediately below says ship the sync form. The template is illustrative only — ship a fully synchronous `list_tiers` command. No `_async` helper, no `asyncio.run`. The function body should call `workflows.list_workflows()` and `workflows.get_spec(name)` directly inside the Typer entry point.
       **Recommendation:** Builder ignores the template sketch and ships a flat sync function.
 
-- [ ] **TA-LOW-02 — `register_workflow` analog citation** (severity: LOW, source: task_analysis.md round 3)
+- [x] **TA-LOW-02 — `register_workflow` analog citation** (severity: LOW, source: task_analysis.md round 3)
       The cited analog `tests/mcp/test_scaffold_workflow_http.py:128-149` is a heredoc string template, not a direct `register_workflow()` call site. Use `tests/workflows/test_compiler.py:215` or `tests/workflows/test_spec.py:235` as the pattern for `register_workflow(synthetic_spec)` in test setup.
       **Recommendation:** Builder uses one of those as the pattern, not the scaffold HTTP test.
