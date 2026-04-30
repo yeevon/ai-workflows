@@ -43,6 +43,7 @@ from ai_workflows.workflows.scaffold_workflow import (
     build_scaffold_workflow,
     scaffold_workflow_tier_registry,
 )
+from ai_workflows.workflows.scaffold_workflow_prompt import render_scaffold_prompt
 
 # ---------------------------------------------------------------------------
 # Stub LiteLLM adapter (same pattern as test_planner_graph.py)
@@ -662,3 +663,27 @@ def test_scaffold_graph_has_synthesize_and_validator_paired() -> None:
     assert "scaffold_validator" in g.nodes
     assert "preview_gate" in g.nodes
     assert "write_to_disk" in g.nodes
+
+
+# ---------------------------------------------------------------------------
+# Prompt rendering tests (M17 T02 AC-4 / LOW-3 / M17-T01-ISS-03)
+# ---------------------------------------------------------------------------
+
+
+def test_render_scaffold_prompt_brace_escaping() -> None:
+    """AC-4 / LOW-3: brace-containing inputs in goal, target_path, and
+    existing_workflow_context pass through render_scaffold_prompt() literally.
+
+    str.format() does not scan substituted values for format fields — values
+    are opaque.  Pre-escaping user-supplied braces is wrong: it would produce
+    {{x}} in the rendered output (LLM sees double braces instead of single).
+    """
+    result = render_scaffold_prompt(
+        goal="generate {x}",
+        target_path="/tmp/{name}.py",
+        existing_workflow_context="def f(): return {'a': 1}",
+    )
+    assert "{x}" in result
+    assert "{{x}}" not in result
+    assert "{'a': 1}" in result
+    assert "{{'a': 1}}" not in result

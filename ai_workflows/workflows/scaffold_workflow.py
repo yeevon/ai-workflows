@@ -44,7 +44,7 @@ from ai_workflows.graph.error_handler import wrap_with_error_handler
 from ai_workflows.graph.human_gate import human_gate
 from ai_workflows.graph.retrying_edge import retrying_edge
 from ai_workflows.graph.tiered_node import tiered_node
-from ai_workflows.primitives.retry import RetryPolicy
+from ai_workflows.primitives.retry import NonRetryable, RetryableSemantic, RetryPolicy
 from ai_workflows.primitives.tiers import ClaudeCodeRoute, TierConfig
 from ai_workflows.workflows import register
 from ai_workflows.workflows._scaffold_validator import (
@@ -227,8 +227,6 @@ def _make_scaffold_validator_node() -> Any:
     the synthesis node (KDR-004 + KDR-006).  On exhaustion escalates to
     ``NonRetryable``.
     """
-    from ai_workflows.primitives.retry import NonRetryable, RetryableSemantic
-
     async def _node(
         state: ScaffoldState,
         config: RunnableConfig,
@@ -307,7 +305,6 @@ async def _write_to_disk(
         TargetRelativePathError,
         OSError,
     ) as exc:
-        from ai_workflows.primitives.retry import NonRetryable
         raise NonRetryable(str(exc)) from exc
 
     outcome = WriteOutcome(target_path=resolved, sha256=sha256)
@@ -442,7 +439,6 @@ async def _validate_input_node(
         TargetDirectoryNotWritableError,
         TargetRelativePathError,
     ) as exc:
-        from ai_workflows.primitives.retry import NonRetryable
         raise NonRetryable(str(exc)) from exc
 
     return {}

@@ -87,7 +87,7 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 - [x] **CLI surface.** `aiw run-scaffold --goal ... --target ~/path/file.py [--force]` alias added. Also works via `aiw run scaffold_workflow --input goal=... --input target_path=...`.
 - [ ] **Skill-install doc extension.** New `§Generating your own workflow` section in [`skill_install.md`](../milestone_9_skill/skill_install.md) — T03 deliverable.
 - [ ] **ADR-0010 added** under `design_docs/adr/0010_user_owned_generated_code.md`. Full text drafted at T03.
-- [ ] **CS300 dogfood smoke.** T02 deliverable.
+- [ ] **CS300 dogfood smoke.** T02 deliverable (live run + CHANGELOG entry operator-dependent; smoke file + prompt iteration landed at T02).
 - [x] **Hermetic tests.** New `tests/workflows/test_scaffold_workflow.py` covering:
     - Validator: parseable Python passes; unparseable Python rejects; missing `register_workflow()` call rejects; valid `register_workflow(SPEC)` with Name-reference passes.
     - Write safety: target inside `ai_workflows/` rejects; nonexistent parent rejects; existing file without `--force` rejects; existing file with `--force` overwrites.
@@ -125,7 +125,7 @@ The scaffold workflow itself is a legitimate consumer of the same infrastructure
 | # | Task | Kind | Status |
 |---|---|---|---|
 | 01 | [`scaffold_workflow` graph + validator + write-safety + CLI/MCP wiring](task_01_scaffold_workflow.md) | code + test | ✅ Built (cycle 1) |
-| 02 | Prompt template iteration + live-mode smoke + CS300 dogfood | prompt + test | 📝 Planned |
+| 02 | Prompt template iteration + live-mode smoke + CS300 dogfood | prompt + test | ✅ Built (cycle 1) |
 | 03 | ADR-0010 + skill-install §Generating-your-own-workflow + `docs/writing-a-workflow.md` §Scaffolding | doc | 📝 Planned |
 | 04 | Milestone close-out | doc | 📝 Planned |
 

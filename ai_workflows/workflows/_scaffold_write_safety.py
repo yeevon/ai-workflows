@@ -105,7 +105,7 @@ def validate_target_path(
 def atomic_write(target: Path, content: str) -> str:
     """Write content atomically. Returns SHA256 hex of written bytes.
 
-    Uses ``tempfile.NamedTemporaryFile(dir=target.parent)`` to guarantee
+    Uses ``tempfile.mkstemp(dir=target.parent)`` to guarantee
     same-filesystem placement (required for ``os.replace`` atomicity on
     POSIX), then ``os.replace()`` to swap.  Ensures a partial write cannot
     corrupt a previous good file on crash.

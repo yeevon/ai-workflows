@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M17 Task 02: prompt template iteration + live-mode smoke + carry-over items (2026-04-30)
+
+Files touched:
+- `ai_workflows/workflows/scaffold_workflow_prompt.py` — `SCAFFOLD_PROMPT_TEMPLATE` iterated: now teaches `WorkflowSpec` field inventory (`name`, `input_schema`, `output_schema`, `steps`, `tiers`), `register_workflow(spec)` calling convention, four-layer contract, tier-naming convention, and canonical example step. Prompt length ~3× T01 placeholder; `render_scaffold_prompt()` unchanged.
+- `ai_workflows/workflows/scaffold_workflow.py` — inner imports of `NonRetryable` / `RetryableSemantic` hoisted to module-level import block (ADV-1 / AC-6).
+- `ai_workflows/workflows/_scaffold_write_safety.py` — `atomic_write` docstring updated: `NamedTemporaryFile` → `mkstemp` (ADV-2 / AC-7).
+- `tests/workflows/test_scaffold_workflow.py` — `test_render_scaffold_prompt_brace_escaping` added: exercises brace-containing inputs in `goal`, `target_path`, and `existing_workflow_context` (LOW-3 / AC-4).
+- `tests/cli/test_run_scaffold_alias.py` — NEW: 5 tests covering `--goal`, `--target`, `--force`, `--tier-override` flag parsing via `typer.testing.CliRunner` (LOW-2 / AC-5).
+- `tests/release/test_scaffold_live_smoke.py` — NEW: `AIW_E2E=1`-gated live smoke; invokes real Opus tier via `ClaudeCodeRoute`; asserts gate interrupt + non-empty `spec_python` + validator pass (AC-2).
+- `CHANGELOG.md` — this entry (AC-9).
+
+ACs satisfied: AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9. Carry-over items LOW-2, LOW-3, ADV-1, ADV-2 from T01 audits closed.
+AC-1 (live CS300-goal run passes validator on first attempt) and AC-3 (CS300 dogfood documented) are operator-dependent: require `AIW_E2E=1` + Claude Code CLI auth. Deferred to operator; noted in issue file.
+Deviations from spec: none.
+
 ### Added — M17 Task 01: scaffold_workflow meta-workflow graph + validator + write safety (2026-04-30)
 
 New modules:

@@ -1,6 +1,6 @@
 # Task 02 — Prompt template iteration + live-mode smoke + CS300 dogfood
 
-**Status:** 📝 Planned.
+**Status:** ✅ Built (cycle 1, 2026-04-30).
 **Grounding:** [milestone README](README.md) · [task_01_scaffold_workflow.md](task_01_scaffold_workflow.md) (T01 built the graph + validator; this task hardens the prompt) · [ai_workflows/workflows/scaffold_workflow_prompt.py](../../../ai_workflows/workflows/scaffold_workflow_prompt.py) (prompt template to iterate) · [ai_workflows/workflows/spec.py:329-404](../../../ai_workflows/workflows/spec.py#L329-L404) (`WorkflowSpec` + `register_workflow` — the API the generated code must call) · [ai_workflows/workflows/summarize.py](../../../ai_workflows/workflows/summarize.py) (canonical WorkflowSpec-based workflow — the shape the prompt teaches).
 
 ## What to Build
@@ -105,10 +105,10 @@ Update `atomic_write` docstring in `_scaffold_write_safety.py`: replace "`tempfi
 
 ## Carry-over from prior audits
 
-- [ ] **LOW-2** (T01 cycle 1, M17-T01-ISS-02) — `aiw run-scaffold` CLI alias test via `typer.testing.CliRunner`. See AC-5.
-- [ ] **LOW-3** (T01 cycle 2, M17-T01-ISS-03) — `render_scaffold_prompt` brace-escape regression test. See AC-4.
-- [ ] **ADV-1** (T01 sr-dev) — hoist inner import in `_make_scaffold_validator_node` to module-level. See AC-6.
-- [ ] **ADV-2** (T01 sr-dev) — update `atomic_write` docstring: `NamedTemporaryFile` → `mkstemp`. See AC-7.
+- [x] **LOW-2** (T01 cycle 1, M17-T01-ISS-02) — `aiw run-scaffold` CLI alias test via `typer.testing.CliRunner`. See AC-5.
+- [x] **LOW-3** (T01 cycle 2, M17-T01-ISS-03) — `render_scaffold_prompt` brace-escape regression test. See AC-4.
+- [x] **ADV-1** (T01 sr-dev) — hoist inner import in `_make_scaffold_validator_node` to module-level. See AC-6.
+- [x] **ADV-2** (T01 sr-dev) — update `atomic_write` docstring: `NamedTemporaryFile` → `mkstemp`. See AC-7.
 
 ## Carry-over to T03
 
