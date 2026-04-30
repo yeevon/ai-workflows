@@ -1,6 +1,6 @@
 # Task 02 — `TieredNode` fallback-cascade dispatch + cost attribution
 
-**Status:** 📝 Planned.
+**Status:** ✅ Built (cycle 1, 2026-04-30).
 **Grounding:** [milestone README](README.md) · [architecture.md §4.2 + §9](../../architecture.md) · [ai_workflows/graph/tiered_node.py](../../../ai_workflows/graph/tiered_node.py) · [ai_workflows/primitives/cost.py](../../../ai_workflows/primitives/cost.py) · [KDR-006](../../architecture.md) (three-bucket retry via RetryingEdge) · [KDR-004](../../architecture.md) (validator pairing — cascade is an infrastructure mechanism, not a semantic retry).
 
 ## What to Build
@@ -154,39 +154,39 @@ naming files touched and ACs satisfied.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1: `AllFallbacksExhaustedError` defined.** New exception class in
+- [x] **AC-1: `AllFallbacksExhaustedError` defined.** New exception class in
   `ai_workflows/graph/tiered_node.py`, subclass of `NonRetryable`. Has
   `attempts: list[TierAttempt]`. Exported via `__all__`.
 
-- [ ] **AC-2: `TierAttempt` defined.** New dataclass in `ai_workflows/graph/tiered_node.py`
+- [x] **AC-2: `TierAttempt` defined.** New dataclass in `ai_workflows/graph/tiered_node.py`
   with fields `route: LiteLLMRoute | ClaudeCodeRoute`, `exception: BaseException`,
   `usage: TokenUsage | None`. Exported via `__all__`.
 
-- [ ] **AC-3: Cascade dispatch wired.** `_node()` walks `tier_config.fallback` after primary
+- [x] **AC-3: Cascade dispatch wired.** `_node()` walks `tier_config.fallback` after primary
   route raises `RetryableTransient`, `NonRetryable`, or `CircuitOpen`. Each fallback dispatch
   acquires the primary tier's semaphore if one is configured. First successful fallback returns
   normally. All-fail raises `AllFallbacksExhaustedError`.
 
-- [ ] **AC-4: `RetryableSemantic` defensive pass-through.** `RetryableSemantic` from any
+- [x] **AC-4: `RetryableSemantic` defensive pass-through.** `RetryableSemantic` from any
   dispatch (primary or fallback) propagates unchanged — the cascade does not re-classify it.
   Validator-driven semantic retry runs through `RetryingEdge` against the primary route only;
   the cascade is at a lower layer and is not entered for semantic failures (KDR-004 unchanged).
 
-- [ ] **AC-5: Cost attribution.** Every successful `_dispatch()` call (primary or fallback)
+- [x] **AC-5: Cost attribution.** Every successful `_dispatch()` call (primary or fallback)
   records its `TokenUsage` to `cost_callback`. Failed dispatches do not record to cost
   callback. `cost_tracker.total(run_id)` reflects only cost-incurring (successful) attempts.
 
-- [ ] **AC-6: Empty-fallback backward compat.** A `TierConfig` with `fallback=[]` (the
+- [x] **AC-6: Empty-fallback backward compat.** A `TierConfig` with `fallback=[]` (the
   default) behaves identically to pre-T02: primary failure logged + re-raised, no cascade
   initiated. All pre-existing tests for `tiered_node` pass without modification.
 
-- [ ] **AC-12: CircuitOpen triggers cascade.** When the primary route is Ollama-backed and
+- [x] **AC-12: CircuitOpen triggers cascade.** When the primary route is Ollama-backed and
   the circuit breaker is open, raising `CircuitOpen` (before `_dispatch()` is called), the
   cascade fires if `tier_config.fallback` is non-empty — identical to the post-dispatch
   `RetryableTransient`/`NonRetryable` path. If `fallback=[]`, `CircuitOpen` propagates as
   today.
 
-- [ ] **AC-13: Per-attempt log records + docstring.** For a cascade run (non-empty fallback,
+- [x] **AC-13: Per-attempt log records + docstring.** For a cascade run (non-empty fallback,
   primary fails), exactly one `node_failed` log record emits per failed route attempt, and one
   `node_completed` emits for the successful route (if any). Each record's `provider` and
   `model` fields reflect the route that was attempted, not the primary route. The module
@@ -194,20 +194,20 @@ naming files touched and ACs satisfied.
   read "one record per *attempt*" (see §1.6); for `fallback=[]` tiers the new wording
   degenerates to the prior one-record-per-invocation behaviour.
 
-- [ ] **AC-7: Hermetic tests green.** `tests/graph/test_tiered_node_fallback.py` — 4 new
+- [x] **AC-7: Hermetic tests green.** `tests/graph/test_tiered_node_fallback.py` — 4 new
   tests, all pass. No provider calls.
 
-- [ ] **AC-8: Existing tests unchanged.** Full `uv run pytest` green. No modification to
+- [x] **AC-8: Existing tests unchanged.** Full `uv run pytest` green. No modification to
   existing test files.
 
-- [ ] **AC-9: Layer contract preserved.** `uv run lint-imports` reports 5 contracts kept,
+- [x] **AC-9: Layer contract preserved.** `uv run lint-imports` reports 5 contracts kept,
   0 broken. `AllFallbacksExhaustedError` and `TierAttempt` in `graph/`; cascade logic in
   `graph/tiered_node.py`. No primitives-layer change.
 
-- [ ] **AC-10: Gates green.** `uv run pytest` + `uv run lint-imports` + `uv run ruff check`
+- [x] **AC-10: Gates green.** `uv run pytest` + `uv run lint-imports` + `uv run ruff check`
   all pass.
 
-- [ ] **AC-11: CHANGELOG entry.** M15 T02 entry added under `[Unreleased]`.
+- [x] **AC-11: CHANGELOG entry.** M15 T02 entry added under `[Unreleased]`.
 
 ## Dependencies
 
@@ -240,7 +240,7 @@ naming files touched and ACs satisfied.
 
 ## Carry-over from task analysis
 
-- [ ] **TA-LOW-01 — `RetryableSemantic` cascade-bypass framing** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-01 — `RetryableSemantic` cascade-bypass framing** (severity: LOW, source: task_analysis.md round 1)
       The spec framing implies `RetryableSemantic` is raised by provider dispatch — it is not.
       `RetryableSemantic` is owned by `ValidatorNode`; the cascade guard is defensive (a custom
       adapter could in principle raise it, so we must not re-classify). The guard is correct and
@@ -250,14 +250,14 @@ naming files touched and ACs satisfied.
       within the cascade reads: "Defensive pass-through — adapters do not raise this bucket;
       ValidatorNode does. Must not re-classify."
 
-- [ ] **TA-LOW-02 — `TierAttempt.usage` field always `None` — drop or document** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-02 — `TierAttempt.usage` field always `None` — drop or document** (severity: LOW, source: task_analysis.md round 1)
       `TierAttempt.usage` is never populated because `_dispatch()` raises before returning
       `TokenUsage` on failure. Either drop the field (simplest) or document it as
       forward-reserved with a code comment naming the trigger.
       **Recommendation:** Builder drops `TierAttempt.usage` unless there is an immediate
       consumer. If dropped, update `TierAttempt` dataclass definition and any test references.
 
-- [ ] **TA-LOW-03 — Per-call timeout inheritance for fallback routes** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-03 — Per-call timeout inheritance for fallback routes** (severity: LOW, source: task_analysis.md round 1)
       `_dispatch()` reads `tier_config.per_call_timeout_s` from the primary `TierConfig`. When
       a fallback reuses the primary's `tier_config`, it inherits the primary's timeout. This is
       desirable (operator-set timeout applies to the whole tier call regardless of route) but
@@ -265,7 +265,7 @@ naming files touched and ACs satisfied.
       **Recommendation:** Builder adds a one-line code comment near the fallback dispatch call:
       "# Fallback routes inherit per_call_timeout_s from the primary TierConfig."
 
-- [ ] **TA-LOW-04 — Breaker bypass for fallback dispatches** (severity: LOW, source: task_analysis.md round 1)
+- [x] **TA-LOW-04 — Breaker bypass for fallback dispatches** (severity: LOW, source: task_analysis.md round 1)
       Spec is silent on whether breaker `record_success` / `record_failure` calls happen for
       fallback dispatches. Fallback dispatches bypass circuit-breaker bookkeeping — each is one
       shot; no breaker `record_success` or `record_failure` is invoked for fallback routes

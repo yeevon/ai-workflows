@@ -9,6 +9,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- next release entries go here -->
 
+### Added — M15 Task 02: TieredNode fallback-cascade dispatch + cost attribution (2026-04-30)
+
+Wires the fallback cascade into `TieredNode`. When `_dispatch()` raises an infrastructure-level
+exception (`RetryableTransient`, `NonRetryable`, or `CircuitOpen`) for the primary route,
+`_node()` walks `tier_config.fallback` in order, attempting each route once. First successful
+call returns normally; cost attribution fires for every successful attempt. If all routes fail,
+raises `AllFallbacksExhaustedError` (a `NonRetryable` subclass). `RetryableSemantic` bypasses
+the cascade entirely (defensive pass-through; KDR-004 unchanged). Empty fallback (`fallback=[]`)
+preserves existing behaviour exactly.
+
+**Files touched:**
+- `ai_workflows/graph/tiered_node.py` — `TierAttempt` dataclass + `AllFallbacksExhaustedError`
+  added; `__all__` updated to export both; `_emit_failed_log` helper extracted; `_node()` closure
+  refactored to drive the cascade loop; `CircuitOpen` pre-dispatch guard extended to fire cascade
+  when `fallback` is non-empty; module docstring "Exactly-once invariants" bullet updated to
+  per-attempt wording (§1.6). `dataclasses.dataclass`/`field` added to stdlib imports.
+- `tests/graph/test_tiered_node_fallback.py` — 9 new hermetic tests covering all cascade ACs
+  (cascade success, all-exhausted, semantic pass-through, cost attribution, empty-fallback compat,
+  per-attempt logs, type/inheritance assertions).
+
+**ACs satisfied:** AC-1 (AllFallbacksExhaustedError), AC-2 (TierAttempt), AC-3 (cascade dispatch),
+AC-4 (RetryableSemantic pass-through), AC-5 (cost attribution), AC-6 (empty-fallback compat),
+AC-7 (9 hermetic tests green), AC-8 (existing 1514 tests unchanged), AC-9 (5 lint-imports contracts),
+AC-10 (all gates green), AC-11 (this entry), AC-12 (CircuitOpen triggers cascade), AC-13 (per-attempt logs).
+
+**Carry-over absorbed:** TA-LOW-01 (defensive comment on RetryableSemantic guard), TA-LOW-02
+(TierAttempt.usage forward-reserved with comment), TA-LOW-03 (timeout inheritance comment),
+TA-LOW-04 (breaker bypass comment for fallback dispatches).
+
+### Added — M15 Task 02: cycle-2 carry-over tests (2026-04-30)
+
+Two tests added to `tests/graph/test_tiered_node_fallback.py` per locked terminal decisions:
+- `test_cascade_triggers_on_retryable_transient_primary_fail` — AC-3: `RetryableTransient` from
+  primary triggers cascade; fallback succeeds; cost recorded.
+- `test_cascade_retryable_semantic_from_fallback_propagates_unchanged` — AC-4: primary
+  `NonRetryable` enters cascade; fallback raises `RetryableSemantic`; exception propagates
+  unchanged (not wrapped in `AllFallbacksExhaustedError`); `cost_tracker.total == 0`.
+
+Also added `_RetryableTransientAdapter` stub and `RetryableTransient` import to the test file.
+
+**Files touched:** `tests/graph/test_tiered_node_fallback.py`
+
+**ACs satisfied (cycle 2):** AC-3 (RetryableTransient cascade trigger), AC-4 (fallback
+RetryableSemantic pass-through). No code changes to `tiered_node.py`.
+
+**Deviations from spec:** None.
+
 ### Added — M15 Task 01: TierConfig.fallback schema + hermetic tests (2026-04-30)
 
 Adds `fallback: list[Route]` field to `TierConfig` in `ai_workflows/primitives/tiers.py`
