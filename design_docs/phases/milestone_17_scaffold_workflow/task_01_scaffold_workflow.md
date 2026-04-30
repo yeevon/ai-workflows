@@ -1,6 +1,6 @@
 # Task 01 — `scaffold_workflow` graph + validator + write-safety + CLI/MCP wiring
 
-**Status:** 📝 Planned.
+**Status:** ✅ Built (cycle 1, 2026-04-30).
 **Grounding:** [milestone README](README.md) · [ai_workflows/workflows/summarize.py](../../../ai_workflows/workflows/summarize.py) (canonical WorkflowSpec-based workflow to mirror) · [ai_workflows/workflows/spec.py:329-404](../../../ai_workflows/workflows/spec.py#L329-L404) (`WorkflowSpec` + `register_workflow` — scaffold outputs code that calls this) · [ai_workflows/workflows/__init__.py:54-110](../../../ai_workflows/workflows/__init__.py#L54-L110) (`register_workflow` primary entry point; `register` = Tier-4 escape hatch) · [M11 README](../milestone_11_gate_review/README.md) (gate-pause projection — scaffold surfaces code preview here) · [M16 task_01](../milestone_16_external_workflows/task_01_external_load_path.md) (load-path the scaffold's output rides on; env-var is `AIW_EXTRA_WORKFLOW_MODULES`).
 
 ## What to Build

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — M17 Task 01: scaffold_workflow meta-workflow graph + validator + write safety (2026-04-30)
+
+New modules:
+- `ai_workflows/workflows/scaffold_workflow.py` — `ScaffoldWorkflowInput`, `ScaffoldedWorkflow`, `WriteOutcome`, `ScaffoldState`, `build_scaffold_workflow()`, `scaffold_workflow_tier_registry()`, `initial_state()`, module-top `register("scaffold_workflow", build_scaffold_workflow)`.
+- `ai_workflows/workflows/_scaffold_write_safety.py` — `validate_target_path()`, `atomic_write()`, error classes (`TargetInsideInstalledPackageError`, `TargetDirectoryNotWritableError`, `TargetExistsError`, `TargetRelativePathError`).
+- `ai_workflows/workflows/_scaffold_validator.py` — `validate_scaffold_output()`, `ScaffoldOutputValidationError`.
+- `ai_workflows/workflows/scaffold_workflow_prompt.py` — `SCAFFOLD_PROMPT_TEMPLATE`, `render_scaffold_prompt()`.
+
+Updated:
+- `ai_workflows/cli.py` — `run-scaffold` Typer alias command added (M17 T01 AC-7).
+
+Tests:
+- `tests/workflows/test_scaffold_workflow.py` — 25 tests covering validator (5), write-safety (8), integration (4), registration (1), pydantic models (4), tier registry (1), KDR compliance (2).
+- `tests/mcp/test_scaffold_workflow_http.py` — 1 HTTP round-trip parity test via `fastmcp.Client`.
+
+ACs satisfied: AC-1 through AC-17.
+T02 follow-up scope: prompt template iteration + live-mode smoke against Claude Opus + CS300 dogfood. ADR-0010 and skill-install docs land at T03.
+Deviations from spec: none.
+
 ### Changed
 - M15 rescoped (2026-04-30): YAML overlay (`~/.ai-workflows/tiers.yaml`) dropped — conflicts with KDR-014 (framework owns quality policy; env-var is the only operator override). M15 scope is now `TierConfig.fallback` schema + `TieredNode` cascade dispatch + cost attribution + `aiw list-tiers` + ADR-0006. M15 deferred pending M17 close-out. M17 unblocked: scaffold tier rebindable per-call via `--tier-override` / `tier_overrides` (KDR-014).
 

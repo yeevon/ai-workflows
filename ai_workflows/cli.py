@@ -439,6 +439,75 @@ def _emit_cli_run_result(result: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# `aiw run-scaffold` (M17 Task 01 — thin alias for scaffold_workflow)
+# ---------------------------------------------------------------------------
+
+
+@app.command("run-scaffold")
+def run_scaffold(
+    goal: str = typer.Option(
+        ...,
+        "--goal",
+        help="Description of the workflow to scaffold.",
+    ),
+    target: Path = typer.Option(
+        ...,
+        "--target",
+        help="Absolute path to write the .py file to.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite an existing file at target.",
+    ),
+    tier_override: list[str] = typer.Option(
+        [],
+        "--tier-override",
+        help=(
+            "Override a tier for this run (name=replacement). "
+            "Example: --tier-override scaffold-synth=planner-synth."
+        ),
+    ),
+    run_id: str | None = typer.Option(
+        None,
+        "--run-id",
+        help="Override the auto-generated run id.",
+    ),
+    budget_cap_usd: float | None = typer.Option(
+        None,
+        "--budget",
+        help="Per-run USD cap enforced by CostTrackingCallback.",
+    ),
+) -> None:
+    """Alias for ``aiw run scaffold_workflow`` with the scaffold's specific flags.
+
+    Routes through the existing ``aiw run <workflow>`` dispatch with
+    ``workflow="scaffold_workflow"`` and the scaffold's ``ScaffoldWorkflowInput``
+    shape.  This alias exists so users can pass ``--goal`` / ``--target`` /
+    ``--force`` directly instead of encoding them as ``--input KEY=VALUE`` pairs
+    on the generic ``aiw run`` surface.
+
+    M17 Task 01.
+    """
+    configure_logging(level="INFO")
+    tier_overrides = _parse_tier_overrides(tier_override)
+    inputs: dict[str, Any] = {
+        "goal": goal,
+        "target_path": str(target),
+        "force": force,
+    }
+    asyncio.run(
+        _run_async(
+            workflow="scaffold_workflow",
+            inputs=inputs,
+            budget_cap_usd=budget_cap_usd,
+            run_id=run_id,
+            tier_overrides=tier_overrides,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # `aiw show-inputs` (M19 T04 — locked H1, refinement #4)
 # ---------------------------------------------------------------------------
 
